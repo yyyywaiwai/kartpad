@@ -1,0 +1,92 @@
+{
+  "schemaVersion": 1,
+  "id": "mkwii-rmcj01-rev0",
+  "displayName": "Mario Kart Wii Japan RMCJ01 revision 0",
+  "sourceDependencies": [
+    "WiiCompiled",
+    "Retro Rewind Pulsar"
+  ],
+  "game": {
+    "discId": "RMCJ01",
+    "region": "J",
+    "discNumber": 0,
+    "revision": 0,
+    "wiiMagic": "5d1c9ea3"
+  },
+  "containers": {
+    "extensions": [
+      "iso",
+      "gcm",
+      "gcz",
+      "ciso",
+      "wbfs",
+      "wia",
+      "rvz"
+    ],
+    "acceptedImages": [
+      {
+        "format": "iso",
+        "sha256": "78cb026411171d531bfbfa60e5e2d8ee94d73e855551de1c23d7231f34b8733a",
+        "bytes": 4699979776,
+        "note": "User-supplied RMCJ01 disc 0 revision 0 ISO, full hash verified 2026-09-06"
+      }
+    ]
+  },
+  "extraction": {
+    "extractor": {
+      "command": "nodtool",
+      "version": "2.0.0-alpha.9"
+    },
+    "requiredFiles": [
+      "sys/boot.bin",
+      "sys/bi2.bin",
+      "sys/apploader.img",
+      "sys/fst.bin",
+      "sys/main.dol",
+      "files/rel/StaticR.rel"
+    ],
+    "executables": {
+      "dol": {
+        "path": "sys/main.dol",
+        "sha256": "1b9621ef7c5d97dada103e50e5389730e67f3c2545dda592edd4b5843655af91"
+      },
+      "rel": {
+        "path": "files/rel/StaticR.rel",
+        "loadAddress": "0x8050FC60",
+        "sha256": "88539012d357a1420724e51dc7e351192ce696da4b0045994895518a3fad6fae"
+      }
+    }
+  },
+  "translation": {
+    "memoryBase": "0x80000000",
+    "memorySize": "0x01A00000",
+    "sdaBase": "0x8038C580",
+    "sda2Base": "0x8038E920",
+    "entryPoints": [
+      "0x800060A4"
+    ],
+    "functionMap": null,
+    "injectors": [],
+    "expectedGeneratedFunctions": null,
+    "expectedBaseFunctions": null,
+    "expectedRetroFunctions": null
+  },
+  "capabilities": {
+    "inspect": true,
+    "extraction": true,
+    "build": false,
+    "status": "macos-development",
+    "reason": "The separate Japanese development scripts build native macOS and signed-iOS candidates, including a region-J Retro Rewind graph. The user accepted iPad/macOS validation; independent runtime and online evidence limits are recorded in docs/RMCJ01-EXTENDED.md. Personal IPA Builder remains gated; the PAL runtime must not be used for Japanese data."
+  },
+  "porting": {
+    "sourceProfile": "mkwii-rmcp01-rev0",
+    "addressMap": "ref/upstream/rr-pulsar/GameSource/versions.txt",
+    "addressMapSHA256": "db5c11e2edaa12227dab7763c712f3c612e1361e60ac3392799023994e3ba5f5",
+    "sourceFunctionMap": "ref/upstream/Wiicompiled/projects/mkwii/MAP.txt",
+    "sourceFunctionMapSHA256": "4266f57c54781c5075d53fbfcf9f6e39744555ab42a4a5a8c8e9fafd080dd271",
+    "evidence": {
+      "sda": "DOL __init_registers at 0x8000628C..0x80006298: lis/ori r2 and r13",
+      "relLoadAddress": "0x8050FC60 confirmed by the Japanese native runtime relocation report; section layout independently decoded from supplied StaticR.rel"
+    }
+  }
+}

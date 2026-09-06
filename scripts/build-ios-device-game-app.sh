@@ -13,6 +13,7 @@ runtime_source="$(absolute_from_repo "${1:-build/g14-ios-game-runtime-source}")"
 xcode_build="$(absolute_from_repo "${2:-build/g14-ios-device-game-app-xcode}")"
 translation_root="$(absolute_from_repo "${3:-private/g8-full-translation}")"
 product="${4:-dual}"
+host_root="$(absolute_from_repo "${KARTPAD_IOS_HOST_ROOT:-${repo_root}}")"
 dawn_archive="${repo_root}/build/dependency-cache/dawn-ios-arm64-v20260603.191052.tar.gz"
 dawn_sha256="a361fcca75929fa5c766cfcde979c010a6da7d805e5db8e15c75e73fd8260e78"
 discio_source="${KARTPAD_DISCIO_SOURCE_DIR:-${repo_root}/build/dolphin-ios-discio-iphoneos-source}"
@@ -67,8 +68,8 @@ trap restore_generated_link EXIT
 ln -sfn "${translation_root}" "${generated_link}"
 
 "${repo_root}/scripts/verify-sunpad-overlay-snapshot.sh"
-plutil -lint "${repo_root}/apple/ios/RuntimeInfo.plist" \
-  "${repo_root}/apple/ios/PrivacyInfo.xcprivacy" >/dev/null
+plutil -lint "${host_root}/apple/ios/RuntimeInfo.plist" \
+  "${host_root}/apple/ios/PrivacyInfo.xcprivacy" >/dev/null
 
 # A prior device deployment may have signed this reusable build product in
 # place. Remove only that generated signing residue before the unsigned build
@@ -95,7 +96,7 @@ cmake -S "${runtime_source}" -B "${xcode_build}" -G Xcode \
   -DAURORA_DAWN_PACKAGE_URL_HASH="SHA256=${dawn_sha256}" \
   -DMKW_TRANSLATED_SHARD_MANIFEST="${translation_root}/build_shards/shards.cmake" \
   -DMKW_KARTPAD_RUNTIME_INCLUDE="${repo_root}/runtime/include" \
-  -DMKW_KARTPAD_REPO_ROOT="${repo_root}" \
+  -DMKW_KARTPAD_REPO_ROOT="${host_root}" \
   -DMKW_KARTPAD_DISCIO_SOURCE_DIR="${discio_source}" \
   -DMKW_KARTPAD_DISCIO_BUILD_DIR="${discio_build}" \
   -DMKW_TRANSLATED_COMPILE_JOBS=2

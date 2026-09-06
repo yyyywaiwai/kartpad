@@ -111,7 +111,7 @@ diff -ruN a/src/hle/net/network_core.cpp b/src/hle/net/network_core.cpp
  bool RetroRewindProfileActive();
  
 +bool LocalWfcTraceEnabled() {
-+    return KartPad::Network::LocalWfcRouteEnabled(RetroRewindProfileActive());
++    return KartPad::Network::LocalWfcTraceEnabled(RetroRewindProfileActive());
 +}
 +
 +void LocalWfcTrace(const char* format, ...) {

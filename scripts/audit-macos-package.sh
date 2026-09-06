@@ -20,9 +20,23 @@ bundle_identifier="$(plutil -extract CFBundleIdentifier raw "${plist}")"
 icon_name="$(plutil -extract CFBundleIconFile raw "${plist}")"
 executable="${contents}/MacOS/${executable_name}"
 
-test "${bundle_identifier}" = "dev.kartpad.app"
+case "${KARTPAD_MACOS_AUDIT_REGION:-P}" in
+  P)
+    expected_bundle_identifier="dev.kartpad.app"
+    expected_game_identity="RMCP01 (PAL)"
+    expected_dol_hash="80d18895b39c63bd80f457398bfcbb91b7d16ac116a41a88967e954080155b05"
+    ;;
+  J)
+    expected_bundle_identifier="dev.kartpad.rmcj01.development"
+    expected_game_identity="RMCJ01 (Japan)"
+    expected_dol_hash="1b9621ef7c5d97dada103e50e5389730e67f3c2545dda592edd4b5843655af91"
+    ;;
+  *) echo "unsupported macOS audit region" >&2; exit 64 ;;
+esac
+test "${bundle_identifier}" = "${expected_bundle_identifier}"
 test "$(plutil -extract CFBundleShortVersionString raw "${plist}")" = "0.4.8"
 test "$(plutil -extract CFBundleVersion raw "${plist}")" = "22"
+test -n "$(plutil -extract NSLocalNetworkUsageDescription raw "${plist}")"
 test "$(plutil -extract NSBluetoothAlwaysUsageDescription raw "${plist}")" = \
   "KartPad uses Bluetooth to pair and connect an experimental Wii Remote and Nunchuk."
 test -x "${executable}"
@@ -97,15 +111,18 @@ for runtime_marker in "Application Support" "Caches" "KartPad Startup"; do
 done
 
 executable_strings="$(strings "${executable}")"
+dual_contracts=()
+if [[ "${KARTPAD_MACOS_AUDIT_REGION:-P}" == P ]]; then
+  dual_contracts=("chooseRetroRewindData:" "RMCP01-r0-retro-rewind"
+    "KartPadRuntimeProfile"
+    "Quit and reopen KartPad to switch games. Your saves and settings are preserved.")
+fi
 for shell_contract in \
   "KartPad Settings" \
   "KartPad Controls" \
   "Original Mario Kart Wii" \
   "Retro Rewind" \
-  "chooseRetroRewindData:" \
-  "RMCP01-r0-retro-rewind" \
-  "KartPadRuntimeProfile" \
-  "Quit and reopen KartPad to switch games. Your saves and settings are preserved." \
+  ${dual_contracts[@]+"${dual_contracts[@]}"} \
   "Player Identity" \
   "Mii Appearance" \
   "showPlayerNameEditor" \
@@ -131,8 +148,8 @@ for shell_contract in \
   "currentSessionTailBegin" \
   "previousSessionTailBegin" \
   "reviewWarning=Review this report before sharing. Arbitrary runtime text may still require review." \
-  "KartPad currently supports RMCP01 (PAL), disc 0, revision 0 only." \
-  "80d18895b39c63bd80f457398bfcbb91b7d16ac116a41a88967e954080155b05" \
+  "KartPad currently supports ${expected_game_identity}, disc 0, revision 0 only." \
+  "${expected_dol_hash}" \
   "Show KartPad Data" \
   "Show KartPad Cache" \
   "Save Diagnostics Report" \

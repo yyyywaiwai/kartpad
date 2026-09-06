@@ -13,6 +13,7 @@ translation_root="$(absolute_from_repo "${1:-private/g8-full-translation}")"
 runtime_source="$(absolute_from_repo "${2:-build/g7-game-runtime-source}")"
 runtime_build="$(absolute_from_repo "${3:-build/g7-game-runtime-build}")"
 product="${4:-base}"
+prepare_only="${KARTPAD_PREPARE_ONLY:-0}"
 dawn_archive="${repo_root}/build/dependency-cache/dawn-darwin-arm64-v20260603.191052.tar.gz"
 sse2neon_url="https://raw.githubusercontent.com/DLTcollab/sse2neon/13a42df35dc7fcc94f987568e7274a998bb6cc86/sse2neon.h"
 sse2neon_sha256="44b9fa3dec3a52ea473246e04b9f692a4e5b0ed654299eef7fe7ec3049e223e0"
@@ -28,7 +29,7 @@ if [[ "$(uname -s)" != "Darwin" || "$(uname -m)" != "arm64" ]]; then
   echo "ERROR: the G7 game-runtime spike requires arm64 macOS" >&2
   exit 1
 fi
-if [[ ! -f "${translation_root}/build_shards/shards.cmake" ]]; then
+if [[ "${prepare_only}" != "1" && ! -f "${translation_root}/build_shards/shards.cmake" ]]; then
   echo "ERROR: missing real-title translation: ${translation_root}" >&2
   exit 1
 fi
@@ -97,6 +98,11 @@ actual_sse2neon_sha256="$(shasum -a 256 "${runtime_source}/third_party/sse2neon/
 if [[ "${actual_sse2neon_sha256}" != "${sse2neon_sha256}" ]]; then
   echo "ERROR: sse2neon hash mismatch: ${actual_sse2neon_sha256}" >&2
   exit 1
+fi
+
+if [[ "${prepare_only}" == "1" ]]; then
+  echo "Prepared integrated macOS runtime source: ${runtime_source}"
+  exit 0
 fi
 
 # Mach-O C symbols have a leading underscore. The translator's assembly blob

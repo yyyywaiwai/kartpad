@@ -64,6 +64,7 @@ def write_translator_manifest(
     retro: RetroRewindInputs,
     mod_output: Path,
 ) -> None:
+    profile.require_build_support()
     config = profile.data["translation"]
     executables = profile.data["extraction"]["executables"]
     dol = executables["dol"]
@@ -196,6 +197,7 @@ def translate(
     jobs: int,
     retro: RetroRewindInputs,
 ) -> None:
+    profile.require_build_support()
     shards = output / "build_shards/shards.cmake"
     expected_generated = profile.data["translation"]["expectedGeneratedFunctions"]
     expected_base = profile.data["translation"]["expectedBaseFunctions"]
@@ -265,12 +267,16 @@ def build(
     jobs: int = 2,
     translation_override: Path | None = None,
     app_override: Path | None = None,
+    extraction_override: Path | None = None,
 ) -> BuildResult:
+    profile.require_build_support()
     fingerprint = source_fingerprint(repo)
     key = cache_key(profile, image_sha256, fingerprint)
     profile_root = work_root / profile.id
     workspace = profile_root / "builds" / key
-    extraction = profile_root / "inputs" / image_sha256 / "disc"
+    extraction = extraction_override or profile_root / "inputs" / image_sha256 / "disc"
+    if extraction_override is not None:
+        _validate_extraction(profile, extraction_override)
     translation = translation_override or workspace / "translation"
     retro = prepare_inputs(profile, work_root, install=False)
     if app_override is None:

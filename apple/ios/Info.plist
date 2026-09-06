@@ -28,6 +28,8 @@
 	<true/>
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>KartPad connects to other players on your local network for multiplayer races.</string>
 	<key>GCSupportsGameMode</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

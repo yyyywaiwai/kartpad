@@ -1,0 +1,30 @@
+--- a/src/hle/input/kpad.cpp
++++ b/src/hle/input/kpad.cpp
+@@ -880,10 +880,25 @@
+     } catch (const Memory::AccessViolation&) {
+         return false;
+     }
+-    if (!Fixture().Active() && !Fixture().AutoArmAtCountdown(stage)) return false;
+-
+     const uint32_t controller = ctx->gpr[3];
++    // This diagnostic must not consume four RKG samples per tick or turn
++    // disconnected controllers into connected players.
++    if (!Fixture().EnsureLoaded()) return false;
+     try {
++        if (controller == 0 || Memory::Read32(controller + 0x8d4) != 0) return false;
++    } catch (const Memory::AccessViolation&) {
++        return false;
++    }
++    if (stage != 1 && stage != 2) {
++        Fixture().Disarm();
++        return false; // Keep normal pause/results/menu input handling.
++    }
++    if (g_fixtureArmRequested.exchange(false, std::memory_order_acq_rel)) {
++        if (Fixture().Active()) { Fixture().Disarm(); return false; }
++        Fixture().Arm(true);
++    }
++    if (!Fixture().Active() && !Fixture().AutoArmAtCountdown(stage)) return false;
++    try {
+         if (controller == 0) {
+             return false;
+         }

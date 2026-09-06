@@ -11,6 +11,7 @@ namespace KartPad::Network {
 
 inline constexpr char kLocalWfcHostEnvironment[] = "KARTPAD_WFC_TEST_HOST";
 inline constexpr char kLocalWfcHttpPortEnvironment[] = "KARTPAD_WFC_TEST_HTTP_PORT";
+inline constexpr char kLocalWfcTraceEnvironment[] = "KARTPAD_WFC_TEST_TRACE";
 
 inline std::optional<uint16_t> ParseLocalWfcPort(const char* text) {
     if (!text || *text == '\0') {
@@ -28,6 +29,23 @@ inline std::optional<uint16_t> ParseLocalWfcPort(const char* text) {
 inline bool LocalWfcRouteEnabled(bool retroRewindActive) {
     const char* const host = std::getenv(kLocalWfcHostEnvironment);
     return retroRewindActive && host && *host != '\0';
+}
+
+// Keep diagnostics independent from destination routing.  The explicit value
+// check avoids enabling packet metadata logging for an accidentally inherited
+// or malformed environment value.
+inline bool LocalWfcTraceRequested() {
+    const char* const value = std::getenv(kLocalWfcTraceEnvironment);
+    if (!value) {
+        return false;
+    }
+    const std::string_view text(value);
+    return text == "1" || text == "true" || text == "on";
+}
+
+inline bool LocalWfcTraceEnabled(bool retroRewindActive) {
+    return retroRewindActive &&
+        (LocalWfcRouteEnabled(retroRewindActive) || LocalWfcTraceRequested());
 }
 
 inline std::string RouteLocalWfcHost(bool retroRewindActive, std::string_view requestedHost) {

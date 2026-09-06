@@ -27,7 +27,7 @@ PROFILES = REPO / "builder/profiles"
 class ProfileTests(unittest.TestCase):
     def test_public_profiles_are_valid_and_unique(self) -> None:
         profiles = load_profiles(PROFILES)
-        self.assertEqual([profile.id for profile in profiles], ["mkwii-rmcp01-rev0"])
+        self.assertEqual([profile.id for profile in profiles], ["mkwii-rmcj01-rev0", "mkwii-rmcp01-rev0"])
 
     def test_profile_can_accept_multiple_container_variants(self) -> None:
         data = json.loads((PROFILES / "mkwii-rmcp01-rev0.json").read_text())
@@ -50,7 +50,7 @@ class ProfileTests(unittest.TestCase):
             select_profile(load_profiles(PROFILES), "0" * 64)
 
     def test_cache_key_changes_for_each_input(self) -> None:
-        profile = load_profiles(PROFILES)[0]
+        profile = next(p for p in load_profiles(PROFILES) if p.id == "mkwii-rmcp01-rev0")
         baseline = cache_key(profile, "a" * 64, "b" * 64)
         self.assertNotEqual(baseline, cache_key(profile, "c" * 64, "b" * 64))
         self.assertNotEqual(baseline, cache_key(profile, "a" * 64, "d" * 64))
@@ -68,7 +68,7 @@ class ProfileTests(unittest.TestCase):
             self.assertNotEqual(baseline, dependency_cache_key(root, ("first", "second")))
 
     def test_dual_mode_upstream_contract_is_explicit(self) -> None:
-        profile = load_profiles(PROFILES)[0]
+        profile = next(p for p in load_profiles(PROFILES) if p.id == "mkwii-rmcp01-rev0")
         dependencies = {
             dependency["name"]
             for dependency in json.loads((REPO / "dependencies.lock.json").read_text())["dependencies"]
@@ -79,7 +79,7 @@ class ProfileTests(unittest.TestCase):
         self.assertIn("Retro Rewind WFC patcher", profile.data["sourceDependencies"])
 
     def test_release_header_is_generated_from_the_retro_rewind_pin(self) -> None:
-        profile = load_profiles(PROFILES)[0]
+        profile = next(p for p in load_profiles(PROFILES) if p.id == "mkwii-rmcp01-rev0")
         retro = profile.data["retroRewind"]
         header = render_retro_rewind_header(profile.data)
         self.assertIn(f'#define KARTPAD_RR_VERSION "{retro["version"]}"', header)
@@ -212,7 +212,7 @@ class RetroRewindTests(unittest.TestCase):
         payload = REPO / "private/builder/retro-rewind-downloads/payload.RMCPD00.bin"
         if not payload.is_file():
             self.skipTest("private production payload is not cached")
-        config = load_profiles(PROFILES)[0].data["retroRewind"]["payload"]
+        config = next(p for p in load_profiles(PROFILES) if p.id == "mkwii-rmcp01-rev0").data["retroRewind"]["payload"]
         validate_rwfc_payload(payload, config)
         with tempfile.TemporaryDirectory() as temp:
             tampered = Path(temp) / "payload.bin"

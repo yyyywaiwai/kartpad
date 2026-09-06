@@ -21,6 +21,12 @@ patch --batch -p1 -d "$stage" < "$dual_symbols_patch"
 patch --batch -p1 -d "$stage" < "$dual_closure_patch"
 patch --batch -p1 -d "$stage" < "$dynamic_overrides_patch"
 
-dotnet_bin=/opt/homebrew/opt/dotnet@8/bin/dotnet
+dotnet_bin="${KARTPAD_DOTNET:-$(command -v dotnet || true)}"
+if [[ -z "$dotnet_bin" ]]; then
+  dotnet_bin="$repo/build/toolchains/dotnet/dotnet"
+fi
+if [[ ! -x "$dotnet_bin" ]]; then
+  dotnet_bin=/opt/homebrew/opt/dotnet@8/bin/dotnet
+fi
 project="$stage/translator/src/Translator.Cli/Translator.Cli.csproj"
 "$dotnet_bin" build "$project" -c Release

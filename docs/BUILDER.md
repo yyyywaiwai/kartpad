@@ -8,11 +8,24 @@ supported ARM64 translation.
 
 ## Current preview
 
-The first Builder preview supports one verified input: the pinned PAL
+The playable Builder profile is the pinned PAL
 `RMCP01` revision 0 WBFS development image. It produces an unsigned,
 personalized IPA for local signing. The Builder and compatibility metadata are
 public; disc data, extracted files, translated code, signing material, and the
 resulting IPA remain ignored and private.
+
+The `mkwii-rmcj01-rev0` profile additionally recognizes the supplied Japanese
+revision-0 ISO and validates its extracted DATA partition. Its status is
+`macos-development`, not IPA `build-enabled`; the separate
+`scripts/build-rmcj01-macos.sh` builds the Japanese ARM64 Mac runtime.
+The separate `scripts/build-rmcj01-ios.sh` path now builds a Japanese iOS
+candidate, including dual Original/Retro Rewind mode when given its J graph.
+Physical-device and extended online acceptance are tracked separately in
+[the extended ledger](RMCJ01-EXTENDED.md); this does not enable the generic
+Personal IPA Builder path yet.
+See [RMCJ01 port status](RMCJ01.md). `profiles` and `inspect` show the capability
+boundary, and `build` rejects an incomplete port before dependency preparation
+or reuse of an existing app/translation override.
 
 Requirements are an Apple Silicon Mac, Xcode, CMake, Ninja, Git, ripgrep,
 Python 3, .NET 8, and `nodtool` 2.0.0-alpha.9. Fetch the profile's exact pinned
@@ -32,6 +45,19 @@ Inspect an image without extracting it:
 ```sh
 ./scripts/build-user-ipa.sh inspect /path/to/Mario-Kart-Wii.wbfs
 ```
+
+Reuse a previously extracted DATA partition, validating the full image hash,
+disc identity, DOL hash, and REL hash without copying or modifying the folder:
+
+```sh
+./scripts/build-user-ipa.sh prepare /path/to/Mario-Kart-Wii.iso \
+  --extracted-data /path/to/DATA
+```
+
+`inspect` and `build` also accept `--extracted-data`. For a fresh extraction,
+use `prepare IMAGE --output DIRECTORY` instead. These input-only operations do
+not require .NET, Xcode, Dawn, or Retro Rewind. Reusing an extraction does not
+require `nodtool`; creating a new one requires the pinned extractor.
 
 Build the private unsigned IPA:
 
@@ -53,6 +79,9 @@ concerns separate:
 - extracted DOL and REL identities;
 - load addresses, memory layout, entry points, function map, injectors, and
   expected translation counts.
+- explicit capability/status metadata for input-verified regions whose
+  translation and runtime port is not yet complete. Unverified function maps
+  and translation counts stay null rather than copying PAL expectations.
 
 This design allows multiple verified WBFS/ISO container variants to point to
 one static-recompilation profile when extraction proves they contain the same

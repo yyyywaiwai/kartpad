@@ -168,6 +168,20 @@ compiler, or executable-code download.
 | Game ID | Region | Revision | Accepted input |
 |---|---|---|---|
 | `RMCP01` | PAL / Europe | 0 | One exact pinned WBFS container for the current development profile |
+| `RMCJ01` | Japan | 0 | One exact pinned ISO; native macOS development build and Japanese dual-mode iOS build |
+
+The Japanese profile is `macos-development`. It validates and reuses an
+existing extracted DATA partition without changing it. The separate
+`scripts/build-rmcj01-macos.sh` path produces a Japanese native macOS app;
+`scripts/translate-rmcj01-retro.sh` and `scripts/build-rmcj01-ios.sh` add the
+Japanese Retro Rewind graph and an iOS development build. The user accepted
+the iPad/macOS runtime validation; the assistant-observed results and remaining
+evidence limits are recorded in [the extended ledger](docs/RMCJ01-EXTENDED.md);
+the Personal IPA Builder remains **not build-enabled** for this region.
+These are **separate region-specific builds**, not one binary that accepts both
+regions. The shipped PAL app still accepts PAL data only; the Japanese build
+accepts RMCJ01 data only. RMCE01 (USA) is not included. See
+[RMCJ01 port status](docs/RMCJ01.md) for commands, evidence, and remaining work.
 
 Other regions, revisions, dumps, and container hashes fail closed even when
 their filename extension is recognized. The expected digest is recorded in

@@ -47,6 +47,22 @@ class Profile:
     def accepts(self, image_sha256: str) -> bool:
         return any(item["sha256"] == image_sha256 for item in self.accepted_images)
 
+    @property
+    def build_enabled(self) -> bool:
+        # Legacy schema-1 profiles are the existing verified PAL build profile.
+        return self.data.get("capabilities", {}).get("build", True)
+
+    @property
+    def status(self) -> str:
+        return self.data.get("capabilities", {}).get("status", "build-enabled")
+
+    def require_build_support(self) -> None:
+        if not self.build_enabled:
+            raise ProfileError(
+                f"{self.id} is {self.status}, not build-enabled: "
+                + self.data["capabilities"]["reason"]
+            )
+
 
 def _require(value: Any, expected: type, location: str) -> Any:
     if not isinstance(value, expected):
@@ -82,6 +98,20 @@ def validate_profile(data: dict[str, Any], source: str = "profile") -> None:
             raise ProfileError(f"{source}.game: missing {key}")
     if len(game["discId"]) != 6:
         raise ProfileError(f"{source}.game.discId must contain six characters")
+    if game["region"] not in ("P", "E", "J", "K") or game["discId"][3] != game["region"]:
+        raise ProfileError(f"{source}.game.region does not match discId")
+    for key in ("discNumber", "revision"):
+        if type(game[key]) is not int or not 0 <= game[key] <= 255:
+            raise ProfileError(f"{source}.game.{key} must be an unsigned byte")
+
+    capabilities = _require(data.get("capabilities", {}), dict, f"{source}.capabilities")
+    for key in ("inspect", "extraction", "build"):
+        if key in capabilities and type(capabilities[key]) is not bool:
+            raise ProfileError(f"{source}.capabilities.{key} must be bool")
+    if capabilities.get("build") is False:
+        for key in ("status", "reason"):
+            if not isinstance(capabilities.get(key), str) or not capabilities[key]:
+                raise ProfileError(f"{source}.capabilities.{key} is required for an incomplete port")
 
     containers = _require(data["containers"], dict, f"{source}.containers")
     extensions = _require(containers.get("extensions"), list, f"{source}.containers.extensions")
@@ -129,6 +159,12 @@ def validate_profile(data: dict[str, Any], source: str = "profile") -> None:
     ):
         if key not in translation:
             raise ProfileError(f"{source}.translation: missing {key}")
+    if capabilities.get("build", True):
+        if not isinstance(translation["functionMap"], str) or not translation["functionMap"]:
+            raise ProfileError(f"{source}: build-enabled profiles require a function map")
+        for key in ("expectedGeneratedFunctions", "expectedBaseFunctions", "expectedRetroFunctions"):
+            if type(translation[key]) is not int or translation[key] < 0:
+                raise ProfileError(f"{source}.translation.{key} must be a non-negative integer")
     if "retroRewind" in data:
         from .retro_rewind import validate_config
 

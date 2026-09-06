@@ -82,6 +82,8 @@ plutil -insert CFBundleVersion -string "${KARTPAD_BUILD_NUMBER:-22}" "${plist}"
 plutil -insert LSApplicationCategoryType -string public.app-category.games "${plist}"
 plutil -insert LSMinimumSystemVersion -string 14.0 "${plist}"
 plutil -insert NSHighResolutionCapable -bool true "${plist}"
+plutil -insert NSLocalNetworkUsageDescription -string \
+  "KartPad connects to other players on your local network for multiplayer races." "${plist}"
 plutil -insert NSBluetoothAlwaysUsageDescription -string \
   "KartPad uses Bluetooth to pair and connect an experimental Wii Remote and Nunchuk." "${plist}"
 plutil -insert NSPrincipalClass -string NSApplication "${plist}"

@@ -8,6 +8,12 @@ fi
 
 app="$1"
 expected_platform="${2:-IOSSIMULATOR}"
+region="${KARTPAD_IOS_AUDIT_REGION:-P}"
+case "${region}" in
+  P) bundle_identifier=dev.kartpad.app; disc_id=RMCP01; region_name=PAL ;;
+  J) bundle_identifier=dev.kartpad.rmcj01.ios; disc_id=RMCJ01; region_name=Japan ;;
+  *) echo "KARTPAD_IOS_AUDIT_REGION must be P or J" >&2; exit 64 ;;
+esac
 if [[ "${expected_platform}" != "IOSSIMULATOR" && "${expected_platform}" != "IOS" ]]; then
   echo "expected platform must be IOSSIMULATOR or IOS" >&2
   exit 64
@@ -23,7 +29,7 @@ test -f "${app}/Assets.car"
 test -f "${app}/initial_pipeline_cache.db"
 test -f "${app}/dsp_coef.bin"
 plutil -lint "${plist}" "${app}/PrivacyInfo.xcprivacy" >/dev/null
-test "$(plutil -extract CFBundleIdentifier raw "${plist}")" = "dev.kartpad.app"
+test "$(plutil -extract CFBundleIdentifier raw "${plist}")" = "${bundle_identifier}"
 test "$(plutil -extract CFBundleExecutable raw "${plist}")" = "KartPad"
 test "$(plutil -extract MinimumOSVersion raw "${plist}")" = "16.0"
 test "$(plutil -extract UIApplicationSceneManifest.UISceneConfigurations.UIWindowSceneSessionRoleApplication.0.UISceneDelegateClassName raw "${plist}")" = "SDLUIKitSceneDelegate"
@@ -31,6 +37,7 @@ test "$(plutil -extract CFBundleIcons.CFBundlePrimaryIcon.CFBundleIconName raw "
 test "$(plutil -extract CFBundleIcons~ipad.CFBundlePrimaryIcon.CFBundleIconName raw "${plist}")" = "AppIcon"
 test "$(plutil -extract UIFileSharingEnabled raw "${plist}")" = "true"
 test "$(plutil -extract LSSupportsOpeningDocumentsInPlace raw "${plist}")" = "true"
+test -n "$(plutil -extract NSLocalNetworkUsageDescription raw "${plist}")"
 
 if [[ "$(file -b "${binary}")" != *"Mach-O 64-bit executable arm64"* ]]; then
   echo "KartPad game runtime is not arm64 Mach-O" >&2
@@ -123,8 +130,8 @@ for importer_contract in \
   'Game-file extraction was incomplete' \
   'RemoveGameDataOnNextLaunch' \
   'Game Data Removal Scheduled' \
-  'KartPad currently supports RMCP01 (PAL), disc 0, revision 0 only.' \
-  'The validated RMCP01 data is stored privately.' \
+  "KartPad currently supports ${disc_id} (${region_name}), disc 0, revision 0 only." \
+  "The validated ${disc_id} data is stored privately." \
   'GameData.import-' \
   'NSFileProtectionCompleteUntilFirstUserAuthentication'; do
   if ! rg -a -F -q "${importer_contract}" "${binary}"; then
@@ -132,6 +139,16 @@ for importer_contract in \
     exit 69
   fi
 done
+if [[ "${region}" == J ]]; then
+  if ! rg -a -F -q '1b9621ef7c5d97dada103e50e5389730e67f3c2545dda592edd4b5843655af91' "${binary}"; then
+    echo "Japanese app is missing the exact RMCJ01 DOL validation hash" >&2
+    exit 69
+  fi
+  if rg -a -F -q 'KartPad currently supports RMCP01' "${binary}"; then
+    echo "Japanese app retains the PAL importer contract" >&2
+    exit 69
+  fi
+fi
 if rg -a -F -q "game-data importer is not connected" "${binary}"; then
   echo "game app still contains the placeholder game-data importer" >&2
   exit 69

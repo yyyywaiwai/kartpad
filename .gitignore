@@ -2,6 +2,14 @@
 .DS_Store
 
 # User-owned and private game data
+/*.iso
+/*.gcm
+/*.gcz
+/*.ciso
+/*.wbfs
+/*.wia
+/*.rvz
+/data/
 ref/*.iso
 ref/*.gcm
 ref/*.gcz
