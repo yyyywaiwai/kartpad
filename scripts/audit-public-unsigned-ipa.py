@@ -47,6 +47,7 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Audit the exact public KartPad IPA.")
     parser.add_argument("ipa", type=Path)
     parser.add_argument("--source-commit", help="Expected release commit")
+    parser.add_argument("--release-tag", default=RELEASE_TAG)
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -89,7 +90,7 @@ def main() -> int:
 
         provenance = json.loads(archive.read("KartPadBuilderProvenance.json"))
         expected_provenance = {
-            "releaseTag": RELEASE_TAG,
+            "releaseTag": args.release_tag,
             "sourceCommit": expected_commit,
             "appVersion": APP_VERSION,
             "appBuild": APP_BUILD,
@@ -143,7 +144,7 @@ def main() -> int:
 
     digest = hashlib.sha256(ipa.read_bytes()).hexdigest()
     print(f"Public unsigned IPA audit passed: {ipa}")
-    print(f"Release: {RELEASE_TAG}; app: {APP_VERSION} ({APP_BUILD}); source: {expected_commit}")
+    print(f"Release: {args.release_tag}; app: {APP_VERSION} ({APP_BUILD}); source: {expected_commit}")
     print(f"SHA-256: {digest}")
     return 0
 

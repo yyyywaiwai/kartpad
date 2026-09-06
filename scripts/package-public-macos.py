@@ -26,6 +26,8 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Package the public KartPad macOS app.")
     parser.add_argument("app", type=Path)
     parser.add_argument("output", type=Path, nargs="?")
+    parser.add_argument("--release-tag", default=RELEASE_TAG)
+    parser.add_argument("--release-notes", type=Path)
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     app = args.app.resolve()
@@ -49,11 +51,11 @@ def main() -> int:
     executable = app / "Contents/MacOS/KartPad"
     provenance = {
         "schemaVersion": 1,
-        "releaseTag": RELEASE_TAG,
+        "releaseTag": args.release_tag,
         "sourceCommit": source_commit,
         "appVersion": APP_VERSION,
         "appBuild": APP_BUILD,
-        "bundleIdentifier": "dev.kartpad.app",
+        "bundleIdentifier": plist["CFBundleIdentifier"],
         "executableSHA256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "containsTranslatedGameCode": True,
         "containsGameData": False,
@@ -65,7 +67,7 @@ def main() -> int:
     }
     extras = {
         "INSTALL_MACOS.md": repo / "docs/INSTALL_MACOS.md",
-        "RELEASE_NOTES.md": repo / "docs/releases/v0.4.8.md",
+        "RELEASE_NOTES.md": args.release_notes.resolve() if args.release_notes else repo / "docs/releases/v0.4.8.md",
         "LICENSES/GPL-3.0.txt": repo / "LICENSES/GPL-3.0.txt",
         "RIGHTS_AND_LICENSES.md": repo / "RIGHTS_AND_LICENSES.md",
         "THIRD_PARTY_NOTICES.md": repo / "THIRD_PARTY_NOTICES.md",

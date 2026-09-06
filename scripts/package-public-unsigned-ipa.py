@@ -28,6 +28,9 @@ def main() -> int:
         nargs="?",
         help="Output IPA path (defaults to artifacts/KartPad-v0.4.8-ios-unsigned.ipa)",
     )
+    parser.add_argument("--release-tag", default=RELEASE_TAG)
+    parser.add_argument("--release-notes", type=Path)
+    parser.add_argument("--build-root", type=Path, help="Original Xcode build directory containing _deps")
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -67,10 +70,10 @@ def main() -> int:
     ).returncode == 0:
         fail("public IPA input app is still signed")
 
-    xcode_build = app.parents[1]
+    xcode_build = args.build_root.resolve() if args.build_root else app.parents[1]
     additional_entries = {
         "INSTALL_IPA.md": repo / "docs/INSTALL_IPA.md",
-        "RELEASE_NOTES.md": repo / "docs/releases/v0.4.8.md",
+        "RELEASE_NOTES.md": args.release_notes.resolve() if args.release_notes else repo / "docs/releases/v0.4.8.md",
         "LICENSES/GPL-3.0.txt": repo / "LICENSES/GPL-3.0.txt",
         "RIGHTS_AND_LICENSES.md": repo / "RIGHTS_AND_LICENSES.md",
         "THIRD_PARTY_NOTICES.md": repo / "THIRD_PARTY_NOTICES.md",
@@ -94,7 +97,7 @@ def main() -> int:
         fail(f"missing release notices: {', '.join(missing_notices)}")
     provenance = {
         "schemaVersion": 1,
-        "releaseTag": RELEASE_TAG,
+        "releaseTag": args.release_tag,
         "sourceCommit": source_commit,
         "appVersion": APP_VERSION,
         "appBuild": APP_BUILD,

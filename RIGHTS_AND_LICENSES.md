@@ -37,6 +37,13 @@ not as an official or broadly relicensed open-source release of Mario Kart Wii.
 Paid access, commercial licensing, TestFlight, App Store, or other official
 store distribution requires a separate decision and independent rights review.
 
+On 7 September 2026, the fork owner requested a GitHub community release of
+macOS and iOS packages for RMCP01 (PAL) and RMCJ01 (Japan). The Japanese
+preview follows the same asset/signing exclusion boundary, with user-supplied
+matching Japanese game data. PAL downloads preserve the original v0.4.8
+upstream release bytes. This request does not alter the unresolved rights
+boundary stated above.
+
 ## Third-party software
 
 KartPad incorporates GPL-covered WiiCompiled and Dolphin-derived code plus
