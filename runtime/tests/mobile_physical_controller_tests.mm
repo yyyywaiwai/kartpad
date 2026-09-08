@@ -2,6 +2,15 @@
 #include "../../apple/mobile/KartPadPhysicalControllers.h"
 #include "../../apple/third_party/sunpad/SunPadControllerSlots.h"
 
+#import <GameController/GameController.h>
+
+// Exercise reconciliation with Apple's mutable snapshot controllers, without
+// substituting the production slot, latch, mapping, or connection code.
+@interface KartPadPhysicalControllers (Fixture)
+- (void)reconcileControllerList:(NSArray<GCController *> *)controllers;
+- (void)publishController:(GCController *)controller gamepad:(GCExtendedGamepad *)gamepad;
+@end
+
 #include <cstdlib>
 #include <iostream>
 #include <stdexcept>
@@ -27,6 +36,41 @@ void TestExactSunPadSlotReconciliation() {
   result = slots.Reconcile({second, returned});
   Require(slots.SlotFor(returned) == 0 && slots.SlotFor(second) == 1,
           "stable slots were not preserved after reconnect");
+}
+
+void TestRegistrationAndReconnect() {
+  KartPadPhysicalControllers *bridge = [KartPadPhysicalControllers new];
+  NSMutableArray<GCController *> *pads = [NSMutableArray array];
+  for (unsigned player = 0; player < 4; ++player) {
+    [pads addObject:[GCController controllerWithExtendedGamepad]];
+  }
+  [bridge reconcileControllerList:pads];
+  Require([bridge connectedControllerCount] == 4, "four pads not detected");
+  for (unsigned player = 1; player < 4; ++player) {
+    GCController *pad = pads[player];
+    [pad.extendedGamepad.buttonA setValue:1];
+    [bridge publishController:pad gamepad:pad.extendedGamepad];
+    [pad.extendedGamepad.buttonA setValue:0];
+    [bridge publishController:pad gamepad:pad.extendedGamepad];
+    for (unsigned probe = 0; probe < 8; ++probe) {
+      Require([bridge isPlayerConnected:player], "WPAD connection query lost physical pad");
+    }
+    SunPadInputState state{};
+    Require([bridge consumePlayer:player state:&state], "registered pad cannot read");
+    Require((state.buttons & SunPadButtonA) != 0, "connection probe consumed registration A");
+    [bridge consumePlayer:player state:&state];
+    Require(state.buttons == 0, "released registration button remained held");
+  }
+  GCController *removed = pads[1];
+  [bridge reconcileControllerList:@[pads[0], pads[2], pads[3]]];
+  Require(![bridge isPlayerConnected:1], "disconnected player still present");
+  Require([bridge isPlayerConnected:2] && [bridge isPlayerConnected:3],
+          "disconnect shifted other player slots");
+  [bridge reconcileControllerList:@[pads[3], removed, pads[0], pads[2]]];
+  Require([bridge isPlayerConnected:1], "reconnected player missing");
+  Require(![bridge isPlayerConnected:4] && ![bridge isPlayerConnected:NSUIntegerMax],
+          "invalid player accepted");
+  [bridge reconcileControllerList:@[]];
 }
 
 void TestControllerSampleMapping() {
@@ -79,6 +123,7 @@ int main() {
     try {
       TestExactSunPadSlotReconciliation();
       TestControllerSampleMapping();
+      TestRegistrationAndReconnect();
       std::cout << "KartPad mobile physical-controller bridge passed\n";
       return EXIT_SUCCESS;
     } catch (const std::exception& error) {

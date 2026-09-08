@@ -331,7 +331,12 @@ def build(
         "sourceSHA256": fingerprint,
         "cacheKey": key,
         "containsUserSuppliedTranslatedCode": True,
-        "redistributionAllowed": False,
+        "softwareLicense": "GPL-3.0-only",
+        "gameCodeRedistributionRights": "not-cleared",
     }
-    digest = package_unsigned_ipa(app, output, provenance)
+    license_entries = {
+        name: repo / name
+        for name in ("LICENSE", "RIGHTS_AND_LICENSES.md", "THIRD_PARTY_NOTICES.md")
+    }
+    digest = package_unsigned_ipa(app, output, provenance, license_entries)
     return BuildResult(ipa=output, ipa_sha256=digest, app=app, cache_key=key)

@@ -36,16 +36,16 @@
          _DISABLE_STRING_ANNOTATION _DISABLE_VECTOR_ANNOTATION TARGET_PC)
      target_compile_features(${target} PRIVATE cxx_std_20)
      mkw_apply_common_compile_options(${target})
-@@ -390,7 +390,104 @@
+@@ -390,7 +390,106 @@
          XCODE_ATTRIBUTE_SUPPORTS_MACCATALYST NO
          XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2")
  endif()
 +
 +set(MKW_KARTPAD_MINIZIP_SOURCE_DIR "" CACHE PATH
 +    "Pinned minizip-ng source used by KartPad's tvOS Retro Rewind installer")
-+set(KARTPAD_TVOS_MARKETING_VERSION "0.4.4" CACHE STRING
++set(KARTPAD_TVOS_MARKETING_VERSION "0.4.11" CACHE STRING
 +    "KartPad tvOS marketing version")
-+set(KARTPAD_TVOS_BUILD_NUMBER "7" CACHE STRING
++set(KARTPAD_TVOS_BUILD_NUMBER "9" CACHE STRING
 +    "KartPad tvOS bundle build number")
 +set(KARTPAD_TVOS_BUNDLE_IDENTIFIER "dev.kartpad.tv" CACHE STRING
 +    "KartPad tvOS product bundle identifier")
@@ -84,6 +84,8 @@
 +    set(MKW_KARTPAD_TVOS_SOURCES
 +        "${MKW_KARTPAD_TVOS_DIR}/KartPadTVRuntimeHost.mm"
 +        "${MKW_KARTPAD_IOS_DIR}/KartPadRetroRewindInstaller.mm"
++        "${MKW_KARTPAD_REPO_ROOT}/runtime/src/retro_rewind/archive_path.cpp"
++        "${MKW_KARTPAD_REPO_ROOT}/runtime/src/retro_rewind/archive_scan.cpp"
 +        "${MKW_KARTPAD_MOBILE_DIR}/KartPadClassicInput.mm"
 +        "${MKW_KARTPAD_MOBILE_DIR}/KartPadPhysicalControllers.mm"
 +        "${MKW_KARTPAD_SUNPAD_DIR}/SunPadControllerMapping.mm"
@@ -141,7 +143,7 @@
  if(MKW_HAVE_RETRO_REWIND)
      add_executable(RetroRewind "${MKW_RETRO_REWIND_PRODUCT_SOURCE}" ${MKW_RETRO_REGISTRATION_SOURCES})
      mkw_configure_product(RetroRewind)
-@@ -455,6 +544,10 @@
+@@ -455,6 +546,10 @@
              XCODE_ATTRIBUTE_SUPPORTS_MACCATALYST NO
              XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2")
      endif()
@@ -152,7 +154,7 @@
      add_custom_target(mkw_release DEPENDS WiiCompiled RetroRewind)
  else()
      add_custom_target(mkw_release DEPENDS WiiCompiled)
-@@ -529,6 +622,10 @@
+@@ -529,6 +624,10 @@
              XCODE_ATTRIBUTE_SUPPORTS_MACCATALYST NO
              XCODE_ATTRIBUTE_TARGETED_DEVICE_FAMILY "1,2")
      endif()

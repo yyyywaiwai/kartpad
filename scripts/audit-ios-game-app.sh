@@ -98,7 +98,7 @@ done
 
 for experimental_feature_contract in \
   'Player Identity' \
-  'Set Player Name' \
+  'Edit Mii Name' \
   'dev.kartpad.manage-miis' \
   'PendingRFL_DB.dat' \
   'PendingPlayerIdentity.plist' \

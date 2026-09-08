@@ -1,0 +1,20 @@
+--- a/src/settings_overlay.cpp
++++ b/src/settings_overlay.cpp
+@@ -1,2 +1,3 @@
+ #include "settings_overlay.h"
++#include <android/log.h>
+ #include "wup028_adapter.h"
+@@ -786,3 +787,13 @@
+                 stats != nullptr ? stats->createdPipelines : 0);
++        // Bounded, content-free diagnostics remain available in release builds.
++        __android_log_print(ANDROID_LOG_INFO, "KartPadPerf",
++                "frames=%llu fps=%.2f effective=%.2f p50_ms=%.2f p95_ms=%.2f "
++                "p99_ms=%.2f pipelines_queued=%u pipelines_created=%u",
++                static_cast<unsigned long long>(presentTiming.totalPresentCount),
++                presentTiming.framesPerSecond, presentTiming.effectiveFramesPerSecond,
++                presentTiming.p50FrameTimeMs, presentTiming.p95FrameTimeMs,
++                presentTiming.p99FrameTimeMs,
++                stats != nullptr ? stats->queuedPipelines : 0,
++                stats != nullptr ? stats->createdPipelines : 0);
+         lastTelemetryPresentCount = presentTiming.totalPresentCount;
+     }

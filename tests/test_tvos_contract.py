@@ -26,6 +26,8 @@ class TvOSContractTests(unittest.TestCase):
             patch.count("TARGET_OS_IOS || TARGET_OS_TV"), 16
         )
         self.assertIn("MINIZIP::minizip", patch)
+        self.assertIn("runtime/src/retro_rewind/archive_path.cpp", patch)
+        self.assertIn("runtime/src/retro_rewind/archive_scan.cpp", patch)
         self.assertIn("KARTPAD_TVOS_BUNDLE_IDENTIFIER", patch)
 
     def test_tvos_runtime_uses_an_a12_safe_cpu_baseline(self):
@@ -174,20 +176,20 @@ class TvOSContractTests(unittest.TestCase):
         ).read_text()
         tvos_audit = (ROOT / "scripts/audit-public-unsigned-tvos-ipa.py").read_text()
         for script in (ios_package, ios_audit):
-            self.assertIn('RELEASE_TAG = "v0.4.8"', script)
-            self.assertIn('APP_VERSION = "0.4.8"', script)
+            self.assertIn('RELEASE_TAG = "v0.4.11"', script)
+            self.assertIn('APP_VERSION = "0.4.11"', script)
         for script in (tvos_package, tvos_audit):
-            self.assertIn('RELEASE_TAG = "v0.4.4"', script)
-            self.assertIn('APP_VERSION = "0.4.4"', script)
-        self.assertIn('APP_BUILD = "22"', ios_package)
-        self.assertIn('APP_BUILD = "22"', ios_audit)
-        self.assertIn('APP_BUILD = "7"', tvos_package)
-        self.assertIn('APP_BUILD = "7"', tvos_audit)
+            self.assertIn('RELEASE_TAG = "v0.4.11-tvos.1"', script)
+            self.assertIn('APP_VERSION = "0.4.11"', script)
+        self.assertIn('APP_BUILD = "26"', ios_package)
+        self.assertIn('APP_BUILD = "26"', ios_audit)
+        self.assertIn('APP_BUILD = "9"', tvos_package)
+        self.assertIn('APP_BUILD = "9"', tvos_audit)
         self.assertIn('"physicalAppleTVAcceptance": False', tvos_package)
         self.assertIn('"physicalAppleTVAcceptance": False', tvos_audit)
         self.assertTrue((ROOT / "docs/INSTALL_TVOS.md").is_file())
         self.assertTrue((ROOT / "docs/releases/v0.4.4.md").is_file())
-        self.assertTrue((ROOT / "docs/releases/v0.4.8.md").is_file())
+        self.assertTrue((ROOT / "docs/releases/v0.4.9.md").is_file())
 
 
 if __name__ == "__main__":

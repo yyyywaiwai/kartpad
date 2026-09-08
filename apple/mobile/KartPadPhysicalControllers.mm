@@ -179,25 +179,29 @@ SunPadInputState KartPadAdaptPhysicalControllerSample(
                        slot:(const std::size_t)slot {
   GCExtendedGamepad *gamepad = controller.extendedGamepad;
   if (gamepad == nil) return;
+  controller.handlerQueue = dispatch_get_main_queue();
   __weak KartPadPhysicalControllers *weakSelf = self;
   __weak GCController *weakController = controller;
   gamepad.valueChangedHandler = ^(GCExtendedGamepad *pad,
                                   GCControllerElement *element) {
     (void)element;
-    dispatch_async(dispatch_get_main_queue(), ^{
-      KartPadPhysicalControllers *strongSelf = weakSelf;
-      GCController *strongController = weakController;
-      if (strongSelf != nil && strongController != nil) {
-        [strongSelf publishController:strongController gamepad:pad];
-      }
-    });
+    // Sample inside the event callback. Deferring the read again can turn a
+    // quick press/release into two released samples before the game polls.
+    KartPadPhysicalControllers *strongSelf = weakSelf;
+    GCController *strongController = weakController;
+    if (strongSelf != nil && strongController != nil) {
+      [strongSelf publishController:strongController gamepad:pad];
+    }
   };
   controller.playerIndex = PlayerIndexForSlot(slot);
   [self publishController:controller gamepad:gamepad];
 }
 
 - (void)reconcileControllers {
-  NSArray<GCController *> *controllers = GCController.controllers;
+  [self reconcileControllerList:GCController.controllers];
+}
+
+- (void)reconcileControllerList:(NSArray<GCController *> *)controllers {
   std::vector<uintptr_t> instances;
   for (GCController *controller in controllers) {
     if (controller.extendedGamepad != nil) {
@@ -247,6 +251,24 @@ SunPadInputState KartPadAdaptPhysicalControllerSample(
   state->buttons |= _latchedButtons[player];
   _latchedButtons[player] = 0;
   return state->connected != 0;
+}
+
+- (BOOL)isPlayerConnected:(NSUInteger)player {
+  if (player >= SunPadControllerSlots::kMaxPlayers) return NO;
+  std::scoped_lock lock(_stateMutex);
+  return _states[player].connected != 0;
+}
+
+- (NSArray<NSString *> *)playerDescriptions {
+  NSAssert(NSThread.isMainThread, @"Controller descriptions require the main thread");
+  NSMutableArray<NSString *> *players = [NSMutableArray array];
+  for (std::size_t slot = 0; slot < SunPadControllerSlots::kMaxPlayers; ++slot) {
+    GCController *controller = _configuredControllers[@(_slots.InstanceAt(slot))];
+    NSString *name = controller.vendorName ?: @"Controller";
+    [players addObject:[NSString stringWithFormat:@"Player %lu: %@",
+        (unsigned long)slot + 1, controller ? name : @"Not connected"]];
+  }
+  return players;
 }
 
 - (NSUInteger)connectedControllerCount {

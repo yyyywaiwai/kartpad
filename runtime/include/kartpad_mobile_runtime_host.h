@@ -29,6 +29,9 @@ const char *KartPadMobileSelectedRuntimeProfile();
 // Called after Aurora has created its SDL/UIKit Metal window.
 void KartPadMobileRuntimeHostInstall(void *sdlWindow);
 void KartPadMobileRuntimeHostUninstall();
+// Called at the guest event-pump boundary. Holds guest execution in the native
+// chooser until the current game is resumed; does not reinitialize the runtime.
+void KartPadMobileServiceMainMenu();
 
 // Reads the persisted settings owned by the exact SunPad shell before Aurora
 // creates the mobile render surface. Aspect modes match SunPadSettings:
@@ -38,6 +41,9 @@ bool KartPadMobileReadRuntimeSettings(KartPadMobileRuntimeSettings *settings);
 // Consumes the exact SunPad mixer's latched state and maps it to the Mario Kart
 // Classic Controller ABI. Returns false until the UIKit host is installed.
 bool KartPadMobileReadClassicInput(KartPadMobileClassicInputSnapshot *snapshot);
+
+// Queries connection state without consuming latched button presses.
+bool KartPadMobileIsControllerConnected(unsigned int player);
 
 // Reads touch (where present) plus the first physical controller for player
 // zero, or the independently assigned physical controller for players one

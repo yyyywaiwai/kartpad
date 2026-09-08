@@ -16,9 +16,9 @@ class IOSTouchLayoutContractTests(unittest.TestCase):
             "void KartPadSeedTouchLayoutDefaults(BOOL force) {", 1
         )[1].split("NSSet<NSString *> *KartPadHiddenTouchControls()", 1)[0]
         self.assertIn("UIUserInterfaceIdiomPad", seed)
-        self.assertIn('@"Start": NSStringFromCGPoint(CGPointMake(0.94, 0.50))', seed)
-        self.assertIn('@"L": NSStringFromCGPoint(CGPointMake(0.93, 0.60))', seed)
-        self.assertIn('@"move": NSStringFromCGPoint(CGPointMake(0.13, 0.83))', seed)
+        self.assertIn('@"Start": NSStringFromCGPoint(CGPointMake(0.95537335285505121, 0.57607607607607603))', seed)
+        self.assertIn('@"L": NSStringFromCGPoint(CGPointMake(0.91096632503660335, 0.64904904904904903))', seed)
+        self.assertIn('@"move": NSStringFromCGPoint(CGPointMake(0.14756954612005857, 0.91391391391391397))', seed)
         self.assertIn('dictionaryForKey:@"SunPadControlOrigins"] == nil', seed)
         self.assertIn("0.93580568318565682", seed)
         self.assertIn("0.8208055524263117", seed)

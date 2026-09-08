@@ -4,6 +4,8 @@
 <dict>
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>KartPad connects to your selected private Wii server and other players on your local network.</string>
 	<key>CFBundleDisplayName</key>
 	<string>KartPad</string>
 	<key>CFBundleExecutable</key>

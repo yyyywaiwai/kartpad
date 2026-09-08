@@ -12,6 +12,15 @@ target_compile_options(kartpad_semantics_contract PRIVATE
 )
 add_test(NAME kartpad_semantics_contract COMMAND kartpad_semantics_contract)
 
+add_executable(kartpad_android_gamepad_contract
+  runtime/tests/android_gamepad_contract_tests.cpp)
+target_include_directories(kartpad_android_gamepad_contract PRIVATE runtime/include)
+target_compile_features(kartpad_android_gamepad_contract PRIVATE cxx_std_20)
+target_compile_options(kartpad_android_gamepad_contract PRIVATE
+  -Wall -Wextra -Wpedantic -Werror)
+add_test(NAME kartpad.android.gamepad-contract
+  COMMAND kartpad_android_gamepad_contract)
+
 option(MKW_PRODUCT_BASE "Build the original-disc base product" ON)
 option(MKW_PRODUCT_RETRO_REWIND "Build the Retro Rewind product" OFF)
 option(MKW_BUILD_MACOS "Build the native macOS host" OFF)
@@ -298,6 +307,29 @@ if(MKW_BUILD_IOS_SIMULATOR OR MKW_BUILD_IOS_DEVICE)
 endif()
 
 if(BUILD_TESTING)
+  add_executable(kartpad_retro_rewind_archive_path_tests
+    runtime/tests/retro_rewind_archive_path_tests.cpp
+    runtime/src/retro_rewind/archive_path.cpp)
+  target_include_directories(kartpad_retro_rewind_archive_path_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime/include")
+  target_compile_features(kartpad_retro_rewind_archive_path_tests PRIVATE cxx_std_20)
+  target_compile_options(kartpad_retro_rewind_archive_path_tests PRIVATE
+    -Wall -Wextra -Wpedantic -Werror)
+  add_test(NAME kartpad.retro-rewind.archive-path
+    COMMAND kartpad_retro_rewind_archive_path_tests)
+
+  add_executable(kartpad_retro_rewind_archive_scan_tests
+    runtime/tests/retro_rewind_archive_scan_tests.cpp
+    runtime/src/retro_rewind/archive_path.cpp
+    runtime/src/retro_rewind/archive_scan.cpp)
+  target_include_directories(kartpad_retro_rewind_archive_scan_tests PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/runtime/include")
+  target_compile_features(kartpad_retro_rewind_archive_scan_tests PRIVATE cxx_std_20)
+  target_compile_options(kartpad_retro_rewind_archive_scan_tests PRIVATE
+    -Wall -Wextra -Wpedantic -Werror)
+  add_test(NAME kartpad.retro-rewind.archive-scan
+    COMMAND kartpad_retro_rewind_archive_scan_tests)
+
   add_executable(kartpad_mii_database_tests runtime/tests/mii_database_tests.cpp)
   target_include_directories(kartpad_mii_database_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/runtime/include")
@@ -361,6 +393,12 @@ if(BUILD_TESTING)
       "${SECURITY_FRAMEWORK}")
     add_test(NAME kartpad.network.apple-secure-transport
       COMMAND kartpad_apple_secure_transport_tests)
+
+    add_executable(kartpad_private_wfc_tests runtime/tests/private_wfc_tests.cpp)
+    target_include_directories(kartpad_private_wfc_tests PRIVATE runtime/include)
+    target_compile_features(kartpad_private_wfc_tests PRIVATE cxx_std_20)
+    target_compile_options(kartpad_private_wfc_tests PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    add_test(NAME kartpad.network.private-wfc COMMAND kartpad_private_wfc_tests)
 
     add_executable(kartpad_local_wfc_test_route_tests
       runtime/tests/local_wfc_test_route_tests.cpp)

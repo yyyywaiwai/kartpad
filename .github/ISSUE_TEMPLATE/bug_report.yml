@@ -1,0 +1,56 @@
+name: Bug report
+description: Report a crash, display, input, import, or performance problem.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve KartPad. Please check the [support guide](https://github.com/chrissotraidis/kartpad/blob/main/docs/SUPPORT.md) first. If this is an existing report, add your results there.
+        Reports are public. Attach only reviewed diagnostic text and screenshots; never game data, saves, NAND, identities, keys, or a raw private diagnostics ZIP.
+  - type: input
+    id: revision
+    attributes:
+      label: KartPad version and build
+      placeholder: e.g. 0.4.11 build 26, or 0.4.10-android.1 build 21
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Device and OS version
+      description: Include the device model and exact OS version. Android reports should include the One UI version if applicable. No serial numbers or MAC addresses.
+      placeholder: e.g. iPhone 15 Pro Max, iOS version; Galaxy S24 Ultra, Android/One UI version
+    validations:
+      required: true
+  - type: textarea
+    id: summary
+    attributes:
+      label: What went wrong?
+      description: What did you expect, and what happened instead? Include any exact error message.
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Steps and game context
+      description: Include Original or Retro Rewind (and version), mode, track, and controller. For display issues, include connection type and which screen fails.
+  - type: input
+    id: frequency
+    attributes:
+      label: How often does it happen?
+      placeholder: Every launch, after several minutes, only on the first lap, etc.
+  - type: textarea
+    id: performance-profile
+    attributes:
+      label: Display and performance settings
+      description: Render resolution, aspect mode, FPS before/during the problem, cold or repeat race, battery/game mode, and charging state if relevant.
+  - type: input
+    id: report-id
+    attributes:
+      label: In-app report ID (if available)
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Reviewed diagnostics and screenshots
+      description: Use the platform steps in docs/SUPPORT.md. Attach a bounded report or relevant redacted log excerpts. The in-app GitHub button does not attach the report file automatically.

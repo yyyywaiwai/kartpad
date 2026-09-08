@@ -19,7 +19,7 @@ for required_ignore in \
   fi
 done
 
-forbidden_pattern='\.(iso|gcm|gcz|ciso|wbfs|wia|rvz|sav|gci|dtm|pcap|pcapng|mobileprovision|p12|key|pem)$'
+forbidden_pattern='\.(iso|gcm|gcz|ciso|wbfs|wia|rvz|sav|gci|dtm|pcap|pcapng|mobileprovision|p12|key|pem|jks|keystore|apk|aab|apks)$'
 if git ls-files | grep -Eiq "$forbidden_pattern"; then
   echo 'ERROR: tracked files include private game, save, capture, or signing data:' >&2
   git ls-files | grep -Ei "$forbidden_pattern" >&2

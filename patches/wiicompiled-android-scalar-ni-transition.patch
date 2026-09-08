@@ -1,0 +1,44 @@
+--- a/include/ppc_runtime.h
++++ b/include/ppc_runtime.h
+@@ -23,7 +23,13 @@
+ {
+     CpuContext* cpu = CurrentCpuContext();
++    // Scalar arithmetic updates sticky/status bits, not NI. Reapplying the
++    // unchanged host mode on every instruction needlessly touches FP control
++    // registers and multiple emulated TLS variables on Android/API 28.
++    const bool niChanged = ((cpu->fpscr ^ result.fpscr) &
++                            kartpad::semantics::fpscr::NI) != 0;
+     cpu->fpscr = result.fpscr;
+-    MkwApplyHostNiMode(cpu->fpscr);
++    if (niChanged)
++        MkwApplyHostNiMode(cpu->fpscr);
+     if (result.write_destination)
+         destination = result.value;
+     return result.write_destination;
+@@ -33,9 +39,12 @@
+ {
+     CpuContext* cpu = CurrentCpuContext();
+     const auto result = kartpad::semantics::EvaluatePpcFloatCompare(
+         cpu->fpscr, a, b, ordered);
++    const bool niChanged = ((cpu->fpscr ^ result.fpscr) &
++                            kartpad::semantics::fpscr::NI) != 0;
+     cpu->fpscr = result.fpscr;
+-    MkwApplyHostNiMode(cpu->fpscr);
++    if (niChanged)
++        MkwApplyHostNiMode(cpu->fpscr);
+     return result.condition;
+ }
+ 
+@@ -60,8 +69,11 @@
+     CpuContext* cpu = CurrentCpuContext();
+     const auto result = kartpad::semantics::EvaluatePpcEstimate(
+         cpu->fpscr, value, false);
++    const bool niChanged = ((cpu->fpscr ^ result.fpscr) &
++                            kartpad::semantics::fpscr::NI) != 0;
+     cpu->fpscr = result.fpscr;
+-    MkwApplyHostNiMode(cpu->fpscr);
++    if (niChanged)
++        MkwApplyHostNiMode(cpu->fpscr);
+     if (!result.write_destination)
+         return current;
+     const float lane = static_cast<float>(result.value);

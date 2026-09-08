@@ -9,3 +9,18 @@
          "${MKW_KARTPAD_SUNPAD_DIR}/SunPadGameOverlay.mm"
          "${MKW_KARTPAD_SUNPAD_DIR}/SunPadInputMixer.mm"
          "${MKW_KARTPAD_SUNPAD_DIR}/SunPadSettings.mm"
+--- a/src/hle/input/kpad.cpp
++++ b/src/hle/input/kpad.cpp
+@@ -771,5 +771,12 @@
+ extern "C" bool KPAD_IsKeyboardChannelConnected(uint32_t chan)
+ {
++    // WPADProbe, SetDataFormat and GetInfoAsync must see the same devices
++    // as KPADRead. Never consume a snapshot here: probing before a read
++    // would discard a short press on the Register Controllers screen.
++#if defined(__APPLE__) && (TARGET_OS_IOS || TARGET_OS_TV)
++    if (chan < g_keyboardConnected.size() &&
++        KartPadMobileIsControllerConnected(chan)) return true;
++#endif
+     return chan < g_keyboardConnected.size() &&
+            (chan == 0 || g_keyboardConnected[chan].load(std::memory_order_acquire));
+ }

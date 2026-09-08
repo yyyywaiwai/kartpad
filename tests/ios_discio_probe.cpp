@@ -8,6 +8,12 @@
 #include "DiscIO/Filesystem.h"
 #include "DiscIO/Volume.h"
 
+#if defined(__ANDROID__)
+#include <fcntl.h>
+#include <unistd.h>
+#include "../android/app/src/main/cpp/kartpad_disc_image_volume.h"
+#endif
+
 #if defined(KARTPAD_FMT_ALLOC_SHIM)
 // The feasibility oracle is linked against the reference build's fmt v12 ABI.
 // Its system fmt archive is macOS-only, so provide the one allocation shim that
@@ -23,6 +29,30 @@ void* allocate(std::size_t size)
 
 int main(int argc, char** argv)
 {
+#if defined(__ANDROID__)
+  if (argc == 4 && std::string(argv[1]) == "--fd")
+  {
+    // Reserve sibling descriptor numbers to reproduce the old WBFS basename
+    // bug deterministically. The original picker descriptor stays readable.
+    const int source = open(argv[2], O_RDONLY);
+    if (source < 0) return 65;
+    for (int fd = 120; fd <= 129; ++fd)
+      if (dup2(source, fd) != fd) return 65;
+    auto legacy = DiscIO::CreateVolume("/proc/self/fd/123");
+    auto volume = KartPadOpenDiscDescriptor(123);
+    unsigned char magic[4]{};
+    const bool source_readable = pread(source, magic, sizeof(magic), 0) == sizeof(magic);
+    const auto* filesystem = volume ? volume->GetFileSystem(volume->GetGamePartition()) : nullptr;
+    const bool valid = volume && volume->GetGameID(volume->GetGamePartition()) == "RMCP01" &&
+                       filesystem && filesystem->IsValid();
+    std::cout << "descriptor-import=" << (valid ? "passed" : "failed")
+              << " source-readable=" << source_readable
+              << " legacy-open=" << bool(legacy) << '\n';
+    if (!valid || !source_readable) return 66;
+    std::filesystem::create_directories(argv[3]);
+    return DiscIO::ExportSystemData(*volume, volume->GetGamePartition(), argv[3]) ? 0 : 68;
+  }
+#endif
   if (argc != 3)
   {
     std::cerr << "usage: ios-discio-probe IMAGE DESTINATION\n";

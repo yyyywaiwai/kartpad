@@ -1,0 +1,23 @@
+name: Question or feature request
+description: Ask how something works or describe a missing capability.
+body:
+  - type: markdown
+    attributes:
+      value: Please check the [support guide](https://github.com/chrissotraidis/kartpad/blob/main/docs/SUPPORT.md) and existing issues first. Logs are not needed for a feature request unless something is also failing.
+  - type: textarea
+    id: question
+    attributes:
+      label: Question or requested behavior
+      description: Describe what you want to do and where the current workflow falls short.
+    validations:
+      required: true
+  - type: input
+    id: platform
+    attributes:
+      label: Platform and KartPad version
+      description: List any relevant devices, controllers, apps, or accessories. Say if this should work across platforms.
+  - type: textarea
+    id: testing
+    attributes:
+      label: Examples or testing availability
+      description: Optional screenshots, relevant documentation, or hardware you can test with. Do not include private data.

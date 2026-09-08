@@ -1,0 +1,32 @@
+--- a/Source/Core/Common/DirectIOFile.h
++++ b/Source/Core/Common/DirectIOFile.h
+@@ -63,6 +63,11 @@
+   bool Open(const std::string& path, AccessMode access_mode,
+             OpenMode open_mode = OpenMode::Default);
+ 
++#if !defined(_WIN32)
++  // Own a duplicate of a caller-granted descriptor; never reopen its path.
++  static DirectIOFile DuplicateFileDescriptor(int fd);
++#endif
++
+   bool Close();
+ 
+   bool IsOpen() const;
+--- a/Source/Core/Common/DirectIOFile.cpp
++++ b/Source/Core/Common/DirectIOFile.cpp
+@@ -171,6 +171,15 @@
+   return IsOpen();
+ }
+ 
++#if !defined(_WIN32)
++DirectIOFile DirectIOFile::DuplicateFileDescriptor(int fd)
++{
++  DirectIOFile file;
++  file.m_fd = fcntl(fd, F_DUPFD_CLOEXEC, 0);
++  return file;
++}
++#endif
++
+ bool DirectIOFile::Close()
+ {
+   if (!IsOpen())

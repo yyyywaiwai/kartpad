@@ -26,10 +26,7 @@ magick "$render_dir/default.png" -alpha off -strip -define png:color-type=2 "$ex
 magick "$render_dir/dark.png" -alpha off -strip -define png:color-type=2 "$export_dir/KartPadIcon-Dark-1024.png"
 magick "$render_dir/tinted.png" -alpha off -strip -define png:color-type=2 "$export_dir/KartPadIcon-Tinted-1024.png"
 
-for pixels in 16 32 64 128 256 512 1024; do
-  magick "$export_dir/KartPadIcon-1024.png" -filter Lanczos -resize "${pixels}x${pixels}!" -strip \
-    -define png:color-type=2 "$export_dir/macos/KartPadIcon-${pixels}.png"
-done
+"$repo_root/scripts/generate-macos-icon-assets.sh"
 
 dimensions="$(sips -g pixelWidth -g pixelHeight -g hasAlpha "$export_dir/KartPadIcon-1024.png")"
 grep -q 'pixelWidth: 1024' <<<"$dimensions"

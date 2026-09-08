@@ -36,9 +36,24 @@ DerivedData/
 *.ipa
 *.dSYM
 
+# Android machine-local state and build products
+/android/.gradle/
+/android/.kotlin/
+/android/local.properties
+/android/**/build/
+/android/**/.cxx/
+/android/app/libs/*.aar
+!/android/app/libs/.gitkeep
+/.android-bootstrap/
+
 # Signing material, logs, saves, and captures
 *.mobileprovision
 *.p12
+*.jks
+*.keystore
+*.apk
+*.aab
+*.apks
 *.key
 *.pem
 *.log

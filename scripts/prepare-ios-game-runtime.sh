@@ -88,6 +88,8 @@ patch --batch -p1 -d "${runtime_source}/aurora-main" < \
   "${repo_root}/patches/aurora-ios-native-text-focus.patch"
 patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-apple-runtime.patch"
 patch --batch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-rfl-alarm-context.patch"
+patch --batch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-ios-low-latency-audio.patch"
 patch --batch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-experimental-wiimote-preset.patch"
@@ -95,6 +97,10 @@ patch --batch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-apple-network-tls.patch"
 patch --batch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-local-wfc-test-route.patch"
+patch --batch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-offline-kd-services.patch"
+patch --batch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-private-wfc.patch"
 patch --batch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-blocking-stream-recv-wait.patch"
 patch --batch -p1 -d "${runtime_source}" < \
@@ -107,6 +113,7 @@ patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios
 patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-first-launch-gate.patch"
 patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-touch-core-buttons.patch"
 patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-settings-bridge.patch"
+patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-main-menu.patch"
 patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-physical-controllers.patch"
 patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-motion-steering.patch"
 patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-discio-import.patch"
@@ -119,6 +126,10 @@ for dual_patch in \
     wiicompiled-dual-product-target.patch; do
   patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/${dual_patch}"
 done
+
+# Backport upstream e0e362b: SCGetProductSN returns a guest u32 for DWC csnum.
+patch --batch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-sc-serial.patch"
 
 mkdir -p "${runtime_source}/third_party/sse2neon"
 cached_sse2neon="${repo_root}/build/dependency-cache/sse2neon-${sse2neon_sha256}.h"

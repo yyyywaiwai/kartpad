@@ -1,0 +1,184 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+repo_root="$(git rev-parse --show-toplevel)"
+# shellcheck source=android-toolchain-versions.sh
+source "$repo_root/scripts/android-toolchain-versions.sh"
+sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
+adb="$sdk_root/platform-tools/adb"
+emulator="$sdk_root/emulator/emulator"
+avd="$KARTPAD_ANDROID_PHONE_AVD"
+package="dev.kartpad.android"
+fixture_component="$package/.RetroRewindWorkerFixtureActivity"
+
+if "$adb" devices | sed -n '2,$p' | grep -q '[[:space:]]device$'; then
+  echo "ERROR: an Android device/emulator is already connected; preserve the one-emulator rule" >&2
+  exit 1
+fi
+
+"$repo_root/scripts/build-android-fixture.sh"
+"$repo_root/scripts/audit-android-package.sh"
+emulator_log="$repo_root/.android-bootstrap/emulator-$avd-worker-restart.raw.log"
+"$emulator" "@$avd" -no-window -no-audio -no-boot-anim -no-snapshot \
+  -gpu auto -wipe-data >"$emulator_log" 2>&1 &
+emulator_pid=$!
+cleanup() {
+  "$adb" emu kill >/dev/null 2>&1 || true
+  wait "$emulator_pid" 2>/dev/null || true
+}
+trap cleanup EXIT
+
+"$adb" wait-for-device
+booted=0
+for _ in {1..60}; do
+  if [[ "$("$adb" shell getprop sys.boot_completed 2>/dev/null | tr -d '\r')" == "1" ]]; then
+    booted=1
+    break
+  fi
+  sleep 2
+done
+[[ "$booted" == 1 ]] || { echo "ERROR: emulator did not finish booting" >&2; exit 1; }
+
+"$adb" shell input keyevent KEYCODE_WAKEUP >/dev/null
+"$adb" shell wm dismiss-keyguard >/dev/null 2>&1 || true
+"$adb" shell settings put system accelerometer_rotation 0
+"$adb" shell settings put system user_rotation 1
+"$adb" install -r "$repo_root/android/app/build/outputs/apk/debug/app-debug.apk" >/dev/null
+"$adb" logcat -c
+
+wait_for_marker() {
+  local marker="$1"
+  for _ in {1..60}; do
+    if "$adb" logcat -d -v brief KartPadFixture:I AndroidRuntime:E '*:S' |
+        grep -Fq "$marker"; then
+      return 0
+    fi
+    sleep 1
+  done
+  echo "ERROR: worker restart marker was not observed: $marker" >&2
+  "$adb" logcat -d -v brief KartPadFixture:V WM-WorkerWrapper:V AndroidRuntime:E '*:S' >&2
+  return 1
+}
+
+"$adb" shell am start -W -n "$fixture_component" \
+  --ez dev.kartpad.android.TEST_RETRO_REWIND_WORKER_RESTART true >/dev/null
+wait_for_marker "A3 durable worker restart fixture enqueued id="
+worker_id="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  sed -n 's/.*A3 durable worker restart fixture enqueued id=\([^ ]*\).*/\1/p' |
+  tail -1)"
+[[ "$worker_id" =~ ^[0-9a-f-]{36}$ ]] || {
+  echo "ERROR: could not parse durable worker id: $worker_id" >&2
+  exit 1
+}
+wait_for_marker "A3 durable resume fixture started id=$worker_id attempt=0 prefix=0"
+wait_for_marker "A3 durable resume fixture checkpoint id=$worker_id bytes="
+
+"$adb" shell am force-stop "$package"
+if "$adb" shell pidof "$package" | grep -q '[0-9]'; then
+  echo "ERROR: KartPad process survived force-stop" >&2
+  exit 1
+fi
+"$adb" shell am start -W -n "$fixture_component" \
+  --ez dev.kartpad.android.TEST_RETRO_REWIND_WORKER_INIT_ONLY true >/dev/null
+wait_for_marker "A3 durable resume fixture started id=$worker_id attempt=1 prefix="
+resumed_from="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  sed -n "s/.*A3 durable resume fixture started id=$worker_id attempt=1 prefix=\([0-9][0-9]*\).*/\1/p" |
+  tail -1)"
+if ! [[ "$resumed_from" =~ ^[0-9]+$ ]] ||
+    ! (( resumed_from > 0 && resumed_from < 92 )); then
+  echo "ERROR: persisted worker resumed from invalid offset: $resumed_from" >&2
+  exit 1
+fi
+wait_for_marker "A3 durable resume fixture completed id=$worker_id attempt=1"
+
+worker_starts="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  grep -Fc "A3 durable resume fixture started id=$worker_id")"
+[[ "$worker_starts" == 2 ]] || {
+  echo "ERROR: persisted worker $worker_id started $worker_starts times; expected exactly 2" >&2
+  exit 1
+}
+if "$adb" logcat -d -v brief KartPadFixture:E AndroidRuntime:E '*:S' | grep -q .; then
+  echo "ERROR: worker restart fixture emitted an error" >&2
+  "$adb" logcat -d -v brief KartPadFixture:V AndroidRuntime:E '*:S' >&2
+  exit 1
+fi
+
+"$adb" shell am force-stop "$package"
+"$adb" logcat -c
+"$adb" shell am start -W -n "$fixture_component" >/dev/null
+wait_for_marker "A3 worker activity-recreation fixture enqueued id="
+recreation_worker_id="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  sed -n 's/.*A3 worker activity-recreation fixture enqueued id=\([^ ]*\).*/\1/p' |
+  tail -1)"
+[[ "$recreation_worker_id" =~ ^[0-9a-f-]{36}$ ]] || {
+  echo "ERROR: could not parse activity-recreation worker id: $recreation_worker_id" >&2
+  exit 1
+}
+wait_for_marker "A3 durable worker fixture started id=$recreation_worker_id attempt=0 steps=40"
+wait_for_marker "A3 worker activity recreation requested"
+wait_for_marker "A3 worker activity recreation observed; KEEP reenqueued"
+wait_for_marker "A3 durable worker fixture completed id=$recreation_worker_id attempt=0"
+recreation_starts="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  grep -Fc "A3 durable worker fixture started id=$recreation_worker_id")"
+[[ "$recreation_starts" == 1 ]] || {
+  echo "ERROR: activity recreation started worker $recreation_worker_id $recreation_starts times" >&2
+  exit 1
+}
+first_pid="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  sed -n 's/.*KartPadFixture( *\([0-9][0-9]*\)): A3 worker activity-recreation fixture enqueued.*/\1/p' |
+  tail -1)"
+recreated_pid="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  sed -n 's/.*KartPadFixture( *\([0-9][0-9]*\)): A3 worker activity recreation observed.*/\1/p' |
+  tail -1)"
+[[ -n "$first_pid" && "$first_pid" == "$recreated_pid" ]] || {
+  echo "ERROR: activity recreation did not retain one process: $first_pid -> $recreated_pid" >&2
+  exit 1
+}
+if "$adb" logcat -d -v brief KartPadFixture:E AndroidRuntime:E '*:S' | grep -q .; then
+  echo "ERROR: worker activity-recreation fixture emitted an error" >&2
+  "$adb" logcat -d -v brief KartPadFixture:V AndroidRuntime:E '*:S' >&2
+  exit 1
+fi
+
+"$adb" shell am force-stop "$package"
+"$adb" logcat -c
+"$adb" shell am start -W -n "$fixture_component" \
+  --ez dev.kartpad.android.TEST_RETRO_REWIND_WORKER_CANCEL true >/dev/null
+wait_for_marker "A3 worker cancellation fixture enqueued id="
+cancellation_worker_id="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  sed -n 's/.*A3 worker cancellation fixture enqueued id=\([^ ]*\).*/\1/p' |
+  tail -1)"
+[[ "$cancellation_worker_id" =~ ^[0-9a-f-]{36}$ ]] || {
+  echo "ERROR: could not parse cancellation worker id: $cancellation_worker_id" >&2
+  exit 1
+}
+wait_for_marker "A3 durable resume fixture started id=$cancellation_worker_id attempt=0 prefix=0"
+wait_for_marker "A3 durable resume fixture checkpoint id=$cancellation_worker_id bytes="
+wait_for_marker "A3 worker cancellation requested id=$cancellation_worker_id"
+wait_for_marker "A3 worker cancellation observed id=$cancellation_worker_id state=CANCELLED partial="
+partial_bytes="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  sed -n "s/.*A3 worker cancellation observed id=$cancellation_worker_id state=CANCELLED partial=\([0-9][0-9]*\).*/\1/p" |
+  tail -1)"
+if ! [[ "$partial_bytes" =~ ^[0-9]+$ ]] ||
+    ! (( partial_bytes > 0 && partial_bytes < 92 )); then
+  echo "ERROR: cancellation preserved invalid partial size: $partial_bytes" >&2
+  exit 1
+fi
+cancellation_starts="$("$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+  grep -Fc "A3 durable resume fixture started id=$cancellation_worker_id")"
+[[ "$cancellation_starts" == 1 ]] || {
+  echo "ERROR: cancellation worker $cancellation_worker_id started $cancellation_starts times" >&2
+  exit 1
+}
+if "$adb" logcat -d -v brief KartPadFixture:I '*:S' |
+    grep -Fq "A3 durable resume fixture completed id=$cancellation_worker_id"; then
+  echo "ERROR: cancelled worker emitted a completion marker" >&2
+  exit 1
+fi
+if "$adb" logcat -d -v brief KartPadFixture:E AndroidRuntime:E '*:S' | grep -q .; then
+  echo "ERROR: worker cancellation fixture emitted an error" >&2
+  "$adb" logcat -d -v brief KartPadFixture:V AndroidRuntime:E '*:S' >&2
+  exit 1
+fi
+
+echo "Android A3 durable worker interruptions passed: avd=$avd resume_worker_id=$worker_id process_starts=$worker_starts resumed_from=$resumed_from recreation_worker_id=$recreation_worker_id recreation_starts=$recreation_starts recreation_pid=$first_pid cancellation_worker_id=$cancellation_worker_id cancellation_starts=$cancellation_starts cancellation_partial=$partial_bytes final_state=cancelled"

@@ -59,6 +59,8 @@ patch --batch -p1 -d "${runtime_source}/aurora-main" < \
   "${repo_root}/patches/aurora-viewport-policy-window-guard.patch"
 patch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-apple-runtime.patch"
 patch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-rfl-alarm-context.patch"
+patch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-experimental-wiimote-preset.patch"
 patch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-macos-cursor-visibility.patch"
@@ -66,6 +68,10 @@ patch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-apple-network-tls.patch"
 patch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-local-wfc-test-route.patch"
+patch --batch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-private-wfc.patch"
+patch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-offline-kd-services.patch"
 patch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-blocking-stream-recv-wait.patch"
 patch -p1 -d "${runtime_source}" < \
@@ -82,6 +88,10 @@ for dual_patch in \
 done
 patch --batch -p1 -d "${runtime_source}" < \
   "${repo_root}/patches/wiicompiled-present-telemetry.patch"
+
+# Backport upstream e0e362b: SCGetProductSN returns a guest u32 for DWC csnum.
+patch --batch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-sc-serial.patch"
 
 mkdir -p "${runtime_source}/third_party/sse2neon"
 cached_sse2neon="${repo_root}/build/dependency-cache/sse2neon-${sse2neon_sha256}.h"

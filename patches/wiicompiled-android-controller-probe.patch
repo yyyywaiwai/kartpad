@@ -1,0 +1,38 @@
+--- a/aurora-main/include/aurora/input.hpp
++++ b/aurora-main/include/aurora/input.hpp
+@@ -3,7 +3,10 @@
+ #include <cstddef>
+ #include <cstdint>
+ 
+ namespace aurora::input {
++// Connection probes must never consume a latched registration button press.
++bool standard_gamepad_connected(uint32_t player,
++                                bool allowSingleUnassigned) noexcept;
+ 
+ enum StandardGamepadButton : uint32_t {
+   kStandardGamepadSouth = 1u << 0,
+--- a/aurora-main/lib/input.cpp
++++ b/aurora-main/lib/input.cpp
+@@ -377,6 +377,14 @@
+   return controller;
+ }
+ 
++bool standard_gamepad_connected(uint32_t player, bool allowSingleUnassigned) noexcept {
++  std::scoped_lock lock(g_standardGamepadBridgeMutex);
++  if (!g_standardGamepadsActive.load(std::memory_order_acquire)) return false;
++  const GameController* controller =
++      resolve_standard_gamepad(player, allowSingleUnassigned);
++  return controller != nullptr && controller->m_controller != nullptr;
++}
++
+ bool read_standard_gamepad_state(uint32_t player, bool allowSingleUnassigned,
+                                  StandardGamepadState* state) noexcept {
+   if (state == nullptr) {
+--- a/src/hle/input/kpad.cpp
++++ b/src/hle/input/kpad.cpp
+@@ -847,4 +847,4 @@
+     if (chan >= g_keyboardConnected.size()) return false;
+ #if defined(__ANDROID__)
+-    if (ReadAndroidClassicInput(chan).connected) return true;
++    if (aurora::input::standard_gamepad_connected(chan, chan == 0)) return true;
+     if (chan == 0 && kartpad::android::IsTouchInputConnected()) return true;

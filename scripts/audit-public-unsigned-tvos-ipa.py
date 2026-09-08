@@ -12,9 +12,9 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 
-RELEASE_TAG = "v0.4.4"
-APP_VERSION = "0.4.4"
-APP_BUILD = "7"
+RELEASE_TAG = "v0.4.11-tvos.1"
+APP_VERSION = "0.4.11"
+APP_BUILD = "9"
 FORBIDDEN_SUFFIXES = {
     ".iso", ".gcm", ".gcz", ".ciso", ".wbfs", ".wia", ".rvz",
     ".gci", ".sav", ".log", ".mobileprovision", ".p12", ".p8",
@@ -28,6 +28,7 @@ REQUIRED_ENTRIES = {
     "INSTALL_TVOS.md",
     "TVOS_TESTING.md",
     "RELEASE_NOTES.md",
+    "LICENSE",
     "LICENSES/GPL-3.0.txt",
     "RIGHTS_AND_LICENSES.md",
     "THIRD_PARTY_NOTICES.md",

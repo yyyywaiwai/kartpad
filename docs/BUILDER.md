@@ -66,8 +66,10 @@ Build the private unsigned IPA:
 ```
 
 The default output is ignored at
-`artifacts/KartPad-personal-unsigned.ipa`. Do not upload or redistribute that
-file: it contains translated code generated from the user's game executable.
+`artifacts/KartPad-personal-unsigned.ipa`. It contains translated code from the
+user's game executable, whose redistribution rights KartPad does not clear.
+The Builder records that game-content status separately from the GPLv3 software
+license; it does not impose a blanket redistribution ban on GPL-covered code.
 
 ## Compatibility profiles
 
@@ -118,11 +120,17 @@ private path prefixes.
 
 ## Release boundary
 
+The following is the maintainer's publication policy, not an additional
+restriction on GPL rights. You may modify and redistribute the GPL-covered
+Builder, runtime, and integration under the GPL, including commercially and
+without separate maintainer approval. See
+[`RIGHTS_AND_LICENSES.md`](../RIGHTS_AND_LICENSES.md).
+
 The maintainer may publish the exact audited community-preview IPA produced by
 `scripts/package-public-unsigned-ipa.py`. That package has versioned
 provenance, license notices, deterministic ZIP metadata, no private game data,
-and no signing material. Its translated-game-code and unresolved-rights status
-must be stated plainly as documented in `RIGHTS_AND_LICENSES.md`.
+and no signing material. Its translated-game-code and uncleared game-content
+rights status must be stated plainly as documented in `RIGHTS_AND_LICENSES.md`.
 
 Do not publish a generated translation directory, raw app bundle, personalized
 Builder IPA, extracted game tree, save, signing certificate, or provisioning

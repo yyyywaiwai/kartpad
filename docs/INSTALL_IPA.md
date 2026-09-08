@@ -1,12 +1,18 @@
 # Install the KartPad unsigned IPA
 
-KartPad `v0.4.8` is an unsigned ARM64 IPA for iPhone and iPad. It is a free
+KartPad `v0.4.11` is an unsigned ARM64 IPA for iPhone and iPad. It is a free
 community release, not an App Store or TestFlight build, and it will not
 install until it is re-signed with your own Apple identity or compatible
 personal sideloading tool.
 
-1. Download `KartPad-v0.4.8-ios-unsigned.ipa` and `SHA256SUMS` from the
-   [0.4.8 release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.8).
+**Update before online play:** 0.4.11/build 26 fixes the incorrect console-serial
+value reported in [issue #94](https://github.com/chrissotraidis/kartpad/issues/94).
+Older IPAs should remain offline. This does not erase incorrect serial history
+already held by a server or clear bans; affected accounts may need service-admin
+help. Never reset identities or delete saves as a workaround.
+
+1. Download `KartPad-v0.4.11-ios-unsigned.ipa` and `SHA256SUMS` from the
+   [0.4.11 release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11).
 2. Verify the IPA with `shasum -a 256 -c SHA256SUMS` on a Mac.
 3. Re-sign and install it with AltStore Classic plus AltServer or another
    compatible IPA-signing workflow. AltStore PAL cannot import arbitrary
@@ -18,16 +24,19 @@ personal sideloading tool.
    official version-locked Retro Rewind 6.12.7 full pack.
 
 To change an existing online name, open **••• → Game Data & Saves → Player
-Identity… → Manage Existing Licenses…**. Choose the exact Original or Retro
+Identity… → Rename or Delete Licenses…**. Choose the exact Original or Retro
 Rewind profile and numbered slot, then choose **Rename License…**. KartPad
 preserves that license's friend code, account data, records, and progress.
 
 To remove a duplicate, choose that exact profile and slot, then **Delete
 License…**. Read the second confirmation carefully: deleting a license removes
-its friend code, account data, records, and progress. Close and reopen KartPad
-to apply either operation. The live save is revalidated and backed up first.
+its friend code, account data, records, and progress. Other licenses retain
+their slots. Fully close KartPad from the app switcher and reopen it to apply
+either operation. Returning to the KartPad menu and resuming does not apply
+pending changes. The live save is revalidated and backed up first.
 
-Use **Set Player Name…** to rename a Mii and licenses already linked to it. Use
+Use **Edit Mii Name…** to rename a Mii and licenses already linked to it. To
+create a license, choose **New** inside the game and select your Mii. Use
 **Import Mii Appearance…** for a standard 74-byte `.mii` file. **Remove Mii
 Appearance…** does not delete a game license and is blocked while the Mii is
 still linked to one.

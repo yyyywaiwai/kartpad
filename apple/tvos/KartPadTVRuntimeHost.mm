@@ -1,3 +1,4 @@
+#import "../mobile/KartPadPrivateServerSettings.h"
 #import "kartpad_mobile_runtime_host.h"
 
 #import "KartPadClassicInput.h"
@@ -317,9 +318,77 @@ UIButton *KartPadTVButton(NSString *title, UIColor *color,
   UIButton *retro = KartPadTVButton(@"Retro Rewind", UIColor.systemPinkColor, ^{
     [weakSelf selectRetroRewind:YES];
   });
+  UIButton *multiplayer = KartPadTVButton(@"Multiplayer…", UIColor.systemGrayColor, ^{
+    [weakSelf showMultiplayer];
+  });
   [self.root showStatus:
       @"Choose a mode. An Extended Gamepad is required for gameplay."
-                    buttons:@[original, retro]];
+                    buttons:@[original, retro, multiplayer]];
+}
+
+- (void)presentMultiplayerAlert:(UIAlertController *)alert {
+  dispatch_async(dispatch_get_main_queue(), ^{
+    UIViewController *presented = self.root.presentedViewController;
+    void (^present)(void) = ^{
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [self.root presentViewController:alert animated:YES completion:nil];
+      });
+    };
+    if ([presented isKindOfClass:UIAlertController.class]) {
+      if (presented.isBeingDismissed && presented.transitionCoordinator) {
+        [presented.transitionCoordinator animateAlongsideTransition:nil
+            completion:^(id<UIViewControllerTransitionCoordinatorContext> context) { present(); }];
+      } else {
+        [presented dismissViewControllerAnimated:YES completion:present];
+      }
+    } else {
+      present();
+    }
+  });
+}
+
+- (void)showMultiplayer {
+  UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Multiplayer"
+      message:@"Both games support local split-screen. Register each connected Extended Gamepad with A in the game. DualShock 4 and DualSense use Cross for A by default.\n\nPrivate friend rooms use Nintendo WFC → Friends. Everyone needs the same game, version and server. Original Mario Kart Wii needs a compatible private server. MeleePad room codes and chat are not available."
+      preferredStyle:UIAlertControllerStyleAlert];
+  __weak KartPadTVLaunchHost *weakSelf = self;
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Private Wii Server…"
+      style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [weakSelf showPrivateServer];
+  }]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Back" style:UIAlertActionStyleCancel handler:nil]];
+  [self presentMultiplayerAlert:sheet];
+}
+
+- (void)showPrivateServer {
+  UIAlertController *editor = [UIAlertController alertControllerWithTitle:@"Private Wii Server"
+      message:@"Experimental: enter a trusted compatible Wii WFC server's hostname or IPv4 address. Legacy Wii traffic is unencrypted. Changes apply after fully closing and reopening KartPad."
+      preferredStyle:UIAlertControllerStyleAlert];
+  [editor addTextFieldWithConfigurationHandler:^(UITextField *field) {
+    field.text = KartPadPrivateServerHost();
+    field.placeholder = @"Server hostname or IPv4 address";
+    field.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    field.autocorrectionType = UITextAutocorrectionTypeNo;
+  }];
+  __weak KartPadTVLaunchHost *weakSelf = self;
+  [editor addAction:[UIAlertAction actionWithTitle:@"Save for Next Launch"
+      style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    NSString *host = [editor.textFields.firstObject.text stringByTrimmingCharactersInSet:
+        NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (!KartPad::Network::ValidPrivateWfcHost(host.UTF8String ?: "")) {
+      [weakSelf showFailure:@"Enter a hostname or IPv4 address without a URL scheme, path, port, or spaces."
+          error:nil retry:^{ [weakSelf showPrivateServer]; }];
+      return;
+    }
+    [NSUserDefaults.standardUserDefaults setObject:host forKey:@"KartPadPrivateWfcHost"];
+    [weakSelf showGameDataState];
+  }]];
+  [editor addAction:[UIAlertAction actionWithTitle:@"Use Default Service Next Launch"
+      style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:@"KartPadPrivateWfcHost"];
+  }]];
+  [editor addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+  [self presentMultiplayerAlert:editor];
 }
 
 - (void)showControllerRequired:(BOOL)retroRewind {
@@ -495,6 +564,7 @@ UIButton *KartPadTVButton(NSString *title, UIColor *color,
 @end
 
 extern "C" bool KartPadMobileEnsureGameDataAvailable() {
+  KartPadApplyPrivateServerAtLaunch();
   SunPadDiagnosticsStart();
   if (!NSThread.isMainThread) {
     __block BOOL available = NO;
@@ -534,6 +604,10 @@ extern "C" bool KartPadMobileReadRuntimeSettings(
 extern "C" bool KartPadMobileReadClassicInput(
     KartPadMobileClassicInputSnapshot *snapshot) {
   return KartPadMobileReadClassicInputForPlayer(0, snapshot);
+}
+
+extern "C" bool KartPadMobileIsControllerConnected(unsigned int player) {
+  return [[KartPadPhysicalControllers sharedControllers] isPlayerConnected:player];
 }
 
 extern "C" bool KartPadMobileReadClassicInputForPlayer(

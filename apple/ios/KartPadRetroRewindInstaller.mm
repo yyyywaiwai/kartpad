@@ -3,6 +3,8 @@
 #import <CommonCrypto/CommonDigest.h>
 #import <TargetConditionals.h>
 
+#include "kartpad/retro_rewind/archive_path.h"
+#include "kartpad/retro_rewind/archive_scan.h"
 #include "kartpad_retro_rewind_release.h"
 #include "mz.h"
 #include "mz_strm.h"
@@ -99,30 +101,40 @@ NSString *KartPadSHA256ForLargeFile(NSString *path,
   return KartPadHexDigest(digest, sizeof(digest));
 }
 
-NSArray<NSString *> *KartPadSafeArchiveComponents(NSString *name,
+NSArray<NSString *> *KartPadSafeArchiveComponents(const char *nameBytes,
+                                                   size_t nameLength,
+                                                   NSString **decodedName,
+                                                   kartpad::retro_rewind::ArchiveMemberPath
+                                                       *portablePath,
                                                    NSError **error) {
-  if (name.length == 0 || [name hasPrefix:@"/"] ||
-      [name containsString:@"\\"] || [name containsString:@"\0"]) {
+  const std::string_view bytes{nameBytes, nameLength};
+  const kartpad::retro_rewind::ArchiveMemberPath validated =
+      kartpad::retro_rewind::ValidateArchiveMemberPath(bytes);
+  NSString *name = [[NSString alloc] initWithBytes:nameBytes
+                                            length:nameLength
+                                          encoding:NSUTF8StringEncoding];
+  if (!validated || name == nil) {
     KartPadRetroRewindFail(error, 3,
         [NSString stringWithFormat:@"The archive contains an unsafe path: %@",
                                    name ?: @"(invalid)"]);
     return nil;
   }
+  if (decodedName != nullptr) *decodedName = name;
+  if (portablePath != nullptr) *portablePath = validated;
+
   NSMutableArray<NSString *> *parts =
-      [[name componentsSeparatedByString:@"/"] mutableCopy];
-  if (parts.lastObject.length == 0) [parts removeLastObject];
-  if (parts.count == 0) {
-    KartPadRetroRewindFail(error, 3, @"The archive contains an empty path.");
-    return nil;
-  }
-  for (NSString *part in parts) {
-    if (part.length == 0 || [part isEqualToString:@"."] ||
-        [part isEqualToString:@".."] || [part containsString:@":"]) {
+      [NSMutableArray arrayWithCapacity:validated.components.size()];
+  for (const std::string& component : validated.components) {
+    NSString *part = [[NSString alloc] initWithBytes:component.data()
+                                              length:component.size()
+                                            encoding:NSUTF8StringEncoding];
+    if (part == nil) {
       KartPadRetroRewindFail(error, 3,
           [NSString stringWithFormat:@"The archive contains an unsafe path: %@",
-                                     name]);
+                                     name ?: @"(invalid)"]);
       return nil;
     }
+    [parts addObject:part];
   }
   return parts;
 }
@@ -321,8 +333,8 @@ BOOL KartPadFileMatches(NSString *path, uint64_t expectedBytes,
   }
 
   void *reader = nullptr;
-  uint64_t selectedBytes = 0;
-  NSUInteger selectedEntries = 0;
+  kartpad::retro_rewind::ArchiveScan archiveScan{
+      KARTPAD_RR_ROOT, 10000, KARTPAD_RR_MAXIMUM_EXPANDED_BYTES};
   if (workError == nil) {
     reader = mz_zip_reader_create();
     if (reader == nullptr ||
@@ -343,29 +355,31 @@ BOOL KartPadFileMatches(NSString *path, uint64_t expectedBytes,
                                           @"The ZIP directory is malformed.");
       break;
     }
-    NSString *name = [NSString stringWithUTF8String:info->filename];
-    NSArray<NSString *> *parts = name == nil ? nil :
-        KartPadSafeArchiveComponents(name, &workError);
+    NSString *name = nil;
+    kartpad::retro_rewind::ArchiveMemberPath portablePath;
+    NSArray<NSString *> *parts = KartPadSafeArchiveComponents(
+        info->filename, info->filename_size, &name, &portablePath, &workError);
     if (parts == nil) break;
-    if (mz_zip_attrib_is_symlink(info->external_fa,
-                                 info->version_madeby) == MZ_OK ||
-        (info->flag & MZ_ZIP_FLAG_ENCRYPTED) != 0 ||
-        info->uncompressed_size < 0) {
-      workError = KartPadRetroRewindError(25,
-          [NSString stringWithFormat:@"The ZIP contains an unsupported entry: %@",
-                                     name]);
-      break;
-    }
-    if ([parts.firstObject isEqualToString:
-            [NSString stringWithUTF8String:KARTPAD_RR_ROOT]]) {
-      selectedEntries += 1;
-      selectedBytes += (uint64_t)info->uncompressed_size;
-      if (selectedEntries > 10000 ||
-          selectedBytes > KARTPAD_RR_MAXIMUM_EXPANDED_BYTES) {
+    const auto observation = archiveScan.Observe(
+        portablePath, info->uncompressed_size,
+        mz_zip_attrib_is_symlink(info->external_fa,
+                                 info->version_madeby) == MZ_OK,
+        (info->flag & MZ_ZIP_FLAG_ENCRYPTED) != 0);
+    if (!observation) {
+      if (observation.error ==
+          kartpad::retro_rewind::ArchiveScanError::UnsupportedEntry) {
+        workError = KartPadRetroRewindError(25,
+            [NSString stringWithFormat:
+                @"The ZIP contains an unsupported entry: %@", name]);
+      } else if (observation.error ==
+                 kartpad::retro_rewind::ArchiveScanError::DuplicateEntry) {
+        workError = KartPadRetroRewindError(31,
+                                            @"The ZIP contains duplicate files.");
+      } else {
         workError = KartPadRetroRewindError(26,
             @"The ZIP expands beyond this build's safety limits.");
-        break;
       }
+      break;
     }
     status = mz_zip_reader_goto_next_entry(reader);
   }
@@ -373,7 +387,7 @@ BOOL KartPadFileMatches(NSString *path, uint64_t expectedBytes,
     workError = KartPadRetroRewindError(27,
                                         @"The ZIP directory could not be read.");
   }
-  if (workError == nil && selectedEntries == 0) {
+  if (workError == nil && archiveScan.selected_entries() == 0) {
     workError = KartPadRetroRewindError(28,
         [NSString stringWithFormat:@"The ZIP does not contain %@.",
             [NSString stringWithUTF8String:KARTPAD_RR_ROOT]]);
@@ -389,8 +403,9 @@ BOOL KartPadFileMatches(NSString *path, uint64_t expectedBytes,
       workError = KartPadRetroRewindError(29, @"A ZIP entry could not be read.");
       break;
     }
-    NSString *name = [NSString stringWithUTF8String:info->filename];
-    NSArray<NSString *> *parts = KartPadSafeArchiveComponents(name, &workError);
+    NSString *name = nil;
+    NSArray<NSString *> *parts = KartPadSafeArchiveComponents(
+        info->filename, info->filename_size, &name, nullptr, &workError);
     if (parts == nil) break;
     if ([parts.firstObject isEqualToString:
             [NSString stringWithUTF8String:KARTPAD_RR_ROOT]]) {
@@ -432,9 +447,10 @@ BOOL KartPadFileMatches(NSString *path, uint64_t expectedBytes,
         }
       }
       extractedBytes += (uint64_t)info->uncompressed_size;
-      if (progress != nil && selectedBytes > 0) {
+      if (progress != nil && archiveScan.selected_bytes() > 0) {
         const double fraction =
-            0.18 + 0.77 * ((double)extractedBytes / (double)selectedBytes);
+            0.18 + 0.77 * ((double)extractedBytes /
+                           (double)archiveScan.selected_bytes());
         const int percent = (int)(fraction * 100.0);
         if (percent != lastExtractionPercent) {
           lastExtractionPercent = percent;

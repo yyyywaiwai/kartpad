@@ -1,3 +1,4 @@
+#import "../mobile/KartPadPrivateServerSettings.h"
 #import "KartPadMacShell.h"
 #import "KartPadMiiManager.h"
 #import "KartPadWiimotePairing.h"
@@ -831,6 +832,52 @@ static NSString *DiagnosticsReport() {
   SDL_PushEvent(&event);
 }
 
+- (void)showMultiplayer:(id)sender {
+  (void)sender;
+  NSAlert *alert = [NSAlert new];
+  alert.messageText = @"KartPad Multiplayer";
+  alert.informativeText = @"Local: choose Multiplayer in either game, then register each controller with A. Use Controls → Controller Settings to assign players.\n\nPrivate friend rooms: use the same game, content version, and service. In Nintendo WFC → Friends, exchange friend codes; the host creates a room and friends join from their roster. Original Mario Kart Wii requires a compatible private Wii server. MeleePad room codes and chat are not available.";
+  [alert addButtonWithTitle:@"Done"];
+  [alert addButtonWithTitle:@"Private Wii Server…"];
+  if ([alert runModal] == NSAlertSecondButtonReturn) [self showPrivateServer:sender];
+}
+
+- (void)showPrivateServer:(id)sender {
+  (void)sender;
+  NSAlert *alert = [NSAlert new];
+  alert.messageText = @"Private Wii Server";
+  alert.informativeText = @"Experimental setup for both games. Enter a compatible Wii WFC server's hostname or IPv4 address. Everyone must use the same server. Legacy Wii traffic is unencrypted. Changes apply after quitting and reopening KartPad.";
+  NSTextField *field = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 340, 26)];
+  field.stringValue = KartPadPrivateServerHost();
+  field.placeholderString = @"Server hostname or IPv4 address";
+  field.accessibilityLabel = @"Private Wii server address";
+  alert.accessoryView = field;
+  [alert addButtonWithTitle:@"Save for Next Launch"];
+  [alert addButtonWithTitle:@"Cancel"];
+  [alert addButtonWithTitle:@"Use Default Service Next Launch"];
+  [alert.window setInitialFirstResponder:field];
+  NSModalResponse response = [alert runModal];
+  if (response == NSAlertSecondButtonReturn) return;
+  if (response == NSAlertThirdButtonReturn) {
+    [NSUserDefaults.standardUserDefaults removeObjectForKey:@"KartPadPrivateWfcHost"];
+  } else {
+    NSString *host = [field.stringValue stringByTrimmingCharactersInSet:
+        NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (!KartPad::Network::ValidPrivateWfcHost(host.UTF8String)) {
+      NSAlert *error = [NSAlert new];
+      error.messageText = @"Invalid Server Address";
+      error.informativeText = @"Enter a hostname or IPv4 address without a URL scheme, path, port, or spaces.";
+      [error runModal];
+      return;
+    }
+    [NSUserDefaults.standardUserDefaults setObject:host forKey:@"KartPadPrivateWfcHost"];
+  }
+  NSAlert *saved = [NSAlert new];
+  saved.messageText = @"Online Service Saved";
+  saved.informativeText = @"Quit and reopen KartPad to apply the change. Private-server compatibility and complete races still need testing.";
+  [saved runModal];
+}
+
 - (void)showControls:(id)sender {
   (void)sender;
   if (self.controlsPanel == nil) {
@@ -1334,6 +1381,11 @@ static void InstallMenu() {
   NSMenuItem *controlsMenuItem = [[NSMenuItem alloc]
       initWithTitle:@"Controls" action:nil keyEquivalent:@""];
   NSMenu *controlsMenu = [[NSMenu alloc] initWithTitle:@"Controls"];
+  NSMenuItem *multiplayer = [[NSMenuItem alloc]
+      initWithTitle:@"Multiplayer…" action:@selector(showMultiplayer:) keyEquivalent:@""];
+  multiplayer.target = Controller();
+  [controlsMenu addItem:multiplayer];
+
   NSMenuItem *controllerSettings = [[NSMenuItem alloc]
       initWithTitle:@"Controller Settings…"
              action:@selector(showControllerSettings:) keyEquivalent:@""];
@@ -1385,6 +1437,7 @@ void KartPadMacShellInstall(void) {
 }
 
 bool KartPadMacShellPrepareGameData(void) {
+  KartPadApplyPrivateServerAtLaunch();
   @autoreleasepool {
     const std::filesystem::path configPath = RuntimeConfigFile::ResolveConfigPath();
     const bool hadConfig = std::filesystem::exists(configPath);

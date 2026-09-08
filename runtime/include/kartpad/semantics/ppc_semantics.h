@@ -7,7 +7,23 @@
 #include <cstdint>
 #include <limits>
 
+#if defined(KARTPAD_ANDROID_COMBINED_FENV)
+// Implemented in a separate translation unit: do not inline across the FP
+// arithmetic whose exception flags are being captured.
+extern "C" int KartPadAndroidCaptureScalarFlags() noexcept;
+#endif
+
 namespace kartpad::semantics {
+
+inline int CaptureAndClearScalarFlags() noexcept {
+#if defined(KARTPAD_ANDROID_COMBINED_FENV)
+  return KartPadAndroidCaptureScalarFlags();
+#else
+  const int flags = std::fetestexcept(FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT);
+  std::feclearexcept(FE_ALL_EXCEPT);
+  return flags;
+#endif
+}
 
 struct PpcFlags {
   bool invalid{};
@@ -245,14 +261,13 @@ inline ScalarFpResult EvaluatePpcScalarBinary(
     exception |= fpscr::ZX;
   }
 
-  const int host_flags = std::fetestexcept(FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT);
+  const int host_flags = CaptureAndClearScalarFlags();
   if ((host_flags & FE_OVERFLOW) != 0)
     exception |= fpscr::OX;
   if ((host_flags & FE_UNDERFLOW) != 0)
     exception |= fpscr::UX;
   if ((host_flags & FE_INEXACT) != 0)
     exception |= fpscr::XX;
-  std::feclearexcept(FE_ALL_EXCEPT);
   return FinishScalarFp(fpscr_value, value, exception, single_precision);
 }
 
@@ -273,14 +288,13 @@ inline ScalarFpResult EvaluatePpcSqrt(std::uint32_t fpscr_value, double input,
     std::feclearexcept(FE_ALL_EXCEPT);
     volatile double computed = std::sqrt(input);
     value = computed;
-    const int flags = std::fetestexcept(FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT);
+    const int flags = CaptureAndClearScalarFlags();
     if ((flags & FE_OVERFLOW) != 0)
       exception |= fpscr::OX;
     if ((flags & FE_UNDERFLOW) != 0)
       exception |= fpscr::UX;
     if ((flags & FE_INEXACT) != 0)
       exception |= fpscr::XX;
-    std::feclearexcept(FE_ALL_EXCEPT);
   }
   return FinishScalarFp(fpscr_value, value, exception, single_precision);
 }
@@ -363,14 +377,13 @@ inline ScalarFpResult EvaluatePpcFused(std::uint32_t fpscr_value, double a,
     value = -value;
   }
 
-  const int flags = std::fetestexcept(FE_OVERFLOW | FE_UNDERFLOW | FE_INEXACT);
+  const int flags = CaptureAndClearScalarFlags();
   if ((flags & FE_OVERFLOW) != 0)
     exception |= fpscr::OX;
   if ((flags & FE_UNDERFLOW) != 0)
     exception |= fpscr::UX;
   if ((flags & FE_INEXACT) != 0)
     exception |= fpscr::XX;
-  std::feclearexcept(FE_ALL_EXCEPT);
   return FinishScalarFp(fpscr_value, value, exception, single_precision);
 }
 

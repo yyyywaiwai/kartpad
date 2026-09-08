@@ -1,19 +1,20 @@
 # KartPad
 
-KartPad is an Apple-platform fork and productization of
+KartPad is an Apple and Android fork and productization of
 [WiiCompiled](https://github.com/patchzyy/Wiicompiled), the original static-
 recompilation project for Mario Kart Wii. KartPad adds a first-class dual-game
-Original Mario Kart Wii / Retro Rewind runtime, native Apple controls, data
+Original Mario Kart Wii / Retro Rewind runtime, native platform controls, data
 management, packaging, and release workflows.
 
 <p align="center">
-  <strong>Mario Kart Wii and Retro Rewind, native for iOS, iPadOS, macOS, and tvOS.</strong><br>
-  Native static recompilation through Metal, with touch controls, motion steering, controllers, and optional Retro Rewind content. tvOS is currently an experimental preview.
+  <strong>Mario Kart Wii and Retro Rewind, native for Android, iOS, iPadOS, and macOS.</strong><br>
+  Native static recompilation through Vulkan on Android and Metal on Apple platforms, with touch controls, motion steering, controllers, and optional Retro Rewind content. tvOS is currently an experimental preview.
 </p>
 
 <p align="center">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-0A84FF?logo=apple">
   <img alt="Metal renderer" src="https://img.shields.io/badge/renderer-Metal-5E5CE6">
+  <img alt="Android ARM64 with Vulkan" src="https://img.shields.io/badge/Android-ARM64%20%2F%20Vulkan-3DDC84?logo=android">
   <img alt="Ahead-of-time static recompilation" src="https://img.shields.io/badge/PowerPC-static%20recompilation-FF9F0A">
   <img alt="macOS development target" src="https://img.shields.io/badge/macOS%20target-14%2B-0A84FF">
   <img alt="iPhone and iPad physical builds accepted" src="https://img.shields.io/badge/iPhone%20%2F%20iPad-physical%20builds%20accepted-30D158">
@@ -24,39 +25,111 @@ management, packaging, and release workflows.
 ![KartPad running a race on DK Summit on iPad](docs/images/kartpad-dk-summit-ipad.png)
 
 > [!IMPORTANT]
-> **The latest release includes KartPad's dual-mode Mario Kart Wii and Retro
-> Rewind builds for Apple Silicon Mac, iPhone, and iPad.** The IPA must be
-> re-signed before installation
-> and requires your own legally obtained supported game image. Retro Rewind is
-> optional and installs through KartPad from the official version-locked pack.
-> KartPad 0.4.8 fixes native player-name keyboard focus, clarifies pending
-> license changes, and adds matching player identity actions on Mac. It adds
-> a floating movement stick and phone-style iPad defaults while preserving
-> custom layouts. It retains Retro Rewind 6.12.7 and the automatic upstream update issue
-> plus one-command maintainer repin flow. It retains the universal
-> iPhone/iPad settings menu, and includes the native Apple TV hardware-bring-up
-> build. Apple TV support still
-> needs external physical testing before it can be called supported.
-> The IPAs include ahead-of-time translated game logic but no disc image,
+> **KartPad 0.4.11 build 26 is the current iPhone/iPad and Mac release.** It fixes the
+> serious online console-serial bug reported in [#94](https://github.com/chrissotraidis/kartpad/issues/94).
+> Update before online play; older iOS, Mac and tvOS packages should stay offline.
+> The Mac package is in `v0.4.11-macos.1`. The IPA requires local
+> re-signing and your own legally obtained supported game image. Retro Rewind
+> 6.12.7 installs separately through KartPad.
+>
+> It retains the accepted iPad touch layout, **Return to KartPad Menu**,
+> and clearer Mii/license editing. It retains the local-controller registration
+> fix, player-slot status, and face-button remapping from 0.4.9. Native private
+> rooms and production online-race verification remain open. Apple TV remains
+> experimental. **Android now has its first supported community release:**
+> [download the Android APK](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.10-android.1).
+> See the [Android installation guide](docs/INSTALL_ANDROID.md) before updating a private preview.
+>
+> The downloads include ahead-of-time translated game logic, but no disc image,
 > extracted game assets, Retro Rewind pack, saves, signing identity, or
-> provisioning profile. Retro WFC is active again; exact KartPad production
-> login, matchmaking, race, results, and reconnect acceptance remain separate.
+> provisioning profile.
+
+## iPhone and iPad 0.4.11 identity hotfix
+
+This native rebuild includes the narrow upstream CSNum correction, credited to
+patchzyy, while preserving stored identities, friend codes and saves. The old
+function could make different serials collapse to the same online identity and
+overwrite adjacent guest memory. Tests cover the actual corrected function;
+the fix does not clear old server-side identity history or reverse existing bans.
+See the [iPhone/iPad notes](docs/releases/v0.4.11.md) and
+[Mac notes](docs/releases/v0.4.11-macos.1.md). The old tvOS binary and
+server-admin remediation remain separate; source fixes do not repair old downloads.
+
+### Earlier physical layout acceptance (0.4.10)
+
+The maintainer previously accepted the macOS, iOS, and iPadOS builds as stable
+for general use. The latest physical review was **0.4.10 build 25 on iPad**:
+Retro Rewind launched, Game Data & Saves was clear, and the in-game Retro WFC
+menu allowed navigation to **Friends**. Earlier checks covered license deletion
+and creation, returning to the chooser, and reopening to switch games. This
+review does not establish a completed online race.
+
+[Download the corrected iPhone/iPad IPA and checksum](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11).
+The menu names below follow 0.4.10; 0.4.9 calls them **Manage Existing Licenses…**
+and **Set Player Name…**. The corrected
+[macOS download](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-macos.1)
+retains the native Mac controls and data-management flows.
 
 ## What is available now?
 
+| Platform | Current corrected download | Installation |
+|---|---|---|
+| Android ARM64 | [0.4.10-android.1, code 21](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.10-android.1) | [APK guide](docs/INSTALL_ANDROID.md) |
+| iPhone / iPad | [0.4.11, build 26](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11) | [Unsigned IPA guide](docs/INSTALL_IPA.md) |
+| Apple Silicon Mac | [0.4.11, build 26](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-macos.1) | [Mac ZIP guide](docs/INSTALL_MACOS.md) |
+| Apple TV (experimental) | [0.4.11, build 9](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-tvos.1) | [tvOS IPA guide](docs/INSTALL_TVOS.md) |
+
+All four contain the corrected online console-serial implementation. Platform
+release tags are independent; identical version strings are not required for
+the shared fix. Apple TV hardware/online acceptance remains experimental.
+
+### Android: first community release
+
+[Download Android APK, notices and SHA-256 checksums](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.10-android.1)
+· [Install and update](docs/INSTALL_ANDROID.md) · [Build from source](android/README.md).
+
+The first Android release promotes the runtime tested on a **Pixel 9 Pro XL**.
+The maintainer accepted Original Mario Kart Wii gameplay with a **Razer Kishi**,
+including automatic touch-control hiding, and reported Retro Rewind 6.12.7
+Retro WFC login, worldwide matchmaking and live race play. Complete online
+results/reconnect and every controller model are not yet verified.
+
+Requires an **ARM64 Android device with Vulkan** and your own supported PAL
+`RMCP01` revision 0 image. The package minimum is Android 9/API 28; that oldest
+physical OS/GPU combination remains unverified. Start at **1x Native** resolution
+and increase it if your phone maintains good performance. The maintainer played
+at 3x, but startup shader compilation, track-dependent dips and warm slowdown
+remain known limitations—not a sustained-60-FPS guarantee. Android uses an
+**APK**, not an IPA, and no Play Store listing is implied.
+
+### Platform overview
+
 | Question | Answer |
 |---|---|
-| Is this Dolphin or streaming? | No. WiiCompiled translates the game's PowerPC code ahead of time, then KartPad compiles it for ARM64 and presents it through Metal. |
-| Are release downloads included? | **Yes.** `v0.4.8` includes an ad-hoc-signed Apple Silicon Mac ZIP and an audited unsigned ARM64 IPA for iPhone/iPad. The experimental Apple TV hardware-bring-up IPA remains available from `v0.4.4`. They require user-supplied supported game data; the IPA also requires local re-signing. |
+| Is this Dolphin or streaming? | No. WiiCompiled translates the game's PowerPC code ahead of time, then KartPad compiles it for ARM64 and presents it through Metal on Apple platforms or Vulkan on Android. |
+| Are release downloads included? | **Yes.** Corrected downloads: iPhone/iPad `v0.4.11`, Mac `v0.4.11-macos.1`, Android `v0.4.10-android.1`. Experimental tvOS has the same correction in `v0.4.11-tvos.1`. Supply your own supported game data; the IPA also requires local re-signing. |
 | Can the source create an IPA? | Yes. The Personal IPA Builder can also translate a supported user-owned game executable and create a separate private unsigned IPA on an Apple Silicon Mac. |
 | Does it include Mario Kart Wii? | No. You must provide your own legally obtained supported PAL `RMCP01` revision 0 WBFS/ISO. |
-| Does it support Retro Rewind? | **Yes.** Choose Original Mario Kart Wii or Retro Rewind when KartPad opens. KartPad can download, verify, and install the official Retro Rewind 6.12.7 pack. The 6.12.7 graph and package are current; physical acceptance remains separate. |
-| Does online play work? | The online-capable build passes login, matchmaking, a two-player race, results, ratings, and lobby return against a compatible isolated WFC server. Retro WFC is active again as of 6 September 2026. Production compatibility of the exact 0.4.8 KartPad artifacts still needs end-to-end and physical-device acceptance. |
+| Does it support Retro Rewind? | **Yes.** Choose Original Mario Kart Wii or Retro Rewind when KartPad opens. KartPad can download, verify, and install the official Retro Rewind 6.12.7 pack. The maintainer accepted Retro Rewind launch and menu navigation on iPad build 25; production online races remain a separate check. |
+| Does online play work? | The online-capable build passes login, matchmaking, a two-player race, results, ratings, and lobby return against a compatible isolated WFC server. Retro WFC is active again as of 6 September 2026. Production online races for the distributed builds still need end-to-end physical-device verification. |
 | Do touch, tilt, and controllers work? | Touch, motion steering, and ordinary GameController-compatible pads are implemented, with general physical acceptance on iPhone and iPad. Direct Wii Remote/Nunchuk pairing is a separate experimental, macOS-only path that still needs external hardware testing. |
-| Can I rename or delete a license? | **Yes on iPhone and iPad.** Open **Game Data & Saves → Player Identity… → Manage Existing Licenses…**, choose the exact game profile and slot, then rename it without losing its friend code/progress or delete only that slot after a second warning. Restart KartPad to apply the backed-up change. |
+| Can I rename or delete a license? | **Yes on iPhone and iPad.** Open **Game Data & Saves → Player Identity… → Rename or Delete Licenses…**, choose the exact game profile and slot, then rename it without losing its friend code/progress or delete only that slot after a second warning. Fully close KartPad from the app switcher and reopen it to apply the backed-up change; returning to its menu and resuming does not apply pending edits. |
 | Can I choose a Mii appearance? | **Appearance import remains experimental.** Open **Game Data & Saves → Player Identity… → Import Mii Appearance…** and choose a standard 74-byte `.mii` file. **Remove Mii Appearance…** never means delete a game license and refuses to remove a Mii that is still linked to one. |
-| Are Android and Apple TV supported? | Apple TV has an experimental native hardware-bring-up IPA in `v0.4.4`, but it is not accepted as supported until physical testers complete the matrix. Native Android implementation is now an active, evidence-gated project; no Android APK or runtime claim exists yet. |
+| Are Android and Apple TV supported? | **Android is supported**, with the first APK in `v0.4.10-android.1` and physical Pixel/Kishi gameplay acceptance. Hardware coverage and performance limits are described above. Apple TV remains an experimental hardware-bring-up IPA in `v0.4.11-tvos.1`. |
+| Where are Android saves, and can I transfer a PC save? | Original save export/restore is available through **••• → Game Data & Saves → Manage Saves…**. Saves are internal app-private files. Retro Rewind save transfer is not covered by that UI yet; see the [transfer guide](docs/SUPPORT.md#android-save-transfer). |
+| Is Wiimmfi supported for Original? | No; it is an open compatibility request [#90](https://github.com/chrissotraidis/kartpad/issues/90). Changing a server address/MAC or importing a patched ISO does not add the matching native executable support. |
+| Can I use AirPlay or an external display? | This is under investigation in [#100](https://github.com/chrissotraidis/kartpad/issues/100); phone/tablet display acceptance does not establish external-output support. |
 | How much storage does it need? | The app is about 80 MiB and extracted Mario Kart Wii data uses about 2.5 GiB. Retro Rewind downloads an additional 1.72 GiB archive and needs temporary installation space. Keeping the WBFS/ISO on the device requires more space. |
+
+## Multiplayer and controller setup
+
+Version 0.4.9 fixes physical-controller registration for Players 2–4 on Apple
+mobile devices and adds player-slot status and face-button remapping. The
+Multiplayer menu covers both games and includes experimental private Wii-server
+configuration. This is a client setting; MeleePad room codes and chat are not
+ported, and Original Mario Kart Wii private-server gameplay is not yet verified.
+See [Multiplayer and controllers](docs/MULTIPLAYER.md) for DualShock/DualSense,
+GameCube-on-iPad details, friend rooms, and Android/Kishi setup.
 
 ## Original Mario Kart Wii or Retro Rewind
 
@@ -67,6 +140,19 @@ an unrelated setup path. The opening screen offers two choices:
   characters, saves, local multiplayer, and KartPad controls.
 - **Retro Rewind** adds its expanded tracks, characters, features, and Retro
   WFC integration while using the same native KartPad runtime and controls.
+
+On iPhone and iPad in 0.4.10, open **••• → Return to KartPad Menu** to pause
+the current game and return to the chooser. **Resume** continues that same
+session. The other game is labeled **Switch on next launch**: choose **Use on
+Next Launch**, fully close KartPad from the app switcher, then reopen it.
+Returning to the chooser alone does not restart the game or apply pending
+license edits. An online connection may time out while the game is paused.
+
+Original Mario Kart Wii no longer offers the unusable private friend-room
+instructions. **Experimental Server Settings…** is an override for an
+already-running compatible Wii service; it does not create a private lobby.
+Retro Rewind retains **Retro WFC Friend Rooms…** guidance. Native MeleePad-style
+room hosting and joining remain unfinished.
 
 KartPad does not bundle either game's private data. After you import your own
 supported Mario Kart Wii image, choosing Retro Rewind checks the official
@@ -86,16 +172,16 @@ Retro WFC is Retro Rewind's online service. KartPad's online-capable graph
 passes login, matchmaking, a complete two-player race, results, ratings, and
 lobby return against a compatible isolated WFC service. Retro WFC's public
 health and room feeds are active again as of 6 September 2026. That service
-recovery does not by itself prove the exact 0.4.8 KartPad artifacts' production
+recovery does not by itself prove the distributed KartPad builds' production
 login, matchmaking, complete-race, results, reconnect, or physical-device gates.
 
-KartPad packages a native Apple ARM64 app around a
+KartPad packages a native ARM64 app around a
 [WiiCompiled](https://github.com/patchzyy/Wiicompiled)-generated Mario Kart Wii
 module and its Aurora/Dawn compatibility runtime. PowerPC game code runs as
-ahead-of-time translated arm64 code, Dawn presents through Metal, and a narrow
-Apple host layer supplies audio, input, storage, timing, and lifecycle behavior.
+ahead-of-time translated arm64 code, Dawn presents through Metal or Vulkan, and
+platform host layers supply audio, input, storage, timing, and lifecycle behavior.
 
-This repository contains KartPad's Apple integration, reproducible patches,
+This repository contains KartPad's Apple and Android integration, reproducible patches,
 tests, documentation, and original artwork. The source tree does **not** contain
 Mario Kart Wii, a disc image, extracted Nintendo assets, generated game code,
 saves, or signing material. The separately downloadable preview IPAs contain
@@ -107,6 +193,7 @@ retail game data.
 
 | Area | Current result |
 |---|---|
+| Android runtime | Full ARM64 Original / Retro Rewind runtime through Vulkan; physically accepted Pixel 9 Pro XL gameplay with touch and Razer Kishi. First APK: `v0.4.10-android.1`; startup/warm frame pacing and broader device coverage remain active work |
 | macOS runtime | Native arm64 dual-game Original / Retro Rewind app with standard Game, Data, Controls, and Help menus; races, saves, ghosts, Battle, and split-screen gameplay render through Metal |
 | Track coverage | All 32 retail tracks have exact native completion evidence |
 | Correctness | Darwin memory, scheduler, ABI, integer, scalar-FP, and paired-single gates pass against their defined oracles |
@@ -115,9 +202,9 @@ retail game data.
 | Performance | Warm, simple scenes can report 60 FPS; first-use shader compilation and some tracks can fall far below real time. Stable frame pacing is **not yet accepted** |
 | Packaging | The K-circuit iPhone/iPad icon and branded package pass structural audit; installed-storage, configured gameplay, save-preservation, and normal-close evidence applies to the previously accepted app candidate, while the native first-run/settings/data-management shell remains open |
 | iPhone/iPad | The full 29,065-function ARM64 retail app has been packaged as an unsigned IPA; locally signed builds have been installed and physically accepted on both iPhone and iPad, reaching live races, importing a supported private WBFS, and preserving saves |
-| Game content | Version-locked dual-mode Original Mario Kart Wii / Retro Rewind 6.12.7 flow without bundling either game's private data; exact 6.12.7 physical acceptance remains open while the preceding physical iPad install, launch, and initial single-player gameplay result remains accepted only for its tested version |
-| Online multiplayer | Local Mac-to-iPad-Simulator login, matchmaking, room, race, native results, ratings, and lobby return pass; public Retro WFC service recovery is verified, while exact 0.4.8 production and physical-device acceptance remain open |
-| Distribution | `v0.4.8` provides source, an Apple Silicon Mac ZIP, and an unsigned iPhone/iPad community IPA containing translated game logic; the experimental tvOS IPA remains at `v0.4.4`. They contain no disc image, extracted game assets, Retro Rewind pack, saves, signing identity, or provisioning profile |
+| Game content | Version-locked dual-mode Original Mario Kart Wii / Retro Rewind 6.12.7 flow without bundling either game's private data; 6.12.7 launch and menu navigation were accepted on physical iPad build 25; complete production-online races remain unverified |
+| Online multiplayer | Local Mac-to-iPad-Simulator race/results evidence passes; Android Retro WFC login, worldwide matchmaking and live racing are owner-reported. Complete production results/reconnect and server CSNum-history remediation remain open |
+| Distribution | Corrected iPhone/iPad IPA in `v0.4.11`, Mac ZIP in `v0.4.11-macos.1`, Android APK in `v0.4.10-android.1`; experimental tvOS IPA in `v0.4.11-tvos.1`. Downloads contain compiled translated logic, but no disc images, extracted retail assets, Retro pack, saves or private signing material |
 
 The evidence ledger, exact open rows, and known risks live in
 [`docs/STATUS.md`](docs/STATUS.md). The 67-row release matrix is in
@@ -190,14 +277,14 @@ distributed.
 
 ## Player identity, experimental Mii appearances, and Wii Remote controls
 
-License and player-name editing is supported on iPhone, iPad and Mac in 0.4.8.
+License and player-name editing is supported on iPhone, iPad and Mac in 0.4.9.
 Imported Mii appearances and direct Wii Remote controls remain opt-in features for community
 testing until users with real exported Miis and original Wii hardware complete
 the remaining acceptance checks.
 
 ### Rename or delete an existing license
 
-Open **••• → Game Data & Saves → Player Identity… → Manage Existing
+Open **••• → Game Data & Saves → Player Identity… → Rename or Delete
 Licenses…**. KartPad lists each active license as **Original Mario Kart Wii** or
 **Retro Rewind**, followed by its one-based slot and current name.
 
@@ -206,8 +293,11 @@ Licenses…**. KartPad lists each active license as **Original Mario Kart Wii** 
 - Choose **Delete License…** only for the exact unwanted slot. A second warning
   names the profile and slot because deletion removes that license's friend
   code, account data, records, and progress.
-- Close and reopen KartPad before playing. The change is applied to the newest
-  live save only after it is revalidated and backed up.
+- Fully close KartPad from the app switcher and reopen it before playing.
+  Returning to the KartPad menu and resuming does not apply pending edits. The
+  newest live save is revalidated and backed up before the change is applied.
+- Deleting a license leaves the other slots in place. Deleting slot 1 does not
+  move the license in slot 2 into slot 1.
 
 If an older license already has a friend code and a newly created duplicate
 does not, rename the established license first. Verify its friend code remains,
@@ -216,14 +306,16 @@ to change its name.
 
 ### Set a Mii name or appearance
 
-On iPhone or iPad, open **Game Data & Saves → Player Identity…**. Choose **Set
-Player Name…** to give the built-in or an imported Mii a 1–10 character name.
+On iPhone or iPad, open **Game Data & Saves → Player Identity…**. Choose **Edit
+Mii Name…** to give the built-in or an imported Mii a 1–10 character name.
 On the next launch, KartPad updates that Mii and every linked original-game or
 Retro Rewind license while retaining friend codes, online account data, and
-progress. New licenses created with that Mii inherit the chosen name.
+progress. This edits your Mii identity; it does not create a game license.
+To create one, choose **New** on the license screen inside Mario Kart Wii or
+Retro Rewind, then select that Mii. The new license inherits its name.
 
-**Set Player Name…** remains available for naming a Mii and every license that
-is already linked to it. For an older or unlinked license, use **Manage Existing
+**Edit Mii Name…** remains available for naming a Mii and every license that
+is already linked to it. For an older or unlinked license, use **Rename or Delete
 Licenses…** instead.
 
 KartPad still does not include the Wii Menu's full appearance editor. To change
@@ -253,8 +345,8 @@ provide the required direct Wii Remote HID pairing path.
 
 ### Download the Apple Silicon Mac app
 
-Download `KartPad-v0.4.8-macos-arm64.zip` and `SHA256SUMS` from the
-[latest release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.8).
+Download `KartPad-v0.4.11-macos.1-arm64.zip` and `SHA256SUMS` from the
+[macOS release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-macos.1).
 The app is ad-hoc signed, requires macOS 14 or newer on Apple Silicon, and does
 not include Mario Kart Wii or Retro Rewind data. Follow
 [`docs/INSTALL_MACOS.md`](docs/INSTALL_MACOS.md) for checksum, Gatekeeper, game
@@ -262,8 +354,8 @@ data, game switching, keyboard, controller, and mouse guidance.
 
 ### Download the unsigned iPhone/iPad IPA
 
-Download `KartPad-v0.4.8-ios-unsigned.ipa` and `SHA256SUMS` from the
-[latest release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.8).
+Download `KartPad-v0.4.11-ios-unsigned.ipa` and `SHA256SUMS` from the
+[0.4.11 release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11).
 Verify the checksum, re-sign the IPA with AltStore Classic plus AltServer or
 another compatible personal-signing workflow, and select your own supported
 PAL `RMCP01` revision 0 image on first launch. See
@@ -290,10 +382,11 @@ Apple Silicon Mac before signing:
 ./scripts/build-user-ipa.sh build /path/to/Mario-Kart-Wii.wbfs
 ```
 
-The resulting `artifacts/KartPad-personal-unsigned.ipa` is private and must not
-be redistributed because it contains translated code generated from the
-user's game executable. Compatibility is profile-driven: additional verified
-WBFS/ISO containers can share a profile only when their extracted executables
+The resulting `artifacts/KartPad-personal-unsigned.ipa` remains an ignored local
+artifact because it contains translated code from the user's game executable,
+whose redistribution rights KartPad does not clear. This publication policy
+does not restrict your rights to the GPL-covered software. Compatibility is
+profile-driven: additional verified WBFS/ISO containers can share a profile only when their extracted executables
 are identical, while different regions or revisions use separate profiles.
 See [`docs/BUILDER.md`](docs/BUILDER.md) for the cache, validation, extension,
 and release contracts. Maintainers should also follow
@@ -483,7 +576,7 @@ available without a separate controller:
   held touch input, and hides touch controls by default. Disconnecting it
   restores touch; additional controllers keep stable Player 2–4 slots.
 - **Menu:** the persistent **•••** opens display, controls, game data,
-  diagnostics, multiplayer access, and motion steering. On iPhone/iPad 0.4.8,
+  diagnostics, multiplayer access, and motion steering. On iPhone/iPad 0.4.9,
   taking a screenshot reasserts the button immediately and again on the next
   main-loop pass if iPadOS temporarily changes the menu presentation state.
 - **Player identity:** **Game Data & Saves → Player Identity…** sets the
@@ -551,6 +644,11 @@ binary is part of this repository.
 
 ## Diagnostics and privacy
 
+Start with the [support guide](docs/SUPPORT.md) for save transfers, aspect modes,
+Android graphics/performance comparisons, external displays, and exact log
+collection steps. The [bug report form](https://github.com/chrissotraidis/kartpad/issues/new?template=bug_report.yml)
+accepts the fields prefilled by the iPhone/iPad and Android report buttons.
+
 On Mac, choose **Help → Save Diagnostics Report…** after a failure or slow
 session. The schema-3 report contains bounded build/runtime identifiers,
 selected safe settings, storage health, clean-versus-unclean shutdown state,
@@ -583,9 +681,14 @@ Useful starting points:
 
 ### Can I download an IPA or playable app?
 
-Yes. `v0.4.8` provides an Apple Silicon Mac ZIP and an unsigned iPhone/iPad IPA
-that must be re-signed before installation. The experimental Apple TV IPA
-remains available from `v0.4.4`.
+Yes. `v0.4.11` provides the corrected unsigned iPhone/iPad IPA, which must be re-signed
+before installation. The corrected Apple Silicon Mac ZIP is in
+[`v0.4.11-macos.1`](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-macos.1).
+The corrected experimental Apple TV IPA is in
+[`v0.4.11-tvos.1`](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-tvos.1);
+older tvOS IPAs should stay offline. Android's APK is in
+[`v0.4.10-android.1`](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.10-android.1);
+follow [the Android guide](docs/INSTALL_ANDROID.md).
 They contain
 KartPad's compiled ARM64 translation but no disc image or extracted game assets,
 so you must supply your own legally obtained supported game data. The Personal
@@ -603,26 +706,25 @@ Public Retro WFC compatibility, Wiimmfi, physical-device online play, and
 external-client interoperability remain separate acceptance gates. As of 6
 September 2026, Retro WFC's health endpoint reports its external API healthy
 and the public room feed reports active rooms. The earlier maintenance outage
-is over, so the exact 0.4.8 builds can now be evaluated against production; the
-service status alone is not that gameplay proof.
+was over at that check. The maintainer subsequently navigated to Friends on
+physical iPad build 25; a complete production online race remains unverified.
 
 - [Retro Rewind service notice](https://mkwiiki.org/wiki/Retro_Rewind)
 - [Retro WFC status](https://status.rwfc.net/)
 
 ### Does KartPad support Retro Rewind?
 
-Yes. The 0.4.8 Mac, iPhone, and iPad release supports Original / Retro Rewind and
-installs a separately downloaded,
-hash-verified Retro Rewind 6.12.7 pack. KartPad does not bundle Mario Kart Wii
-or Retro Rewind content. Physical iPad build 7 completes the pack download,
-verification, installation, Retro Rewind launch, and initial single-player
-gameplay on the earlier tested pack. Build 8 adds the final iPad
-multiplayer-guidance polish and installs in place without removing app data.
-The exact 6.12.7 artifact still needs physical and production-online
-acceptance. Before Retro Rewind starts, KartPad checks
-the official version feed. If
-Retro Rewind advances beyond the version compiled into the app, KartPad asks
-for a compatible KartPad update instead of launching an outdated online pack.
+Yes. The current Mac/iPhone/iPad 0.4.11 and Android 0.4.10-android.1 builds support
+Original / Retro Rewind using the separately installed, hash-verified Retro
+Rewind 6.12.7 pack. KartPad does not bundle Mario Kart Wii or Retro Rewind content.
+The maintainer accepted Retro Rewind launch and menu navigation on physical
+iPad build 25. Earlier physical tests covered pack download, verification,
+installation, and initial single-player gameplay on the tested pack version.
+Complete production-online races remain a separate check.
+
+Before Retro Rewind starts, KartPad checks the official version feed. If Retro
+Rewind advances beyond the version compiled into the app, KartPad asks for a
+compatible KartPad update instead of launching an outdated online pack.
 
 ### Can KartPad set my player name or import a custom Mii?
 
@@ -643,13 +745,15 @@ iPhone or iPad.
 ### Are Android or Apple TV supported?
 
 Apple Silicon Mac, iPhone, and iPad are supported. An experimental native Apple
-TV tester IPA is included in `v0.4.4`; it has passed build and package
+TV tester IPA is included in `v0.4.11-tvos.1`; it has passed build and package
 audits but still needs physical Apple TV acceptance before tvOS can be called
 supported. See [the tvOS implementation and acceptance plan](docs/TVOS.md).
-Native Android implementation is now active, beginning with a reproducible
-ARM64 toolchain, JNI shell, and Vulkan fixture. No Android APK or gameplay
-claim exists yet. See the [Android architecture and feasibility plan](docs/ANDROID.md)
-and [autonomous Android goal loop](docs/ANDROID-GOAL-LOOP.md).
+Android is supported with a full playable ARM64/Vulkan APK in
+[`v0.4.10-android.1`](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.10-android.1).
+Original with Razer Kishi and Retro Rewind online race play have maintainer
+physical testing on Pixel 9 Pro XL. Other GPUs, controllers and sustained
+performance need broader testing. See [installation](docs/INSTALL_ANDROID.md)
+and [source builds](android/README.md).
 
 ### How much storage does KartPad use?
 
@@ -707,7 +811,7 @@ container, so back up before crossing those boundaries.
 No. Native macOS gameplay is broad and the accepted mobile IPA runs real
 races, but sustained performance, a complete three- and four-player result
 path, the eight-hour soak, fresh-clone provisioning, production online
-acceptance after Retro WFC returns, complete touch/motion race coverage, and
+verification on production Retro WFC, complete touch/motion race coverage, and
 the full engineering-completion matrix remain open.
 General physical-device acceptance is complete on both iPhone and iPad, while
 narrower performance, audio, motion, and controller refinements can continue.
@@ -717,7 +821,7 @@ narrower performance, audio, motion, and controller refinements can continue.
 | Path | Purpose |
 |---|---|
 | [`docs/INSTALL_IPA.md`](docs/INSTALL_IPA.md) | Download, checksum, re-signing, first-launch import, and update guidance for the public unsigned IPA |
-| [`RIGHTS_AND_LICENSES.md`](RIGHTS_AND_LICENSES.md) | Free community-preview authorization and unresolved translated-code rights boundary |
+| [`RIGHTS_AND_LICENSES.md`](RIGHTS_AND_LICENSES.md) | GPLv3 scope, redistribution rights, Corresponding Source, and game-content boundary |
 | [`scripts/build-user-ipa.sh`](scripts/build-user-ipa.sh) | Identify a supported image and build a private unsigned IPA with the profile-driven Builder |
 | [`scripts/package-public-unsigned-ipa.py`](scripts/package-public-unsigned-ipa.py) | Deterministically package the exact audited public community-preview IPA |
 | [`scripts/audit-public-unsigned-ipa.py`](scripts/audit-public-unsigned-ipa.py) | Reject game data, signing residue, private paths, missing notices, malformed provenance, or an incorrect release build |
@@ -759,8 +863,17 @@ Mario Kart, Wii, Nintendo, and game imagery are owned by their respective
 rights holders and are used here only to identify compatibility and document
 runtime behavior. KartPad is not affiliated with or endorsed by Nintendo.
 
-WiiCompiled is GPLv3 at the pinned revision. Aurora, Dawn, SDL, Dolphin-derived
-code, Crypto++, Abseil, FreeType, libpng, and other dependencies retain their
+KartPad is free software under the **GNU General Public License, version 3**
+([`LICENSE`](LICENSE)). This covers KartPad-owned code and all modifications to
+WiiCompiled, including the modified runtime and the integrated application as a
+combined work where GPLv3 requires. You may use, modify, and redistribute the
+GPL-covered software, including commercially, under the GPL without separate
+maintainer approval. Community-release policies do not restrict those rights.
+See [`RIGHTS_AND_LICENSES.md`](RIGHTS_AND_LICENSES.md) for the full scope,
+Corresponding Source obligations, and separate game-content rights.
+
+Aurora, Dawn, SDL, Dolphin-derived code, Crypto++, Abseil, FreeType, libpng,
+and other dependencies retain their
 own licenses and notice obligations. The imported SunPad mobile UI snapshot
 retains its GPLv3 license, exact upstream revision, hashes, and attribution.
 KartPad's original icon provenance is recorded in

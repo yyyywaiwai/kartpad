@@ -36,6 +36,8 @@ SunPadInputState KartPadAdaptPhysicalControllerSample(
 - (void)stop;
 - (void)reconcileControllers;
 - (BOOL)consumePlayer:(NSUInteger)player state:(SunPadInputState *)state;
+- (BOOL)isPlayerConnected:(NSUInteger)player;
+- (NSArray<NSString *> *)playerDescriptions;
 - (NSUInteger)connectedControllerCount;
 
 @end

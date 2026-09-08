@@ -9,11 +9,11 @@ class ExperimentalMiiWiimoteContractTests(unittest.TestCase):
     def test_ios_menu_exposes_features_in_expected_submenus(self) -> None:
         source = (REPO / "apple/ios/KartPadRuntimeOverlayHost.mm").read_text()
         self.assertIn('actionWithTitle:@"Player Identity…"', source)
-        self.assertIn('actionWithTitle:@"Manage Existing Licenses…"', source)
+        self.assertIn('actionWithTitle:@"Rename or Delete Licenses…"', source)
         self.assertIn('actionWithTitle:@"Rename License…"', source)
         self.assertIn('actionWithTitle:@"Delete License…"', source)
         self.assertIn('actionWithTitle:@"Remove Mii Appearance…"', source)
-        self.assertIn('actionWithTitle:@"Set Player Name…"', source)
+        self.assertIn('actionWithTitle:@"Edit Mii Name…"', source)
         self.assertIn('menuWithTitle:@"Controls"', source)
         self.assertIn('actionWithTitle:@"Experimental Wii Remote + Nunchuk…"', source)
         self.assertLess(source.index('actionWithTitle:@"Player Identity…"'),

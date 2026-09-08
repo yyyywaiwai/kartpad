@@ -1,0 +1,38 @@
+--- a/src/hle/net/network_core.cpp
++++ b/src/hle/net/network_core.cpp
+@@ -3,6 +3,7 @@
+ #include "console_identity.h"
+ #include "hle/net/network.h"
+ #include "kartpad/network/local_wfc_test_route.h"
++#include "kartpad/network/private_wfc.h"
+ #include "runtime_config.h"
+ #include "runtime_log.h"
+ #include "runtime_product.h"
+@@ -30,6 +31,9 @@
+ }
+ 
+ std::string RoutedWfcDnsNode(std::string_view requestedNode) {
++    if (KartPad::Network::PrivateWfcRoutesHost(requestedNode)) {
++        return KartPad::Network::RoutePrivateWfcHost(requestedNode);
++    }
+     return KartPad::Network::RouteLocalWfcHost(RetroRewindProfileActive(), requestedNode);
+ }
+ 
+--- a/src/hle/net/network_ssl.cpp
++++ b/src/hle/net/network_ssl.cpp
+@@ -1,4 +1,5 @@
+ #include "network_internal.h"
++#include "kartpad/network/private_wfc.h"
+ 
+ #ifdef __APPLE__
+ #include <kartpad/network/apple_secure_transport.h>
+@@ -79,6 +80,9 @@
+ }
+ 
+ static bool IsRetroPlaintextSslHost(std::string_view hostname) {
++    // An explicitly selected compatible private WFC service uses the legacy
++    // Wii plaintext protocol. Ordinary TLS hosts keep certificate validation.
++    if (KartPad::Network::PrivateWfcRoutesHost(hostname)) return true;
+     if (IsRetroNasSslHost(hostname)) {
+         return true;
+     }

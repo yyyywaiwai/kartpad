@@ -125,7 +125,7 @@ def main(argv: list[str] | None = None) -> int:
         )
         print(f"Built private unsigned IPA: {result.ipa}")
         print(f"SHA-256: {result.ipa_sha256}")
-        print("Do not redistribute this personalized IPA; it contains user-generated translated game code.")
+        print("Game-code redistribution rights are not cleared; GPL-covered software remains redistributable under GPLv3.")
         return 0
     except (ProfileError, BuildError, OSError, json.JSONDecodeError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
