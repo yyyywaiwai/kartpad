@@ -29,7 +29,7 @@
 	<key>LSSupportsOpeningDocumentsInPlace</key>
 	<true/>
 	<key>NSLocalNetworkUsageDescription</key>
-	<string>KartPad connects to other players on your local network for multiplayer races.</string>
+	<string>KartPad connects to your selected private Wii server and other players on your local network for multiplayer races.</string>
 	<key>GCSupportsGameMode</key>
 	<true/>
 	<key>UIApplicationSupportsIndirectInputEvents</key>

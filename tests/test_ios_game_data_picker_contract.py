@@ -85,15 +85,25 @@ class IOSGameDataPickerContractTests(unittest.TestCase):
 
     def test_local_peer_network_usage_is_declared_and_audited(self) -> None:
         for name in ("Info.plist", "RuntimeInfo.plist"):
-            with (REPO / "apple/ios" / name).open("rb") as handle:
+            path = REPO / "apple/ios" / name
+            with path.open("rb") as handle:
                 info = plistlib.load(handle)
             description = info.get("NSLocalNetworkUsageDescription", "")
             self.assertIn("local network", description, name)
             self.assertIn("multiplayer", description, name)
+            self.assertEqual(
+                path.read_text().count("<key>NSLocalNetworkUsageDescription</key>"),
+                1,
+                name,
+            )
         audit = (REPO / "scripts/audit-ios-game-app.sh").read_text()
         self.assertIn("plutil -extract NSLocalNetworkUsageDescription raw", audit)
         package = (REPO / "scripts/package-macos-runtime.sh").read_text()
         self.assertIn("plutil -insert NSLocalNetworkUsageDescription -string", package)
+        self.assertEqual(
+            package.count("plutil -insert NSLocalNetworkUsageDescription -string"),
+            1,
+        )
         mac_audit = (REPO / "scripts/audit-macos-package.sh").read_text()
         self.assertIn("plutil -extract NSLocalNetworkUsageDescription raw", mac_audit)
 
