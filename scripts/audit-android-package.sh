@@ -4,6 +4,11 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 # shellcheck source=android-toolchain-versions.sh
 source "$repo_root/scripts/android-toolchain-versions.sh"
+case "${KARTPAD_ANDROID_AUDIT_REGION:-P}" in
+  P) package=dev.kartpad.android ;;
+  J) package=dev.kartpad.rmcj01.android ;;
+  *) echo "ERROR: audit region must be P or J" >&2; exit 64 ;;
+esac
 sdk_root="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
 apk="${1:-$repo_root/android/app/build/outputs/apk/debug/app-debug.apk}"
 [[ -f "$apk" ]] || { echo "ERROR: APK does not exist: $apk" >&2; exit 1; }
@@ -26,7 +31,7 @@ if [[ "${KARTPAD_ANDROID_REQUIRE_RELEASE:-0}" == 1 &&
       "$badging" == *"application-debuggable"* ]]; then
   echo "ERROR: release APK is debuggable" >&2; exit 1
 fi
-[[ "$badging" == *"package: name='dev.kartpad.android'"* ]]
+[[ "$badging" == *"package: name='$package'"* ]]
 [[ "$badging" == *"versionName='$expected_version_name'"* ]] || {
   echo "ERROR: APK version name is not $expected_version_name" >&2
   exit 1
@@ -46,7 +51,7 @@ expected_permission_names="$(printf '%s\n' \
   android.permission.POST_NOTIFICATIONS \
   android.permission.RECEIVE_BOOT_COMPLETED \
   android.permission.WAKE_LOCK \
-  dev.kartpad.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION | sort)"
+  "$package.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" | sort)"
 if [[ "$permission_names" != "$expected_permission_names" ]]; then
   echo "ERROR: KartPad Android permission set differs from the install-worker allowlist" >&2
   exit 1
@@ -54,7 +59,7 @@ fi
 declared_permissions="$(printf '%s\n' "$permissions" |
   sed -n "s/^permission: \([^[:space:]]*\).*$/\1/p" | sort)"
 if [[ "$declared_permissions" != \
-      "dev.kartpad.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" ]]; then
+      "$package.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" ]]; then
   echo "ERROR: KartPad Android declared-permission set differs from the allowlist" >&2
   exit 1
 fi
@@ -204,6 +209,17 @@ fi
   exit 1
 }
 unzip -p "$apk" | strings > "$audit_root/apk.strings"
+if [[ "${KARTPAD_ANDROID_AUDIT_REGION:-P}" == J ]]; then
+  for marker in RMCJ01 524d434a \
+    1b9621ef7c5d97dada103e50e5389730e67f3c2545dda592edd4b5843655af91 \
+    5a97dbe12aa9c41ce529d32830740d1eabb970474a3125be4bab5f4600ae29e7; do
+    grep -Fq "$marker" "$audit_root/apk.strings" || {
+      echo "ERROR: APK is missing Japanese contract: $marker" >&2; exit 1;
+    }
+  done
+  PYTHONPATH="$repo_root/builder" python3 -c \
+    'from pathlib import Path; import sys; from kartpad_builder.rmcj01_android import audit_region; audit_region(Path(sys.argv[1]))' "$apk"
+fi
 if grep -Eq '/Users/|Mario Kart Wii\.(iso|wbfs)' "$audit_root/apk.strings"; then
   echo "ERROR: APK contains a private path or game-data name" >&2
   exit 1

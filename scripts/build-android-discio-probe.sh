@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+host_root="${KARTPAD_ANDROID_HOST_ROOT:-$repo_root}"
 source_root="${1:-${repo_root}/ref/upstream/dolphin}"
 work_source="${2:-${repo_root}/build/dolphin-android-discio-source}"
 work_build="${3:-${repo_root}/build/dolphin-android-discio-build}"
@@ -80,7 +81,7 @@ path_map_flags="-ffile-prefix-map=${work_source}=Dolphin -fmacro-prefix-map=${wo
   -DUSE_UPNP=OFF \
   -DUSE_SYSTEM_LIBS=OFF \
   -DKARTPAD_ANDROID_DISCIO_PROBE_SOURCE="${repo_root}/tests/ios_discio_probe.cpp" \
-  -DKARTPAD_ANDROID_DISCIO_JNI_SOURCE="${repo_root}/android/app/src/main/cpp/kartpad_discio_jni.cpp"
+  -DKARTPAD_ANDROID_DISCIO_JNI_SOURCE="${host_root}/android/app/src/main/cpp/kartpad_discio_jni.cpp"
 "${cmake_bin}" --build "${work_build}" --target \
   kartpad-android-discio-probe kartpad_discio --parallel 2
 

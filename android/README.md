@@ -8,6 +8,10 @@ Retro WFC worldwide race play on Pixel 9 Pro XL. Read
 [installation, update safety and known limits](../docs/INSTALL_ANDROID.md).
 Sustained 60 FPS and complete device/controller coverage are not claimed.
 
+This public release/build lane is **RMCP01 (PAL)**. For a separate RMCJ01 Japan
+development APK, use [the Japanese Android build](../docs/RMCJ01.md#android-arm64)
+and `scripts/build-rmcj01-android.sh`; do not pass Japanese data to the PAL builder.
+
 ## Build the full playable app on an Apple Silicon Mac
 
 The current scripts target macOS ARM64, with Xcode command-line tools, Python 3,

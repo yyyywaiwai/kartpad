@@ -105,6 +105,46 @@ injectors, expected function counts, or PAL Retro-WFC payload attached.
 
 ## Development build and local acceptance
 
+### Android ARM64
+
+The dedicated Android entrypoint uses the existing Japanese translation graph
+and address-porting workflow, then stages a separate Android host. It does not
+enable Japanese input in the PAL app or the generic Personal IPA Builder.
+
+```sh
+./scripts/bootstrap-android-host.sh
+KARTPAD_RMCJ_BUILD_TAG=android-japan \
+  ./scripts/build-rmcj01-android.sh "$PWD/private/rmcj01/retro/translation" "$PWD/data"
+```
+
+Pass `private/rmcj01/verified/translation` for the original-game-only graph;
+the wrapper automatically selects the dual product when the graph includes
+Retro Rewind. These private graphs must already have been prepared by the
+Japanese workflows; they are not included in the repository. Use a fresh tag.
+
+The default result is a locally debug-signed APK at
+`private/rmcj01/<tag>/host/android/app/build/outputs/apk/debug/app-debug.apk`.
+The application ID is `dev.kartpad.rmcj01.android`, displayed as **KartPad Japan**.
+It can coexist with PAL without sharing application data. JNI/Kotlin namespaces
+stay unchanged, while the disc importer, exact DOL hash, original/Retro save
+paths, and pinned `RMCJD00` download contract are Japanese-specific. DiscIO is
+rebuilt separately, rather than reusing the PAL importer library.
+
+The build command runs the APK package audit with `KARTPAD_ANDROID_AUDIT_REGION=J`.
+It checks Japanese import/save contracts in addition to the existing ARM64,
+16 KiB alignment, native dependencies, permissions and asset allowlists.
+`KARTPAD_ANDROID_PACKAGE_FORMAT=aab` produces an unsigned AAB only; the existing
+PAL release derivation/publication scripts are not a Japanese release lane.
+Neither successful compilation nor package auditing proves Android gameplay,
+controller behavior, save/reload, or Retro WFC networking on physical devices.
+The iPad/macOS acceptance above is not Android acceptance.
+
+`PYTHONPATH=builder python3 -m unittest tests.test_rmcj01_android` checks staged
+Japanese contracts, PAL source preservation, and rejection of wrong-region
+graphs, SDA bases, Retro module link bases, and reused/public output paths.
+
+### macOS
+
 The private development path is `scripts/build-rmcj01-macos.sh`. It validates
 the original DATA input, stages pinned runtime sources, ports address-bearing
 source tokens including `.inc` registrations, and keeps public PAL host sources

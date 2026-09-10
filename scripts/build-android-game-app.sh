@@ -2,6 +2,7 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
+host_root="${KARTPAD_ANDROID_HOST_ROOT:-$repo_root}"
 # shellcheck source=android-toolchain-versions.sh
 source "$repo_root/scripts/android-toolchain-versions.sh"
 version_code_override="${KARTPAD_ANDROID_VERSION_CODE:-}"
@@ -92,7 +93,7 @@ export MINIZIP_ANDROID_ROOT="$minizip_root"
 export MBEDTLS_ANDROID_ROOT="$mbedtls_root"
 
 gradle_args=(
-  --project-dir "$repo_root/android"
+  --project-dir "$host_root/android"
   --no-daemon
   -PkartpadGameRuntimeSource="$runtime_source"
   -PkartpadTranslatedShardManifest="$translation_root/build_shards/shards.cmake"
@@ -114,9 +115,9 @@ fi
   ":app:$package_task"
 
 if [[ "$package_format" == apk ]]; then
-  package_path="$repo_root/android/app/build/outputs/apk/debug/app-debug.apk"
+  package_path="$host_root/android/app/build/outputs/apk/debug/app-debug.apk"
 else
-  package_path="$repo_root/android/app/build/outputs/bundle/release/app-release.aab"
+  package_path="$host_root/android/app/build/outputs/bundle/release/app-release.aab"
 fi
 if [[ ! -f "$package_path" ]]; then
   echo "ERROR: Gradle did not produce $package_path" >&2
