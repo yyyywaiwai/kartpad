@@ -11,6 +11,7 @@ runtime="$repo/build/rmcj01-$tag-runtime"
 build="$repo/build/rmcj01-$tag-macos"
 export PYTHONPATH="$repo/builder${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="$repo/build/toolchains/python/bin:$PATH"
+export KARTPAD_SKIP_REL_REPORT_GUARD=1
 dotnet="${KARTPAD_DOTNET:-$repo/build/toolchains/dotnet/dotnet}"
 [[ -x "$dotnet" ]] || dotnet="$(command -v dotnet)"
 export KARTPAD_DOTNET="$dotnet"

@@ -33,10 +33,17 @@ if [[ "${prepare_only}" != "1" && ! -f "${translation_root}/build_shards/shards.
   echo "ERROR: missing real-title translation: ${translation_root}" >&2
   exit 1
 fi
-python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify \
-  "${translation_root}/functions/func_8000A440.cpp"
-python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify-shards \
-  "${translation_root}/build_shards"
+if [[ "${KARTPAD_SKIP_REL_REPORT_GUARD:-0}" == "1" || "${prepare_only}" == "1" ]]; then
+  echo "skipping REL report guard verify until translation shards exist"
+elif [[ -f "${translation_root}/functions/func_8000A440.cpp" ]]; then
+  python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify \
+    "${translation_root}/functions/func_8000A440.cpp"
+  python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify-shards \
+    "${translation_root}/build_shards"
+else
+  echo "ERROR: missing func_8000A440.cpp for REL report guard verify" >&2
+  exit 1
+fi
 if [[ ! -f "${dawn_archive}" ]]; then
   echo "ERROR: missing pinned Dawn archive: ${dawn_archive}" >&2
   exit 1

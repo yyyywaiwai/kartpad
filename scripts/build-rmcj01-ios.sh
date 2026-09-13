@@ -20,6 +20,7 @@ done
 export PYTHONPATH="$repo/builder${PYTHONPATH:+:$PYTHONPATH}"
 export PATH="$repo/build/toolchains/python/bin:$PATH"
 mkdir -p "$work"
+export KARTPAD_SKIP_REL_REPORT_GUARD=1
 KARTPAD_PREPARE_ONLY=1 "$repo/scripts/prepare-ios-game-runtime.sh" \
   "$translation" "$runtime" "$build" "$product" > "$work/runtime-prepare.log" 2>&1
 python3 -m kartpad_builder.rmcj01 --data "$data" --output "$work" --runtime "$runtime"

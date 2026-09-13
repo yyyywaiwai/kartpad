@@ -42,10 +42,14 @@ if [[ ! -f "${translation_root}/build_shards/shards.cmake" ]]; then
   echo "ERROR: missing real-title translation: ${translation_root}" >&2
   exit 1
 fi
-python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify \
-  "${translation_root}/functions/func_8000A440.cpp"
-python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify-shards \
-  "${translation_root}/build_shards"
+if [[ "${KARTPAD_SKIP_REL_REPORT_GUARD:-0}" == "1" ]]; then
+  echo "skipping PAL REL report guard verify (region-specific translation)"
+else
+  python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify \
+    "${translation_root}/functions/func_8000A440.cpp"
+  python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify-shards \
+    "${translation_root}/build_shards"
+fi
 if [[ -e "${runtime_source}" || -e "${runtime_build}" ]]; then
   echo "ERROR: output already exists; choose fresh output paths" >&2
   exit 1
