@@ -1,0 +1,25 @@
+--- a/cmake/PublicProducts.cmake
++++ b/cmake/PublicProducts.cmake
+@@ -548,17 +548,21 @@
+     endif()
+     add_dependencies(mkw_release KartPadDual)
+ endif()
+ 
+ set(MKW_ALL_BUILD_TARGETS
+     mkw_runtime_common mkw_base_shared mkw_base_sensitive mkw_retro_sensitive
+     mkw_retro_rewind_functions WiiCompiled RetroRewind KartPadDual)
+ foreach(target IN LISTS MKW_ALL_BUILD_TARGETS)
+     if(TARGET ${target})
+-        if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
++        # Physical iOS includes older arm64 devices without FEAT_LRCPC.
++        # Keep the existing macOS and Simulator target unchanged.
++        if(CMAKE_SYSTEM_NAME STREQUAL "tvOS" OR
++           (CMAKE_SYSTEM_NAME STREQUAL "iOS" AND
++            CMAKE_OSX_SYSROOT MATCHES "iphoneos|iPhoneOS"))
+             target_compile_options(${target} PRIVATE
+                 "SHELL:-mcpu=generic -Xclang -target-feature -Xclang -rcpc")
+         else()
+             target_compile_options(${target} PRIVATE -mcpu=apple-m2)
+         endif()
+     endif()
+ endforeach()

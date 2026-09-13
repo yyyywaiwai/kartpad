@@ -11,25 +11,41 @@ internal object KartPadSaveStorage {
     private const val CORE_CRC_OFFSET = 0x27ffc
     private val magic = "RKSD0006".toByteArray(Charsets.US_ASCII)
 
-    fun active(filesDir: File): File = File(
-        filesDir,
-        "KartPad/NAND/title/00010004/524d4350/data/rksys.dat",
-    )
+    val profiles = listOf("original", "retro_rewind", "retro_rewind_separate")
 
-    private fun pending(filesDir: File): File = File(filesDir, "KartPad/PendingSaves/rksys.dat")
+    fun title(profile: String): String {
+        require(profile in profiles) { "Unknown save profile." }
+        return KartPadIdentityStorage.titles.getValue(profile)
+    }
 
-    fun hasPending(filesDir: File): Boolean = pending(filesDir).isFile
+    fun active(filesDir: File, profile: String = "original"): File {
+        require(profile in profiles) { "Unknown save profile." }
+        return File(filesDir, "KartPad/${KartPadIdentityStorage.paths.getValue(profile)}")
+    }
 
-    fun readActive(filesDir: File): ByteArray {
-        val file = active(filesDir)
-        require(file.isFile) { "No Mario Kart Wii save exists yet." }
+    private fun pending(filesDir: File, profile: String): File {
+        title(profile)
+        // Keep the original filename so pre-upgrade restores retain their target.
+        val name = if (profile == "original") "rksys.dat" else "$profile.dat"
+        return File(filesDir, "KartPad/PendingSaves/$name")
+    }
+
+    fun hasPending(filesDir: File): Boolean = KartPadRatingStorage.hasPending(filesDir) || profiles.any { hasPending(filesDir, it) }
+
+    fun hasPending(filesDir: File, profile: String): Boolean = pending(filesDir, profile).isFile
+
+    fun readActive(filesDir: File, profile: String = "original"): ByteArray {
+        val file = active(filesDir, profile)
+        require(file.isFile) { "No ${title(profile)} save exists yet." }
         return readExact(file).also(::validate)
     }
 
-    fun writePending(filesDir: File, data: ByteArray) {
+    fun writePending(filesDir: File, data: ByteArray, profile: String = "original") {
         require(!KartPadIdentityStorage.hasPending(filesDir)) { "Apply pending identity edits before restoring a save." }
+        require(!hasPending(filesDir, profile)) { "Restart to apply this profile's pending restore first." }
+        require(!KartPadRatingStorage.hasPending(filesDir)) { "Restart to apply the pending rating restore first." }
         validate(data)
-        val file = pending(filesDir)
+        val file = pending(filesDir, profile)
         check(file.parentFile?.let { it.isDirectory || it.mkdirs() } == true) {
             "Save staging is unavailable."
         }
@@ -38,11 +54,19 @@ internal object KartPadSaveStorage {
 
     /** Applies a validated restore before SDL starts and retains the prior save. */
     fun applyPending(filesDir: File): String? {
-        val pending = pending(filesDir)
+        for (profile in profiles) {
+            applyPending(filesDir, profile)?.let { return it }
+        }
+        return KartPadRatingStorage.applyPending(filesDir)
+    }
+
+    private fun applyPending(filesDir: File, profile: String): String? {
+        val pending = pending(filesDir, profile)
         if (!pending.isFile) return null
         return runCatching {
+            check(!KartPadIdentityStorage.hasPending(filesDir))
             val replacement = readExact(pending).also(::validate)
-            val active = active(filesDir)
+            val active = active(filesDir, profile)
             check(active.parentFile?.let { it.isDirectory || it.mkdirs() } == true) {
                 "Save storage is unavailable."
             }
@@ -50,13 +74,14 @@ internal object KartPadSaveStorage {
                 val current = readExact(active).also(::validate)
                 val backups = File(filesDir, "KartPad/SaveBackups")
                 check(backups.isDirectory || backups.mkdirs()) { "Save backup storage is unavailable." }
-                val backup = File(backups, "rksys-${System.currentTimeMillis()}-${UUID.randomUUID()}.dat")
+                val prefix = if (profile == "original") "rksys" else profile
+                val backup = File(backups, "$prefix-${System.currentTimeMillis()}-${UUID.randomUUID()}.dat")
                 writeAtomic(backup, current)
             }
             writeAtomic(active, replacement)
             check(pending.delete()) { "The pending save restore could not be finalized." }
             pending.parentFile?.delete()
-        }.exceptionOrNull()?.let { "A pending save restore could not be applied safely." }
+        }.exceptionOrNull()?.let { "The pending ${title(profile)} save restore could not be applied safely. It remains staged; your existing save and any backups have been retained." }
     }
 
     fun validate(data: ByteArray) {

@@ -77,13 +77,16 @@ plutil -insert CFBundleIdentifier -string dev.kartpad.app "${plist}"
 plutil -insert CFBundleInfoDictionaryVersion -string 6.0 "${plist}"
 plutil -insert CFBundleName -string KartPad "${plist}"
 plutil -insert CFBundlePackageType -string APPL "${plist}"
-plutil -insert CFBundleShortVersionString -string "${KARTPAD_VERSION:-0.4.11}" "${plist}"
-plutil -insert CFBundleVersion -string "${KARTPAD_BUILD_NUMBER:-26}" "${plist}"
+plutil -insert NSLocalNetworkUsageDescription -string \
+  "KartPad connects to your selected private Wii server and other players on your local network for multiplayer races." "${plist}"
+plutil -insert CFBundleShortVersionString -string "${KARTPAD_VERSION:-0.4.17}" "${plist}"
+plutil -insert CFBundleVersion -string "${KARTPAD_BUILD_NUMBER:-39}" "${plist}"
 plutil -insert LSApplicationCategoryType -string public.app-category.games "${plist}"
 plutil -insert LSMinimumSystemVersion -string 14.0 "${plist}"
 plutil -insert NSHighResolutionCapable -bool true "${plist}"
-plutil -insert NSLocalNetworkUsageDescription -string \
-  "KartPad connects to your selected private Wii server and other players on your local network for multiplayer races." "${plist}"
+# Native settings stay in NSScreen.visibleFrame; the optional desktop fullscreen
+# mode can use the real display bounds, including the area around the notch.
+plutil -insert NSPrefersDisplaySafeAreaCompatibilityMode -bool false "${plist}"
 plutil -insert NSBluetoothAlwaysUsageDescription -string \
   "KartPad uses Bluetooth to pair and connect an experimental Wii Remote and Nunchuk." "${plist}"
 plutil -insert NSPrincipalClass -string NSApplication "${plist}"
@@ -165,7 +168,7 @@ unsigned_runtime_hash="$(shasum -a 256 "${macos}/KartPad" | awk '{print $1}')"
 source_commit="$(git -C "${repo_root}" rev-parse HEAD)"
 fingerprint="${runtime_resources}/build-fingerprint.json"
 printf '{\n  "SetupVersion": "%s",\n  "SourceCommit": "%s",\n  "UnsignedRuntimeSHA256": "%s"\n}\n' \
-  "${KARTPAD_VERSION:-0.4.11}" "${source_commit}" "${unsigned_runtime_hash}" > "${fingerprint}"
+  "${KARTPAD_VERSION:-0.4.17}" "${source_commit}" "${unsigned_runtime_hash}" > "${fingerprint}"
 ln -s ../Resources/Runtime/build-fingerprint.json "${macos}/build-fingerprint.json"
 
 if find "${staged_app}" \( -name portable.txt -o -name UserData -o -name Config.toml \) -print -quit | rg -q .; then

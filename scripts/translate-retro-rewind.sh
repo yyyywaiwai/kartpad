@@ -132,6 +132,8 @@ for selection_function in 8083DFA8 80846C1C 8084E388 80643F48; do
 done
 "${repo_root}/scripts/inject-g10-camera-lifecycle-guard.py" \
   "${functions}/func_805A1A8C.cpp"
+"${repo_root}/scripts/inject-retro-rel-report-guard.py" \
+  "${functions}/func_8000A440.cpp"
 
 "${dotnet_bin}" "${translator}" emit-base-manifest \
   --project "${manifest}" --profile retro-rewind \
@@ -165,6 +167,12 @@ fi
   --native-source-dir "${repo_root}/build/wiicompiled-fpscr/runtime/src" \
   --resolved-profile "${mod_output}/resolved_dispatch_profile.json" \
   --retro-cpp-dir "${mod_output}/cpp" --out "${shards}"
+"${repo_root}/scripts/inject-retro-rel-report-guard.py" \
+  --inject-shards "${shards}"
+"${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify \
+  "${functions}/func_8000A440.cpp"
+"${repo_root}/scripts/inject-retro-rel-report-guard.py" \
+  --verify-shards "${shards}"
 
 # Mach-O C symbols carry a leading underscore. Publish aliases immediately so
 # an incremental Apple rebuild remains valid after the translator rewrites the

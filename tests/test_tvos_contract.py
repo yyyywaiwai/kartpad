@@ -176,13 +176,13 @@ class TvOSContractTests(unittest.TestCase):
         ).read_text()
         tvos_audit = (ROOT / "scripts/audit-public-unsigned-tvos-ipa.py").read_text()
         for script in (ios_package, ios_audit):
-            self.assertIn('RELEASE_TAG = "v0.4.11"', script)
-            self.assertIn('APP_VERSION = "0.4.11"', script)
+            self.assertIn('RELEASE_TAG = "v0.4.14-ios.1"', script)
+            self.assertIn('APP_VERSION = "0.4.14"', script)
         for script in (tvos_package, tvos_audit):
             self.assertIn('RELEASE_TAG = "v0.4.11-tvos.1"', script)
             self.assertIn('APP_VERSION = "0.4.11"', script)
-        self.assertIn('APP_BUILD = "26"', ios_package)
-        self.assertIn('APP_BUILD = "26"', ios_audit)
+        self.assertIn('APP_BUILD = "33"', ios_package)
+        self.assertIn('APP_BUILD = "33"', ios_audit)
         self.assertIn('APP_BUILD = "9"', tvos_package)
         self.assertIn('APP_BUILD = "9"', tvos_audit)
         self.assertIn('"physicalAppleTVAcceptance": False', tvos_package)

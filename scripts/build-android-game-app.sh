@@ -44,6 +44,11 @@ runtime_source="$(absolute_from_repo "${2:-build/android-game-runtime-source}")"
 runtime_build="$(absolute_from_repo "${3:-build/android-game-runtime-build}")"
 discio_jni_root="${KARTPAD_DISCIO_JNI_ROOT:-$repo_root/build/dolphin-android-discio-jni}"
 
+python3 "$repo_root/scripts/inject-retro-rel-report-guard.py" --verify \
+  "$translation_root/functions/func_8000A440.cpp"
+python3 "$repo_root/scripts/inject-retro-rel-report-guard.py" --verify-shards \
+  "$translation_root/build_shards"
+
 native_target="WiiCompiled"
 runtime_product="base"
 if grep -Eq '^set\(MKW_HAVE_RETRO_REWIND_SHARDS ON\)' \
@@ -65,6 +70,12 @@ fi
 if [[ ! -d "$runtime_source" ]]; then
   "$repo_root/scripts/prepare-android-game-runtime.sh" \
     "$translation_root" "$runtime_source" "$runtime_build" "$runtime_product"
+fi
+if [[ ! -f "$runtime_source/include/sc_serial_contract.h" ||
+      ! -f "$runtime_source/src/hle/sc.cpp" ]] ||
+   ! grep -Fq 'RuntimeScSerial::Write' "$runtime_source/src/hle/sc.cpp"; then
+  echo "ERROR: prepared runtime is missing the numeric console-serial ABI guard; use a fresh runtime source" >&2
+  exit 1
 fi
 if [[ ! -f "$(dirname "$runtime_source")/generated/data_sections_init.cpp" ]]; then
   echo "ERROR: prepared runtime is not paired with its ignored generated graph" >&2

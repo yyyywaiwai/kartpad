@@ -1,0 +1,44 @@
+name: REL report build integrity
+on:
+  pull_request:
+    paths:
+      - 'scripts/*game-runtime.sh'
+      - 'scripts/*game-app.sh'
+      - 'scripts/translate-*.sh'
+      - 'scripts/generate-g8-full-title.sh'
+      - 'scripts/inject-retro-rel-report-guard.py'
+      - 'patches/wiicompiled-retro-rel-report-guard.patch'
+      - 'builder/**'
+      - 'tests/test_retro_rel_report_guard.py'
+      - 'tests/fixtures/rel_report/**'
+      - '.github/workflows/rel-report-guard.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/*game-runtime.sh'
+      - 'scripts/*game-app.sh'
+      - 'scripts/translate-*.sh'
+      - 'scripts/generate-g8-full-title.sh'
+      - 'scripts/inject-retro-rel-report-guard.py'
+      - 'patches/wiicompiled-retro-rel-report-guard.patch'
+      - 'builder/**'
+      - 'tests/test_retro_rel_report_guard.py'
+      - 'tests/fixtures/rel_report/**'
+      - '.github/workflows/rel-report-guard.yml'
+permissions:
+  contents: read
+jobs:
+  regression:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Compile and exercise report control flow with sanitizers
+        env:
+          CXX: clang++
+        run: python3 -B -m unittest discover -s tests -p 'test_retro_rel_report_guard.py' -v
+      - name: Builder integration
+        run: bash scripts/test-kartpad-builder.sh

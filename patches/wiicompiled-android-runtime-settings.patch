@@ -14,7 +14,7 @@ diff --git a/src/settings_overlay.cpp b/src/settings_overlay.cpp
  #include "runtime_log.h"
  
  #include <imgui.h>
-@@ -1009,5 +1014,25 @@ void RefreshHostSettings() noexcept {
+@@ -1009,5 +1014,29 @@ void RefreshHostSettings() noexcept {
              RT_LOG(RT_TAG_CONFIG) << "mobile runtime resolutionScale=" << resolutionScale << std::endl;
          }
      }
@@ -22,6 +22,9 @@ diff --git a/src/settings_overlay.cpp b/src/settings_overlay.cpp
 +    kartpad::android::DisplaySettings settings{};
 +    if (kartpad::android::ConsumeDisplaySettings(&settings)) {
 +        g_showFps = settings.show_fps;
++        constexpr float kFpsScales[]{1.0f, 1.5f, 2.0f};
++        const int fpsSize = std::clamp(settings.fps_size, 0, 2);
++        g_androidFpsOverlayScale = kFpsScales[fpsSize];
 +        const int aspectMode = std::clamp(settings.aspect_mode, 0, 2);
 +        uint32_t surfaceWidth = 0;
 +        uint32_t surfaceHeight = 0;
@@ -36,7 +39,8 @@ diff --git a/src/settings_overlay.cpp b/src/settings_overlay.cpp
 +        VISetFrameBufferScale(resolutionScale);
 +        RT_LOG(RT_TAG_CONFIG) << "android runtime aspectMode=" << aspectMode
 +                              << " resolutionScale=" << resolutionScale
-+                              << " showFps=" << g_showFps << std::endl;
++                              << " showFps=" << g_showFps
++                              << " fpsSize=" << fpsSize << std::endl;
 +    }
  #endif
  }

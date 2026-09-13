@@ -27,7 +27,7 @@ done
 
 "$java" -jar "$bundletool" validate --bundle="$bundle" >/dev/null
 manifest="$($java -jar "$bundletool" dump manifest --bundle="$bundle")"
-expected_version_name="${KARTPAD_ANDROID_EXPECTED_VERSION_NAME:-0.4.10-android.1}"
+expected_version_name="${KARTPAD_ANDROID_EXPECTED_VERSION_NAME:-0.4.12-android.2}"
 if [[ -n "${KARTPAD_ANDROID_EXPECTED_VERSION_CODE:-}" ]]; then
   [[ "$manifest" == *"android:versionCode=\"$KARTPAD_ANDROID_EXPECTED_VERSION_CODE\""* ]] || {
     echo "ERROR: AAB version code does not match the requested code" >&2; exit 1;
@@ -113,6 +113,9 @@ expected_asset_members="$(printf '%s\n' \
   base/assets/wii/shared2/wc24/nwc24fls.bin \
   base/assets/wii/shared2/wc24/nwc24msg.cbk \
   base/assets/wii/shared2/wc24/nwc24msg.cfg | sort)"
+if printf '%s\n' "$asset_members" | grep -Fxq base/assets/kartpad-build.json; then
+  expected_asset_members="$(printf '%s\n' "$expected_asset_members" base/assets/kartpad-build.json | sort)"
+fi
 [[ "$asset_members" == "$expected_asset_members" ]] || {
   echo "ERROR: AAB asset set differs from the public runtime-resource allowlist" >&2
   exit 1
@@ -167,26 +170,30 @@ if grep -Eq '/Users/|Mario Kart Wii\.(iso|wbfs)' "$audit_root/aab.strings"; then
   echo "ERROR: AAB contains a private path or game-data name" >&2
   exit 1
 fi
-key_markers="$(grep -E -- '-----(BEGIN|END) (RSA |EC |OPENSSH )?PRIVATE KEY-----' \
-  "$audit_root/aab.strings" | sort || true)"
-private_key_suffix='PRIVATE KEY-----'
-expected_key_markers="$(
-  # The release AAB contains three parser copies in its runtime libraries and
-  # repeats those code strings in native debug-symbol metadata.
-  for ((index = 0; index < 6; ++index)); do
-    printf '%s\n' \
-      "-----BEGIN EC $private_key_suffix" \
-      "-----BEGIN $private_key_suffix" \
-      "-----BEGIN RSA $private_key_suffix" \
-      "-----END EC $private_key_suffix" \
-      "-----END $private_key_suffix" \
-      "-----END RSA $private_key_suffix"
-  done | sort
-)"
-[[ "$key_markers" == "$expected_key_markers" ]] || {
-  echo "ERROR: AAB contains an unexpected private-key marker" >&2
-  exit 1
-}
+# Parser literals belong only in the two TLS-bearing runtime libraries and their
+# optional debug-symbol copies. Prestripped JNI packaging omits symbol copies.
+python3 - "$bundle" <<'PY_AUDIT'
+import collections
+import re
+import sys
+import zipfile
+
+suffix = b"PRIVATE KEY-----"
+markers = [b"-----" + boundary + b" " + kind + suffix
+           for boundary in (b"BEGIN", b"END") for kind in (b"", b"EC ", b"RSA ")]
+expected = {"base/lib/arm64-v8a/libmain.so": 2,
+            "base/lib/arm64-v8a/libkartpad_discio.so": 1}
+for library, copies in list(expected.items()):
+    name = library.rsplit("/", 1)[1]
+    expected["BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/" + name + ".sym"] = copies
+pattern = rb"-----(?:BEGIN|END) (?:RSA |EC |OPENSSH )?PRIVATE KEY-----"
+with zipfile.ZipFile(sys.argv[1]) as archive:
+    for member in archive.infolist():
+        found = collections.Counter(re.findall(pattern, archive.read(member)))
+        wanted = collections.Counter({marker: expected.get(member.filename, 0) for marker in markers})
+        if found != wanted:
+            raise SystemExit("ERROR: AAB contains an unexpected private-key marker in " + member.filename)
+PY_AUDIT
 
 echo "Android unsigned AAB audit passed."
 echo "aab_sha256=$(shasum -a 256 "$bundle" | awk '{ print $1 }')"

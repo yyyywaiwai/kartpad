@@ -31,7 +31,7 @@ apk="$repo_root/android/app/build/outputs/apk/debug/app-debug.apk"
 
 "$adb" shell am start -W -n dev.kartpad.android/.KartPadActivity \
   --es dev.kartpad.android.TEST_TOUCH_SETTINGS_FLOW seed >/dev/null
-seeded="A4 touch settings flow seeded render=3x opacity=64 size=120 hide=false modern=true"
+seeded="A4 touch settings flow seeded render=1x opacity=64 size=120 hide=false modern=true"
 for _ in {1..30}; do
   output="$("$adb" logcat -d -v brief KartPadFixture:I AndroidRuntime:E '*:S')"
   grep -Fq "$seeded" <<<"$output" && break
@@ -50,7 +50,7 @@ sleep 1
 "$adb" shell am force-stop dev.kartpad.android
 "$adb" shell am start -W -n dev.kartpad.android/.KartPadActivity \
   --es dev.kartpad.android.TEST_TOUCH_SETTINGS_FLOW verify >/dev/null
-passed="A4 touch settings flow passed render=3x opacity=64 size=120 hide=false modern=true"
+passed="A4 touch settings flow passed render=1x opacity=64 size=120 hide=false modern=true"
 for _ in {1..30}; do
   output="$("$adb" logcat -d -v brief KartPadFixture:I AndroidRuntime:E '*:S')"
   if grep -Fq "$passed" <<<"$output"; then

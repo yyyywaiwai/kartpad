@@ -1,0 +1,33 @@
+--- a/aurora-main/lib/webgpu/gpu.cpp
++++ b/aurora-main/lib/webgpu/gpu.cpp
+@@ -694,10 +694,18 @@
+       "enable_immediate_error_handling",
+         /* clang-format on */
+     };
++    const char* rendererValidationFlag = std::getenv("KARTPAD_RENDERER_VALIDATION");
++    const bool rendererValidation = rendererValidationFlag != nullptr &&
++                                    std::strcmp(rendererValidationFlag, "1") == 0;
+ #ifdef NDEBUG
+-    enableToggles.push_back("skip_validation");
+-    enableToggles.push_back("disable_robustness");
+-#endif
++    if (!rendererValidation) {
++      enableToggles.push_back("skip_validation");
++      enableToggles.push_back("disable_robustness");
++    }
++#endif
++    const std::array<const char*, 2> validationDisabledToggles = {
++        "skip_validation", "disable_robustness"};
++    Log.info("KartPad renderer diagnostic mode: {}", rendererValidation ? "validation-and-robustness" : "normal");
+     if (g_backendType == wgpu::BackendType::Vulkan) {
+       enableToggles.push_back("vulkan_monolithic_pipeline_cache");
+     }
+@@ -705,6 +713,8 @@
+         .nextInChain = &cacheDescriptor,
+         .enabledToggleCount = enableToggles.size(),
+         .enabledToggles = enableToggles.data(),
++        .disabledToggleCount = rendererValidation ? validationDisabledToggles.size() : 0,
++        .disabledToggles = rendererValidation ? validationDisabledToggles.data() : nullptr,
+     });
+ #endif
+     wgpu::DeviceDescriptor deviceDescriptor;

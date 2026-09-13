@@ -212,6 +212,9 @@ def translate(
             or "set(MKW_HAVE_RETRO_REWIND_SHARDS ON)" not in graph
         ):
             raise BuildError("cached translation failed profile validation")
+        guard = repo / "scripts/inject-retro-rel-report-guard.py"
+        run([str(guard), "--verify", str(output / "functions" / "func_8000A440.cpp")])
+        run([str(guard), "--verify-shards", str(output / "build_shards")])
         print(f"Reused validated translation: {output}")
         return
     run([str(repo / "scripts/prepare-patched-translator.sh")])
@@ -238,6 +241,10 @@ def translate(
     if mod_blob.is_file() and ".globl _k" not in mod_blob.read_text():
         run(["perl", "-0pi", "-e", r"s/^\.globl (k[^\n]+)\n\1:/.globl $1\n.globl _$1\n$1:\n_$1:/mg", str(mod_blob)])
     run([dotnet, str(translator), "emit-build-shards", "--project", str(manifest), "--profile", "retro-rewind", "--base-metadata", str(metadata), "--base-functions-dir", str(output / "functions"), "--native-source-dir", str(repo / "build/wiicompiled-fpscr/runtime/src"), "--resolved-profile", str(mod_output / "resolved_dispatch_profile.json"), "--retro-cpp-dir", str(mod_output / "cpp"), "--out", str(output / "build_shards")])
+    guard = repo / "scripts/inject-retro-rel-report-guard.py"
+    run([str(guard), "--inject-shards", str(output / "build_shards")])
+    run([str(guard), "--verify", str(output / "functions" / "func_8000A440.cpp")])
+    run([str(guard), "--verify-shards", str(output / "build_shards")])
     count = len(list((output / "functions").glob("func_*.cpp")))
     graph = shards.read_text()
     if (

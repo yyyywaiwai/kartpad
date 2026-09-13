@@ -4,6 +4,8 @@ import android.app.Activity
 import android.os.Bundle
 import android.util.Log
 import java.io.File
+import java.nio.ByteBuffer
+import java.nio.ByteOrder
 import java.util.zip.CRC32
 
 /** Debug-only, synthetic validation of save export/stage/apply/backup storage. */
@@ -54,6 +56,53 @@ internal class KartPadSaveStorageFixtureActivity : Activity() {
         check(runCatching { KartPadSaveStorage.validate(corrupt) }.isFailure) {
             "checksum-corrupt save was accepted"
         }
+        // Exercise Android's real AtomicFile with all three target profiles.
+        for (profile in KartPadSaveStorage.profiles) {
+            KartPadSaveStorage.active(root, profile).apply {
+                parentFile?.mkdirs()
+                writeBytes(original)
+            }
+        }
+        for (profile in KartPadSaveStorage.profiles) {
+            val before = KartPadSaveStorage.profiles.associateWith {
+                KartPadSaveStorage.readActive(root, it)
+            }
+            KartPadSaveStorage.writePending(root, replacement, profile)
+            check(KartPadSaveStorage.applyPending(root) == null)
+            check(KartPadSaveStorage.readActive(root, profile).contentEquals(replacement))
+            for (other in KartPadSaveStorage.profiles - profile) {
+                check(KartPadSaveStorage.readActive(root, other).contentEquals(before.getValue(other)))
+            }
+        }
+        runRatingFixture(root)
+    }
+
+    private fun runRatingFixture(root: File) {
+        fun buffer(bytes: ByteArray) = ByteBuffer.wrap(bytes).order(ByteOrder.BIG_ENDIAN)
+        val save = validSave(0).also { bytes ->
+            buffer(bytes).putInt(8, 0x524b5044).putInt(8 + 0x5c, 10)
+                .putInt(0x27ffc, CRC32().apply { update(bytes, 0, 0x27ffc) }.value.toInt())
+        }
+        val source = ByteArray(1640).also { bytes ->
+            buffer(bytes).putInt(0, 0x52525254).putShort(4, 1).putShort(6, 100)
+                .putInt(8, 10).putFloat(12, 90.5f).putFloat(16, 25f).putInt(20, 1)
+        }
+        val previous = source.copyOf().also { buffer(it).putInt(8, 20) }
+        val target = File(root, "KartPad/NAND/shared2/Pulsar/RetroRewind6/RRRating.pul")
+        target.parentFile?.mkdirs()
+        for (profile in listOf("retro_rewind", "retro_rewind_separate")) {
+            KartPadSaveStorage.active(root, profile).writeBytes(save)
+            target.writeBytes(previous)
+            KartPadRatingStorage.stage(root, profile, source)
+            check(target.readBytes().contentEquals(previous))
+            check(KartPadSaveStorage.applyPending(root) == null)
+            check(!KartPadSaveStorage.hasPending(root))
+            check(target.readBytes().contentEquals(KartPadRatingCompanion.merge(source, previous, setOf(10))))
+            check(File(root, "KartPad/SaveBackups").listFiles().orEmpty().any {
+                it.extension == "pul" && it.readBytes().contentEquals(previous)
+            })
+        }
+        Log.i(TAG, "Rating storage passed profiles=2 backup=preserved unrelated=preserved pending=cleared")
     }
 
     private fun validSave(marker: Int): ByteArray {

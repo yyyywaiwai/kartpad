@@ -14,9 +14,9 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 
-RELEASE_TAG = "v0.4.11-macos.1"
-APP_VERSION = "0.4.11"
-APP_BUILD = "26"
+RELEASE_TAG = "v0.4.17-macos.1"
+APP_VERSION = "0.4.17"
+APP_BUILD = "39"
 FORBIDDEN_SUFFIXES = {".iso", ".wbfs", ".rvz", ".wia", ".gcz", ".gcm", ".ciso",
                       ".sav", ".p12", ".p8", ".pem", ".key", ".cer"}
 REQUIRED_ENTRIES = {

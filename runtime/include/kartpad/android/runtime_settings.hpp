@@ -4,6 +4,7 @@ namespace kartpad::android {
 
 struct DisplaySettings {
   bool show_fps = true;
+  int fps_size = 0;
   int aspect_mode = 2;
   float resolution_scale = 1.0f;
 };

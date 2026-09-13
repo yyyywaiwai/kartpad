@@ -42,6 +42,10 @@ if [[ ! -f "${translation_root}/build_shards/shards.cmake" ]]; then
   echo "ERROR: missing real-title translation: ${translation_root}" >&2
   exit 1
 fi
+python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify \
+  "${translation_root}/functions/func_8000A440.cpp"
+python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify-shards \
+  "${translation_root}/build_shards"
 if [[ -e "${runtime_source}" || -e "${runtime_build}" ]]; then
   echo "ERROR: output already exists; choose fresh output paths" >&2
   exit 1
@@ -77,6 +81,8 @@ cp -R "${repo_root}/ref/upstream/Wiicompiled/aurora-main" \
 patch --batch -p1 -d "${runtime_source}/aurora-main" < \
   "${repo_root}/patches/aurora-present-telemetry.patch"
 patch --batch -p1 -d "${runtime_source}/aurora-main" < \
+  "${repo_root}/patches/aurora-metal-view-lifetime.patch"
+patch --batch -p1 -d "${runtime_source}/aurora-main" < \
   "${repo_root}/patches/aurora-gx-resolve-snapshot-copy-src.patch"
 patch --batch -p1 -d "${runtime_source}/aurora-main" < \
   "${repo_root}/patches/aurora-ios-opaque-letterbox.patch"
@@ -84,6 +90,8 @@ patch --batch -p1 -d "${runtime_source}/aurora-main" < \
   "${repo_root}/patches/aurora-ios-simulator-single-pipeline-worker.patch"
 patch --batch -p1 -d "${runtime_source}/aurora-main" < \
   "${repo_root}/patches/aurora-viewport-policy-window-guard.patch"
+patch --batch -p1 -d "${runtime_source}/aurora-main" < \
+  "${repo_root}/patches/aurora-viewport-interpolation.patch"
 patch --batch -p1 -d "${runtime_source}/aurora-main" < \
   "${repo_root}/patches/aurora-ios-native-text-focus.patch"
 patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-apple-runtime.patch"
@@ -126,6 +134,14 @@ for dual_patch in \
     wiicompiled-dual-product-target.patch; do
   patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/${dual_patch}"
 done
+
+# Apply after the Apple/dual target patches; device and Simulator share this source.
+patch --batch -p1 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-ios-device-cpu-baseline.patch"
+
+# Guard the translated REL diagnostic path on every product sharing this runtime.
+patch --batch --fuzz=0 -p2 -d "${runtime_source}" < \
+  "${repo_root}/patches/wiicompiled-retro-rel-report-guard.patch"
 
 # Backport upstream e0e362b: SCGetProductSN returns a guest u32 for DWC csnum.
 patch --batch -p1 -d "${runtime_source}" < \

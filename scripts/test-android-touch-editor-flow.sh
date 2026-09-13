@@ -13,9 +13,15 @@ case "$lane" in
   *) echo "ERROR: lane must be phone or tablet" >&2; exit 64 ;;
 esac
 
-device_count="$("$adb" devices | sed -n '2,$p' | grep -c '[[:space:]]device$' || true)"
-[[ "$device_count" == 1 ]] || {
-  echo "ERROR: expected exactly one connected Android emulator/device" >&2
+emulator_targets="$("$adb" devices 2>/dev/null | awk '$1 ~ /^emulator-[0-9]+$/ && $2 == "device" {print $1}')"
+emulator_count="$(printf '%s\n' "$emulator_targets" | awk 'NF {count++} END {print count+0}')"
+[[ "$emulator_count" == 1 ]] || {
+  echo "ERROR: expected exactly one authorized Android emulator; no physical device will be modified" >&2
+  exit 1
+}
+export ANDROID_SERIAL="$emulator_targets"
+[[ "$("$adb" shell getprop ro.kernel.qemu | tr -d '\r')" == 1 ]] || {
+  echo "ERROR: target is not an emulator" >&2
   exit 1
 }
 

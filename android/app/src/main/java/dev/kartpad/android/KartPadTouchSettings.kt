@@ -19,6 +19,7 @@ internal object KartPadTouchSettings {
     private const val HIDE_ON_CONTROLLER = "hide_on_controller"
     private const val MODERN_C_STICK = "modern_c_stick_horizontal"
     private const val SHOW_FPS = "show_fps"
+    private const val FPS_SIZE = "fps_size"
     private const val ASPECT_MODE = "aspect_mode"
     private const val RESOLUTION_SCALE = "resolution_scale"
     private const val MOTION_ENABLED = "motion_steering_enabled"
@@ -68,6 +69,13 @@ internal object KartPadTouchSettings {
 
     fun setShowFps(context: Context, value: Boolean) {
         preferences(context).edit().putBoolean(SHOW_FPS, value).apply()
+    }
+
+    fun fpsSize(context: Context): Int = preferences(context)
+        .getInt(FPS_SIZE, 0).coerceIn(0, 2)
+
+    fun setFpsSize(context: Context, value: Int) {
+        preferences(context).edit().putInt(FPS_SIZE, value.coerceIn(0, 2)).apply()
     }
 
     fun aspectMode(context: Context): Int = preferences(context)

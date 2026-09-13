@@ -334,6 +334,9 @@ if(BUILD_TESTING)
   target_include_directories(kartpad_mii_database_tests PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/runtime/include")
   target_compile_features(kartpad_mii_database_tests PRIVATE cxx_std_20)
+  target_compile_options(kartpad_mii_database_tests PRIVATE
+    $<$<CXX_COMPILER_ID:MSVC>:/UNDEBUG>
+    $<$<NOT:$<CXX_COMPILER_ID:MSVC>>:-UNDEBUG>)
   add_test(NAME kartpad_mii_database_tests COMMAND kartpad_mii_database_tests)
 
   add_executable(kartpad_host_contract_tests runtime/tests/host_contract_tests.cpp)

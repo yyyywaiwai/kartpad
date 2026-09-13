@@ -23,7 +23,7 @@ public final class ProbeActivity extends Activity {
         int pad = Math.round(24 * getResources().getDisplayMetrics().density);
         content.setPadding(pad, pad, pad, pad);
         TextView explanation = new TextView(this);
-        explanation.setText("KartPad Renderer Check\n\nTests synthetic vertex data and matrix layouts. This separate app does not read KartPad, game files, saves, or identifiers. A pass does not prove gameplay works.\n");
+        explanation.setText("KartPad Renderer Check\n\nTests synthetic packed data, indexed draws, matrix layouts, textures, and queued buffer updates. This separate app does not read KartPad, game files, saves, or identifiers. A pass does not prove gameplay works.\n");
         content.addView(explanation);
         Button run = new Button(this); run.setText("Run GPU Check"); content.addView(run);
         Button share = new Button(this); share.setText("Share Results"); share.setEnabled(false); content.addView(share);

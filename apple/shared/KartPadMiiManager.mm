@@ -1,4 +1,9 @@
 #import "KartPadMiiManager.h"
+#import <TargetConditionals.h>
+
+#if TARGET_OS_OSX && !defined(KARTPAD_MII_MANAGER_TESTING)
+#include "runtime_config.h"
+#endif
 
 #include "kartpad/mii/mii_database.h"
 #include "kartpad/mii/player_identity.h"
@@ -16,9 +21,15 @@ NSString *SupportRoot() {
   const char *root = std::getenv("KARTPAD_MII_TEST_SUPPORT_ROOT");
   if (root == nullptr || root[0] != '/') std::abort();
   return [NSString stringWithUTF8String:root];
-#endif
+#elif TARGET_OS_OSX
+  // Match the shell and runtime, including portable.txt/UserData. Never apply
+  // another installation's pending identity changes during portable startup.
+  const auto root = RuntimeConfigFile::ApplicationDataDirectory().string();
+  return [NSString stringWithUTF8String:root.c_str()];
+#else
   return [[NSHomeDirectory() stringByAppendingPathComponent:
       @"Library/Application Support"] stringByAppendingPathComponent:@"KartPad"];
+#endif
 }
 
 NSString *DatabasePath() {

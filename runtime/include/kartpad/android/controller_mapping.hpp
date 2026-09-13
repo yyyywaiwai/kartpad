@@ -8,15 +8,15 @@
 
 namespace kartpad::android {
 
-using ControllerButtonMapping = std::array<uint8_t, 5>;
+using ControllerButtonMapping = std::array<uint8_t, 7>;
 
 inline constexpr ControllerButtonMapping kDefaultControllerButtonMapping{
-    0, 1, 2, 3, 4,
+    0, 1, 2, 3, 4, 5, 6,
 };
 
-inline constexpr std::array<uint32_t, 5> kMappablePhysicalButtons{
+inline constexpr std::array<uint32_t, 7> kMappablePhysicalButtons{
     kGamepadSouth, kGamepadEast, kGamepadWest, kGamepadNorth,
-    kGamepadLeftShoulder,
+    kGamepadLeftShoulder, kGamepadRightShoulder, kGamepadDpadUp,
 };
 
 inline bool IsValidControllerButtonMapping(
@@ -28,7 +28,7 @@ inline bool IsValidControllerButtonMapping(
     if ((seen & bit) != 0) return false;
     seen |= bit;
   }
-  return seen == 0x1fu;
+  return seen == ((1u << mapping.size()) - 1u);
 }
 
 inline uint32_t ApplyControllerButtonMapping(
@@ -37,7 +37,8 @@ inline uint32_t ApplyControllerButtonMapping(
     mapping = kDefaultControllerButtonMapping;
   }
   constexpr uint32_t mappedMask = kGamepadSouth | kGamepadEast |
-      kGamepadWest | kGamepadNorth | kGamepadLeftShoulder;
+      kGamepadWest | kGamepadNorth | kGamepadLeftShoulder |
+      kGamepadRightShoulder | kGamepadDpadUp;
   uint32_t result = buttons & ~mappedMask;
   for (std::size_t game = 0; game < mapping.size(); ++game) {
     if ((buttons & kMappablePhysicalButtons[mapping[game]]) != 0) {

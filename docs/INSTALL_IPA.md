@@ -1,9 +1,19 @@
 # Install the KartPad unsigned IPA
 
-KartPad `v0.4.11` is an unsigned ARM64 IPA for iPhone and iPad. It is a free
-community release, not an App Store or TestFlight build, and it will not
-install until it is re-signed with your own Apple identity or compatible
-personal sideloading tool.
+KartPad `v0.4.17-ios.1` (0.4.17, build 39) is the current unsigned ARM64 IPA
+for iPhone and iPad, with the official Retro Rewind 6.12.8 profile. Re-sign it
+with your existing compatible Apple identity and update in place.
+
+This build includes the corrected compiled REL-report guard. The owner accepted
+the bounded iPhone 14 race-and-relaunch trial, with saves and configuration
+preserved. The separate iPhone 17 Pro Max/iOS 27 report still needs matching
+hardware confirmation. See the [release notes](releases/v0.4.17-ios.1.md).
+
+The IPA declares **iOS/iPadOS 16 or newer** and an ARM64 device with Metal.
+The generic ARM64 startup correction is retained. The A10X reporter confirmed
+startup and Original/Retro loading in build 29, but reported lower performance;
+see [issue #135](https://github.com/chrissotraidis/kartpad/issues/135).
+These results do not establish performance on every device.
 
 **Update before online play:** 0.4.11/build 26 fixes the incorrect console-serial
 value reported in [issue #94](https://github.com/chrissotraidis/kartpad/issues/94).
@@ -11,17 +21,25 @@ Older IPAs should remain offline. This does not erase incorrect serial history
 already held by a server or clear bans; affected accounts may need service-admin
 help. Never reset identities or delete saves as a workaround.
 
-1. Download `KartPad-v0.4.11-ios-unsigned.ipa` and `SHA256SUMS` from the
-   [0.4.11 release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11).
-2. Verify the IPA with `shasum -a 256 -c SHA256SUMS` on a Mac.
+1. Download `KartPad-v0.4.17-ios.1-unsigned.ipa` and `SHA256SUMS-ios` from the
+   [official iPhone/iPad release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.17-ios.1).
+2. Run `shasum -a 256 KartPad-v0.4.17-ios.1-unsigned.ipa` on a Mac and
+   compare it with the IPA row in `SHA256SUMS-ios`. The source download is optional for normal installation.
 3. Re-sign and install it with AltStore Classic plus AltServer or another
    compatible IPA-signing workflow. AltStore PAL cannot import arbitrary
    unsigned IPA files.
-4. On first launch, choose your own legally obtained supported PAL `RMCP01`
-   revision 0 WBFS/ISO through the native importer.
+4. On first launch, choose **Import Game** on the Mario Kart Wii card and select
+   your own legally obtained PAL (Europe) `RMCP01` revision 0 ISO/WBFS. An extracted
+   DATA folder also works; convert RVZ before importing.
 5. Choose **Mario Kart Wii** for the original game or **Retro Rewind** for the
    optional expanded game. KartPad can download, verify, and install the
-   official version-locked Retro Rewind 6.12.7 full pack.
+   official version-locked Retro Rewind 6.12.8 full pack.
+
+Choose **Help** on the game chooser for the two-step setup instructions and
+GitHub guides. The normal landscape iPhone chooser fits without scrolling;
+large accessibility text can scroll to remain readable.
+
+## Player identity
 
 To change an existing online name, open **••• → Game Data & Saves → Player
 Identity… → Rename or Delete Licenses…**. Choose the exact Original or Retro
@@ -41,8 +59,8 @@ create a license, choose **New** inside the game and select your Mii. Use
 Appearance…** does not delete a game license and is blocked while the Mii is
 still linked to one.
 
-The persistent **•••** button is restored immediately after iPadOS reports a
-screenshot if the system temporarily changes its presentation state.
+## Import and controls
+
 The experimental direct Wii Remote/Nunchuk pairing flow is macOS-only; the IPA
 does not claim direct Wii Remote pairing on iPhone or iPad.
 
@@ -50,6 +68,8 @@ If **Import from This Installation's Folder…** cannot see a game image because
 the signer created a different app container, KartPad opens the normal Files
 picker automatically. Select the visible WBFS/ISO there; the app still validates
 the exact supported game before importing it.
+
+## Content and updates
 
 The IPA includes KartPad's ARM64 app and ahead-of-time translated executable
 module. It does not include a Mario Kart Wii disc image, extracted courses,
@@ -64,10 +84,8 @@ compatible KartPad update if the online-compatible content profile advances.
 The accepted physical iPad flow completed the download, verification,
 installation, launch, and a playable single-player match.
 
-Retro WFC is active again as of 6 September 2026. Service recovery does not by
-itself establish production compatibility for this exact KartPad artifact;
-login, matchmaking, a complete race, results, reconnect, and physical-device
-acceptance remain separate gates.
+Production-online acceptance is separate from offline gameplay and package
+audits. See the [online status](ONLINE.md) for tested flows and remaining gaps.
 
 Updating in place with the same bundle identifier and signing identity is the
 safest way to retain game data and saves. A clean uninstall can remove the app

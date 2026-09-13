@@ -13,19 +13,25 @@ Its package is `dev.kartpad.rendererprobe`; installing it does not replace
 
 ## Run
 
+[Download the audited Android diagnostic APK](https://github.com/chrissotraidis/kartpad/releases/tag/renderer-probe-v0.2.0).
+
+You do not need to run KartPad first. This separate app supplies all of its
+own synthetic inputs.
+
 Open **KartPad Renderer Check**, tap **Run GPU Check**, then **Share Results**.
 Keep the app open during the test. Post the text to the relevant issue after
 reviewing it. Include whether Original, Retro Rewind, or both show corruption.
 
-Four variants compare 4,096 values each against an independent CPU decoder:
+In version 0.2.0, four compute variants and four indexed-draw variants
+compare 4,096 values each against independent CPU expectations (32,768 total):
 
 - Scalar uniform array, bounds protection disabled.
 - Vector-packed uniform array, bounds protection disabled.
 - Scalar uniform array, bounds protection enabled.
 - Vector-packed uniform array, bounds protection enabled.
 
-WebGPU validation remains enabled in every variant. Each uses a fresh adapter
-and device; the selected backend is Vulkan on Android and Metal on macOS.
+WebGPU validation remains enabled in every variant. Each robustness mode uses a
+fresh adapter and device; the selected backend is Vulkan on Android and Metal on macOS.
 Software adapters are rejected before device creation because the pinned Dawn
 library aborts in its SwiftShader device-toggle setup. There is no fallback
 to a different graphics backend. GPU callbacks have a
@@ -47,9 +53,18 @@ Field numbers in a mismatch report mean:
 | 12–14 | matrix transform components |
 | 15 | big-endian finite float |
 
-A pass only validates these synthetic compute cases. It does not validate the
-vertex/fragment stages, textures, actual GX draw streams, buffer reuse,
-presentation, frame pacing, or gameplay on that device. A mismatch is evidence
+The new draw variants issue indexed triangles through vertex and fragment stages.
+They use separate packed vertex-index and attribute storage buffers, signed
+big-endian positions, the current Aurora 80-byte uniform prefix, 20 indexed
+position matrices, dynamic uniform offsets, RGBA8 textures, and four queued
+updates of shared buffers/textures before readback. The CPU expects one
+independently computed RGBA pixel per quad. Reports distinguish compute lines
+from `draw` lines and include the failed phase/pixel/channel when applicable.
+
+A pass validates only these synthetic cases. It does not validate actual GX
+draw streams/generated game shaders, compressed textures, the renderer's
+staging buffers or multithreaded lifetime, presentation, frame pacing, or
+gameplay on that device. A mismatch is evidence
 for a smaller follow-up case, not automatic proof of a driver bug. Error reports
 are distinct from value mismatches.
 

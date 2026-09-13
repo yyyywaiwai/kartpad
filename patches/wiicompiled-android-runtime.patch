@@ -268,11 +268,15 @@
  mkw_configure_product(WiiCompiled)
  target_precompile_headers(WiiCompiled PRIVATE
      "${MKW_RUNTIME_SOURCE_DIR}/include/mkw_pch.h")
-@@ -537,11 +563,11 @@
+@@ -537,15 +563,15 @@
      mkw_retro_rewind_functions WiiCompiled RetroRewind KartPadDual)
  foreach(target IN LISTS MKW_ALL_BUILD_TARGETS)
      if(TARGET ${target})
-         if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")
+         # Physical iOS includes older arm64 devices without FEAT_LRCPC.
+         # Keep the existing macOS and Simulator target unchanged.
+         if(CMAKE_SYSTEM_NAME STREQUAL "tvOS" OR
+            (CMAKE_SYSTEM_NAME STREQUAL "iOS" AND
+             CMAKE_OSX_SYSROOT MATCHES "iphoneos|iPhoneOS"))
              target_compile_options(${target} PRIVATE
                  "SHELL:-mcpu=generic -Xclang -target-feature -Xclang -rcpc")
 -        else()

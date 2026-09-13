@@ -34,8 +34,8 @@ class AndroidUpdateInPlaceContractTests(unittest.TestCase):
 
         self.assertIn('providers.gradleProperty("kartpadVersionCode")', gradle)
         self.assertIn('providers.gradleProperty("kartpadVersionName")', gradle)
-        self.assertIn('.getOrElse(21)', gradle)
-        self.assertIn('0.4.10-android.1', gradle)
+        self.assertIn('.getOrElse(83)', gradle)
+        self.assertIn('0.4.18-android.1', gradle)
         self.assertIn("versionCode = kartpadVersionCode", gradle)
         self.assertIn("KARTPAD_ANDROID_VERSION_CODE", builder)
         self.assertIn("KARTPAD_ANDROID_VERSION_NAME", builder)

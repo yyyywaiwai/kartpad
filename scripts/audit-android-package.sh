@@ -21,7 +21,7 @@ for tool in "$aapt2" "$zipalign" "$readelf"; do
 done
 
 badging="$("$aapt2" dump badging "$apk")"
-expected_version_name="${KARTPAD_ANDROID_EXPECTED_VERSION_NAME:-0.4.10-android.1}"
+expected_version_name="${KARTPAD_ANDROID_EXPECTED_VERSION_NAME:-0.4.12-android.2}"
 if [[ -n "${KARTPAD_ANDROID_EXPECTED_VERSION_CODE:-}" ]]; then
   [[ "$badging" == *"versionCode='$KARTPAD_ANDROID_EXPECTED_VERSION_CODE'"* ]] || {
     echo "ERROR: APK version code does not match the requested code" >&2; exit 1;
@@ -120,6 +120,9 @@ if [[ -n "$asset_members" ]]; then
     assets/wii/shared2/wc24/nwc24fls.bin \
     assets/wii/shared2/wc24/nwc24msg.cbk \
     assets/wii/shared2/wc24/nwc24msg.cfg | sort)"
+  fi
+  if printf '%s\n' "$asset_members" | grep -Fxq assets/kartpad-build.json; then
+    expected_asset_members="$(printf '%s\n' "$expected_asset_members" assets/kartpad-build.json | sort)"
   fi
   if printf '%s\n' "$asset_members" | grep -Eq '^assets/dexopt/baseline\.profm?$'; then
     # bundletool materializes AGP's two audited BUNDLE-METADATA baseline-profile

@@ -12,9 +12,9 @@ import zipfile
 from pathlib import Path
 
 
-RELEASE_TAG = "v0.4.11-macos.1"
-APP_VERSION = "0.4.11"
-APP_BUILD = "26"
+RELEASE_TAG = "v0.4.17-macos.1"
+APP_VERSION = "0.4.17"
+APP_BUILD = "39"
 ZIP_TIMESTAMP = (2020, 1, 1, 0, 0, 0)
 
 
@@ -26,15 +26,13 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Package the public KartPad macOS app.")
     parser.add_argument("app", type=Path)
     parser.add_argument("output", type=Path, nargs="?")
-    parser.add_argument("--release-tag", default=RELEASE_TAG)
-    parser.add_argument("--release-notes", type=Path)
     parser.add_argument("--runtime-build", type=Path, required=True,
                         help="Exact runtime build containing pinned dependency notices")
     args = parser.parse_args()
     repo = Path(__file__).resolve().parents[1]
     app = args.app.resolve()
     output = (args.output.resolve() if args.output else
-              repo / "artifacts/KartPad-v0.4.11-macos.1-arm64.zip")
+              repo / "artifacts/KartPad-v0.4.17-macos.1-arm64.zip")
     if subprocess.check_output(
         ["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=all"],
         text=True,
@@ -53,11 +51,11 @@ def main() -> int:
     executable = app / "Contents/MacOS/KartPad"
     provenance = {
         "schemaVersion": 1,
-        "releaseTag": args.release_tag,
+        "releaseTag": RELEASE_TAG,
         "sourceCommit": source_commit,
         "appVersion": APP_VERSION,
         "appBuild": APP_BUILD,
-        "bundleIdentifier": plist["CFBundleIdentifier"],
+        "bundleIdentifier": "dev.kartpad.app",
         "executableSHA256": hashlib.sha256(executable.read_bytes()).hexdigest(),
         "containsTranslatedGameCode": True,
         "containsGameData": False,
@@ -69,7 +67,7 @@ def main() -> int:
     }
     extras = {
         "INSTALL_MACOS.md": repo / "docs/INSTALL_MACOS.md",
-        "RELEASE_NOTES.md": args.release_notes.resolve() if args.release_notes else repo / "docs/releases/v0.4.11-macos.1.md",
+        "RELEASE_NOTES.md": repo / "docs/releases/v0.4.17-macos.1.md",
         "MULTIPLAYER.md": repo / "docs/MULTIPLAYER.md",
         "LICENSE": repo / "LICENSE",
         "LICENSES/GPL-3.0.txt": repo / "LICENSES/GPL-3.0.txt",

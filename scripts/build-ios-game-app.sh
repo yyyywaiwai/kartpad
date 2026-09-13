@@ -34,6 +34,10 @@ if [[ ! -f "${translation_root}/build_shards/shards.cmake" ]]; then
   echo "ERROR: missing real-title translation: ${translation_root}" >&2
   exit 66
 fi
+python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify \
+  "${translation_root}/functions/func_8000A440.cpp"
+python3 "${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify-shards \
+  "${translation_root}/build_shards"
 if [[ ! -f "${dawn_archive}" ]] ||
    [[ "$(shasum -a 256 "${dawn_archive}" | awk '{print $1}')" != "${dawn_sha256}" ]]; then
   echo "ERROR: missing or mismatched pinned Simulator Dawn archive" >&2
@@ -85,9 +89,13 @@ cmake -S "${runtime_source}" -B "${xcode_build}" -G Xcode \
   -DMKW_KARTPAD_DISCIO_SOURCE_DIR="${discio_source}" \
   -DMKW_KARTPAD_DISCIO_BUILD_DIR="${discio_build}" \
   -DMKW_TRANSLATED_COMPILE_JOBS=2
+python3 "${repo_root}/scripts/write-build-provenance.py" --repo "${repo_root}" \
+  --runtime "${runtime_source}" --translation "${translation_root}" \
+  --output "${xcode_build}/kartpad-build.json"
 cmake --build "${xcode_build}" --config Release --target "${product_target}" -- \
   -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO
 
 app="${xcode_build}/Release-iphonesimulator/KartPad.app"
+cp "${xcode_build}/kartpad-build.json" "${app}/kartpad-build.json"
 "${repo_root}/scripts/audit-ios-game-app.sh" "${app}"
 echo "Built full translated iOS Simulator app: ${app}"

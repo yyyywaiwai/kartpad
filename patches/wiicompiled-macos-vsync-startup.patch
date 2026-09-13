@@ -1,0 +1,29 @@
+--- a/include/runtime_config.h
++++ b/include/runtime_config.h
+@@ -40,6 +40,7 @@
+     std::optional<float> resolutionMultiplier;
+     std::optional<std::string> graphicsApi;
+     std::optional<std::string> displayMode;
++    std::optional<bool> vsync;
+     std::optional<uint32_t> frameInterpolationFps;
+     std::optional<bool> skipUnreadyPipelines;
+     std::optional<bool> disableCopyFilter;
+@@ -410,6 +411,7 @@
+             config.frameInterpolationFps = migrated;
+         }
+     }
++    config.vsync = FindConfigValue<bool>(document, "video", "vsync");
+     config.skipUnreadyPipelines = FindConfigValue<bool>(document, "video", "skip_unready_pipelines");
+     config.disableCopyFilter = FindConfigValue<bool>(document, "video", "disable_copy_filter");
+     config.showFps = FindConfigValue<bool>(document, "video", "show_fps");
+--- a/src/main.cpp
++++ b/src/main.cpp
+@@ -1205,6 +1205,8 @@
+         // We use auto backend (or specific if needed) and set a default window size.
+         // This is required for GX commands (like texture loading) to work.
+         AuroraConfig auroraConfig = {};
++        // macOS opt-in presentation preference; changes apply on the next launch.
++        auroraConfig.vsync = RuntimeConfigFile::Get().vsync.value_or(false);
+         auroraConfig.appName = RuntimeProduct::Active().displayName.data();
+         const auto applicationDataDirectory = RuntimeConfigFile::ApplicationDataDirectory();
+         const auto rendererCacheDirectory = RuntimeConfigFile::CacheDataDirectory();

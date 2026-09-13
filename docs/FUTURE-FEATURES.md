@@ -5,6 +5,24 @@ current release priority. An entry here is not a shipping promise and should
 not be presented as supported until its implementation and acceptance gates
 pass.
 
+## Android D-pad and shoulder remapping
+
+**Status:** Implemented in [PR #219](https://github.com/chrissotraidis/kartpad/pull/219)
+and delivered in Android 0.4.17/code 80. The affected AYN Thor/Odin controller
+trial remains open.
+
+R and D-pad Up are configurable in Android Controller Button Mapping. Assigning
+Right Shoulder to D-pad Up swaps the old R assignment so actions remain distinct.
+Existing valid custom mappings migrate without a reset. Native mapping and
+Kotlin migration tests passed. Analog-trigger expansion remains separately scoped.
+
+Acceptance: press/release and held input, diagonals, simultaneous buttons,
+conflicts, reset, persistence across restart, disconnect/reconnect and touch
+handoff. Validate trick/wheelie and menus in Original and Retro on the named
+controller; unaffected default mappings must continue working. Android delivery
+does not establish iOS/macOS/tvOS parity. The next step is exact-candidate
+controller acceptance, not another implementation of the same mapping.
+
 ## RetroAchievements
 
 **Status:** Researched; deferred.
@@ -128,3 +146,20 @@ phone/app versions, and whether they want sideways phone steering or a bridged
 physical Wii Remote/Nunchuk, before choosing the first compatibility target.
 Keep this deferred until separately prioritized; listing it here does not
 commit it to the next build or establish hardware support.
+
+## Android custom Vulkan driver comparison
+
+**Status:** Investigation proposal from [#104](https://github.com/chrissotraidis/kartpad/issues/104); no implementation or release commitment.
+
+[Mesa Turnip](https://docs.mesa3d.org/drivers/freedreno.html) is an alternative
+Vulkan implementation for Adreno. KartPad currently uses its existing Vulkan
+loading path and offers no custom-driver import/selection. Downloading a driver
+ZIP does not change the driver used by KartPad.
+
+A bounded pilot would first establish compatibility with the exact Android
+device, loader and pinned Dawn build, then compare the same failing scene with
+the system driver and the alternative. Preserve a working system-driver
+fallback. Such a comparison may isolate vendor-dependent behavior; it would
+not alone prove whether the original defect belongs to KartPad or the driver.
+Do not substitute this proposal for the ongoing actual-draw investigation or
+ask reporters to modify their system drivers.

@@ -1,0 +1,21 @@
+--- a/src/hle/os/os_alarm.cpp
++++ b/src/hle/os/os_alarm.cpp
+@@ -222,7 +222,6 @@
+                         throw;
+                     }
+                     DecrementSchedulerDisableCount();
+-                    RunDeferredReschedule(cpu);
+                 }
+             }
+         } catch (const ::Memory::AccessViolation& e) {
+@@ -233,7 +232,9 @@
+     // Host DNS workers never touch guest memory. Commit their output here on
+     // the scheduler thread, waking synchronous IOS waiters or queuing async IOS
+     // callbacks before the callback drain below.
+-    bool completionNeedsReschedule = false;
++    // Alarm handlers can wake threads too. Switch only after the alarm guard
++    // has unwound, so the selected fiber can pump its own completions.
++    bool completionNeedsReschedule = handledAny;
+     if (Network_HLE_ProcessCompletions(cpu)) {
+         handledAny = true;
+         completionNeedsReschedule = true;

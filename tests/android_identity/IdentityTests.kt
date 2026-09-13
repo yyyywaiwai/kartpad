@@ -5,9 +5,54 @@ import java.nio.file.Files
 import java.util.zip.CRC32
 import android.util.AtomicFile
 
+// Bind the production activity's JNI import/list methods without starting a UI.
+private class KartPadActivity {
+    external fun nativeImportMii(database: ByteArray, mii: ByteArray): ByteArray
+    external fun nativeListMiis(database: ByteArray): Array<String>
+}
+
+private fun testExportedMiiImport(fixtures: File) {
+    val root = Files.createTempDirectory("kartpad-mii-import-test-").toFile()
+    try {
+        val database = File(root, "KartPad/NAND/shared2/menu/FaceLib/RFL_DB.dat")
+        database.parentFile.mkdirs()
+        val original = File(fixtures, "mii.dat").readBytes()
+        database.writeBytes(original)
+        val exported = original.copyOfRange(4, 78).apply {
+            this[0] = (this[0].toInt() or 0x80).toByte() // RFL padding0
+            this[0x1b] = 2 // A distinct synthetic creation ID.
+        }
+        val activity = KartPadActivity()
+        val imported = activity.nativeImportMii(KartPadMiiStorage.readWorking(root), exported)
+        check(activity.nativeListMiis(imported).size == 6) // Two three-field records.
+        check(imported.copyOfRange(78, 152).contentEquals(exported))
+        KartPadMiiStorage.writePending(root, imported)
+        check(database.readBytes().contentEquals(original))
+        check(KartPadMiiStorage.hasPending(root))
+        check(KartPadMiiStorage.applyPending(root) == null)
+        check(!KartPadMiiStorage.hasPending(root))
+        check(database.readBytes().contentEquals(imported))
+        val backup = File(root, "KartPad/MiiBackups").listFiles()!!.single()
+        check(backup.readBytes().contentEquals(original))
+        for (invalid in listOf(exported.copyOf(73), exported.copyOf().apply { this[0x16] = 128.toByte() })) {
+            val error = runCatching { activity.nativeImportMii(imported, invalid) }.exceptionOrNull()
+            check(error is IllegalArgumentException)
+            check(database.readBytes().contentEquals(imported))
+            check(!KartPadMiiStorage.hasPending(root))
+        }
+        println("Android Mii import passed: padding bit, JNI list/import, staged apply, original backup, invalid-file rejection")
+    } finally {
+        root.deleteRecursively() // Only this test's newly-created synthetic directory.
+    }
+}
+
 fun main(args: Array<String>) {
+    testRatingCompanion()
+    testRatingStorage()
     System.load(args[0])
     val fixtures = File(args[1])
+    testExportedMiiImport(fixtures)
+    testSaveProfiles(fixtures)
     val root = Files.createTempDirectory("kartpad-identity-test-").toFile()
     fun path(profile: String) = File(root, "KartPad/${KartPadIdentityStorage.paths.getValue(profile)}")
     for (profile in KartPadIdentityStorage.paths.keys) {

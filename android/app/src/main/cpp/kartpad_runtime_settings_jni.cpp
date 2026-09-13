@@ -12,10 +12,11 @@ Java_dev_kartpad_android_KartPadActivity_nativeEnableActivityRecreation(
 
 extern "C" JNIEXPORT void JNICALL
 Java_dev_kartpad_android_KartPadActivity_nativeApplyDisplaySettings(
-    JNIEnv*, jobject, jboolean show_fps, jint aspect_mode,
+    JNIEnv*, jobject, jboolean show_fps, jint fps_size, jint aspect_mode,
     jfloat resolution_scale) {
   kartpad::android::PublishDisplaySettings({
       .show_fps = show_fps == JNI_TRUE,
+      .fps_size = static_cast<int>(fps_size),
       .aspect_mode = static_cast<int>(aspect_mode),
       .resolution_scale = static_cast<float>(resolution_scale),
   });
@@ -24,9 +25,9 @@ Java_dev_kartpad_android_KartPadActivity_nativeApplyDisplaySettings(
 extern "C" JNIEXPORT void JNICALL
 Java_dev_kartpad_android_KartPadActivity_nativeApplyControllerMapping(
     JNIEnv* env, jobject, jintArray values) {
-  if (values == nullptr || env->GetArrayLength(values) != 5) return;
-  jint raw[5]{};
-  env->GetIntArrayRegion(values, 0, 5, raw);
+  if (values == nullptr || env->GetArrayLength(values) != 7) return;
+  jint raw[7]{};
+  env->GetIntArrayRegion(values, 0, 7, raw);
   if (env->ExceptionCheck()) return;
   kartpad::android::ControllerButtonMapping mapping{};
   for (std::size_t index = 0; index < mapping.size(); ++index) {

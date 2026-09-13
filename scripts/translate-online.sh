@@ -46,6 +46,8 @@ for selection_function in 8083DFA8 80846C1C 8084E388 80643F48; do
 done
 "${repo_root}/scripts/inject-g10-camera-lifecycle-guard.py" \
   "${functions}/func_805A1A8C.cpp"
+"${repo_root}/scripts/inject-retro-rel-report-guard.py" \
+  "${functions}/func_8000A440.cpp"
 
 "${dotnet_bin}" "${translator}" emit-base-manifest \
   --project "${manifest}" --profile online \
@@ -69,6 +71,9 @@ done
   --native-source-dir "${repo_root}/build/wiicompiled-fpscr/runtime/src" \
   --resolved-profile "${mod_output}/resolved_dispatch_profile.json" \
   --retro-cpp-dir "${mod_output}/cpp" --out "${shards}"
+"${repo_root}/scripts/inject-retro-rel-report-guard.py" --inject-shards "${shards}"
+"${repo_root}/scripts/inject-retro-rel-report-guard.py" --verify-shards "${shards}"
+
 
 rg -q '^set\(MKW_RETRO_REWIND_FUNCTION_COUNT [1-9][0-9]*\)$' \
   "${shards}/shards.cmake"

@@ -1,13 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-if [[ $# -ne 1 || "$1" != /* || "$1" != *.app ]]; then
-  echo "usage: $0 /absolute/path/to/KartPad.app" >&2
+if [[ $# -lt 1 || $# -gt 2 || "$1" != /* || "$1" != *.app ]]; then
+  echo "usage: $0 /absolute/path/to/KartPad.app [base|retro-rewind|dual]" >&2
   exit 64
 fi
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
 app="$1"
+product="${2:-dual}"
+case "${product}" in base|retro-rewind|dual) ;; *) exit 64 ;; esac
 contents="${app}/Contents"
 plist="${contents}/Info.plist"
 if [[ ! -d "${app}" || ! -f "${plist}" ]]; then
@@ -35,8 +37,8 @@ case "${KARTPAD_MACOS_AUDIT_REGION:-P}" in
   *) echo "unsupported macOS audit region" >&2; exit 64 ;;
 esac
 test "${bundle_identifier}" = "${expected_bundle_identifier}"
-test "$(plutil -extract CFBundleShortVersionString raw "${plist}")" = "0.4.11"
-test "$(plutil -extract CFBundleVersion raw "${plist}")" = "26"
+test "$(plutil -extract CFBundleShortVersionString raw "${plist}")" = "0.4.17"
+test "$(plutil -extract CFBundleVersion raw "${plist}")" = "39"
 test -n "$(plutil -extract NSLocalNetworkUsageDescription raw "${plist}")"
 test "$(plutil -extract NSBluetoothAlwaysUsageDescription raw "${plist}")" = \
   "KartPad uses Bluetooth to pair and connect an experimental Wii Remote and Nunchuk."
@@ -135,11 +137,11 @@ for shell_contract in \
   "Use item" \
   "Left Shift (Classic L)" \
   "Select / minus" \
-  "Runtime settings bar" \
   "showControls:" \
   "Render resolution" \
-  "Controller mappings remain available from Controller settings in the in-game F10 bar." \
-  "Changes are saved safely and apply the next time KartPad launches." \
+  "ControllerProfiles.json" \
+  "Graphics & Display" \
+  "Controller Compatibility Tools" \
   "Game Data Required" \
   "Choose Extracted Mario Kart Wii Data" \
   "Choose Game Data" \
@@ -156,6 +158,12 @@ for shell_contract in \
   "Show KartPad Cache" \
   "Save Diagnostics Report" \
   "privacy=personal paths are replaced; game data, translated code, save contents, credentials, device identifiers, signing material, and unbounded logs are omitted"; do
+  # These selectors/preferences are compiled only into the dual launcher.
+  if [[ "${product}" != dual ]]; then
+    case "${shell_contract}" in
+      "chooseRetroRewindData:"|"KartPadRuntimeProfile"|"Quit and reopen KartPad to switch games. Your saves and settings are preserved.") continue ;;
+    esac
+  fi
   if ! rg -F -q "${shell_contract}" <<<"${executable_strings}"; then
     echo "package runtime lacks native shell contract: ${shell_contract}" >&2
     exit 70

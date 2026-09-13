@@ -1,0 +1,183 @@
+{
+  "schema": 1,
+  "objective": "Stable gameplay across Android and Apple builds, with Original and Retro tracked separately. Actionable data-loss and launch blockers take precedence; prioritize measured sustained performance, then actual-game geometry while reporter-dependent cases await new evidence. Count affected-device outcomes, not diagnostics.",
+  "work": [
+    {
+      "id": "retro-save-loss",
+      "priority": 0,
+      "issues": [
+        169
+      ],
+      "state": "awaiting-reporter",
+      "next_action": "Classify which Retro progress is lost and whether normal exit or pack replacement triggers it; use the existing request and do not deliberately lose more data.",
+      "acceptance": "The identified state survives the exact exit/relaunch or replacement boundary on the affected build, with a data-preserving regression comparison.",
+      "dependency": {
+        "owner": "issue-169 reporter",
+        "needs": "The already requested lost-state and exit-path details; https://github.com/chrissotraidis/kartpad/issues/169"
+      },
+      "checkpoint": "docs/MAINTENANCE-BOARD.md",
+      "priority_reason": "Preserve user progress; actionable data loss overrides other work."
+    },
+    {
+      "id": "android-exits",
+      "priority": 1,
+      "issues": [
+        143,
+        200,
+        205,
+        208,
+        128,
+        131,
+        207,
+        215,
+        216,
+        236
+      ],
+      "state": "awaiting-reporter",
+      "next_action": "Classify one actual OS/process exit per separate launch/cup/race case. #215 and #236 already confirm Android-home exit; do not re-ask that destination. Home exit alone does not distinguish native fault, Java exception or OS termination. Use the existing ApplicationExitInfo/report path; keep #208 canonical and avoid a speculative shared renderer fix.",
+      "acceptance": "Each classified failure passes its affected import/start, cup-awards or race boundary on the exact target. Similar exits are not assumed to share a cause.",
+      "dependency": {
+        "owner": "the named reporters in each linked issue",
+        "needs": "Already requested process-exit classification and exact profile/transition; preserve separate subcases."
+      },
+      "checkpoint": "docs/MAINTENANCE-BOARD.md",
+      "priority_reason": "Classified crashes block stable play; distinct exits require separate evidence."
+    },
+    {
+      "id": "ios27-startup",
+      "priority": 1,
+      "issues": [
+        196
+      ],
+      "state": "awaiting-reporter",
+      "next_action": "Build39 still failed the matching iPhone17 Pro Max/iOS27 retest. Issue196 was reopened during current review after an unsupported completed closure. Await the already requested new per-mode crash analytics or in-app Share Report; reporter said current analytics were absent. Do not rebuild the same IPA or repeat old simulator tests as a fix.",
+      "dependency": {
+        "owner": "issue196 reporter",
+        "needs": "Already requested new crash report or recent in-app log, or confirmation that the menu cannot be reached. Preserve installation and data."
+      },
+      "acceptance": "The same corrected candidate preserves existing data and passes both Original and Retro launch, race and relaunch on the matching iPhone 17 Pro Max/iOS 27 target. Package/reporter/release acceptance remain separate.",
+      "checkpoint": "docs/artifacts/2026-09-13/platform-candidate-handoff.md",
+      "priority_reason": "A game that cannot launch cannot meet offline or online acceptance."
+    },
+    {
+      "id": "android-online",
+      "priority": 4,
+      "issues": [
+        206
+      ],
+      "state": "awaiting-reporter",
+      "next_action": "Await #206's already requested reporter confirmation that Wi-Fi stays connected beyond the prior four/five-race window. The mobile-data-versus-Wi-Fi comparison was acknowledged at https://github.com/chrissotraidis/kartpad/issues/206#issuecomment-5642834780; it narrows a network-dependent subcase without proving a carrier/NAT or shared runtime cause. Do not repeat the acknowledgement, known build/device questions or generic log request. Issue #123 is closed upstream and retained only as historical evidence; its closure is not a technical online acceptance claim.",
+      "dependency": {
+        "owner": "#206 reporter",
+        "needs": "The already requested Wi-Fi endurance confirmation beyond the prior four/five-race window; no reinstall, data clear or generic log request"
+      },
+      "acceptance": "Exact candidate passes login, matching, race, results, repeat and reconnect; a #206 endurance result must exceed its reported 4-5-race failure window. Dashboard entry alone does not pass.",
+      "checkpoint": "docs/MAINTENANCE-BOARD.md",
+      "priority_reason": "Network-dependent endurance remains open; use the existing requested comparison while locally actionable performance and geometry work proceeds."
+    },
+    {
+      "id": "adreno-geometry",
+      "priority": 3,
+      "issues": [
+        102,
+        104,
+        120,
+        137,
+        166,
+        193,
+        211
+      ],
+      "state": "ready-local",
+      "next_action": "Recover the retained actual-draw/PNMTX experiment into a clean current-code83 worktree, preserving draw identity and disabling diagnostic draw merging as already reviewed. Compile generated vertex shaders and prepare a compatible-signer dynamic/literal/dynamic comparison for an affected device. Passing synthetic probes are not gameplay acceptance.",
+      "dependency": {
+        "owner": "renderer worker and affected-device tester",
+        "needs": "Current immutable diagnostic and concrete delivery; signer location is known. Affected S24/Adreno or 840 test of the actual selected failing draw still required."
+      },
+      "acceptance": "A correlated actual bad draw discriminates the hypothesis; a subsequent narrow correction removes the reported corruption on the affected GPU with a matched baseline and no relevant regression.",
+      "checkpoint": "docs/MAINTENANCE-BOARD.md",
+      "priority_reason": "Multiple independent reports show real-game corruption; complete a controlled affected-draw experiment."
+    },
+    {
+      "id": "warmed-performance",
+      "priority": 2,
+      "issues": [
+        198,
+        167,
+        103,
+        169,
+        195,
+        204,
+        207,
+        135
+      ],
+      "state": "ready-local",
+      "next_action": "Private code84 is packaged, non-debuggable and shell-profileable, with public83 native payload and verified symbols. Arrange the existing accepted private handoff after checking recipient version/signer; derive a Debug-signed twin before using the owner Pixel last verified on private82. Then capture one bounded warmed driven CPU sample to classify guest, GX CPU and waits. Do not rebuild native code or repeat answered settings/log/willingness requests.",
+      "acceptance": "A matched warmed affected-device comparison shows a useful frame-time improvement with guest semantics and stability preserved. No FPS claim from a host microbenchmark.",
+      "checkpoint": "docs/MAINTENANCE-BOARD.md",
+      "priority_reason": "Owner explicitly prioritizes slowdowns. Sustained low FPS after shader queues empty is the strongest measured opportunity; a local diagnostic can progress now.",
+      "dependency": {
+        "owner": "performance worker and release operator",
+        "needs": "Community-signed code84 audit passed. Concrete private delivery and affected-device capture remain; owner Pixel needs a compatible signing twin. Neither install nor capture has occurred."
+      }
+    },
+    {
+      "id": "kamek-continuations",
+      "priority": 1,
+      "issues": [
+        248
+      ],
+      "state": "ready-local",
+      "next_action": "Continue the existing issue-248 investigator owned by the active release task; reconcile that owner before acting and do not spawn a competing worker. Review its narrow upstream PR182 backport and old-fail/new-pass synthetic continuation regression, then assess generated-graph coverage and code growth. The exact 0x807EF16C abort remains unproven in KartPad; do not broadly bump the upstream pin or merge on translator output alone.",
+      "acceptance": "A reviewed narrow source change passes the discriminating continuation regression and generated-graph checks. Native compilation and actual item-change/Item Rain acceptance remain subsequent gates before claiming the reported game failure fixed.",
+      "checkpoint": "docs/artifacts/2026-09-13/maintenance-ready-actions.md",
+      "priority_reason": "Concrete translator evidence and a confirmed skip-return control-flow defect provide a locally actionable crash investigation."
+    },
+    {
+      "id": "android-menu-handoff",
+      "priority": 2,
+      "issues": [
+        197
+      ],
+      "state": "ready-local",
+      "next_action": "Use the documented held-versus-released focus-loss and detach matrix to distinguish touch acceleration lock from stale SDL cached A. Shared held-A suppression is established at source level, but the reported cause is not reproduced. Prepare a discriminator with ordinary press/release and true detach controls; preserve valid held input on resume. The fresh offline touch-only reporter question is already outstanding; do not repeat it or change live device state without ownership.",
+      "acceptance": "A source-level discriminator either demonstrates stale input across handoff or rejects that hypothesis and records the next narrow path. Default-mode A/B mapping, auto-acceleration and affected moto g200 hardware acceptance remain separate; #184 remapping is not acceptance for #197.",
+      "checkpoint": "docs/ANDROID-INPUT-197.md",
+      "priority_reason": "Both touch and controller fail after controller use; shared input state can be inspected while the requested reporter comparison is pending."
+    },
+    {
+      "id": "adreno-diagnostic-preparation",
+      "priority": 3,
+      "issues": [
+        102,
+        104,
+        120,
+        137,
+        166,
+        193,
+        211
+      ],
+      "state": "ready-local",
+      "next_action": "Inventory the retained diagnostic source, APK and symbols and prove their immutable identities before reuse. Compare prepared source to the intended dynamic/literal/dynamic experiment; use the verified Community Release signing capability only through the authorized operator. Prepare the exact compatible-candidate build/audit recipe and redacted test card. Rebuild only if inspection establishes it is necessary and host build ownership is available. Do not assume an existing scratch artifact is valid.",
+      "acceptance": "A reviewed source/artifact inventory, compatible signing plan, exact build/audit recipe and three-phase test card are ready. If a candidate is produced, retain its source/hash/symbol identity. Then park delivery and affected-GPU execution on adreno-geometry; no graphics fix or hardware acceptance is implied.",
+      "checkpoint": "docs/artifacts/2026-09-13/maintenance-ready-actions.md",
+      "priority_reason": "Local identity and delivery preparation is executable before an affected reporter or private transfer channel is available."
+    },
+    {
+      "id": "warmed-profiler-preparation",
+      "priority": 4,
+      "issues": [
+        198
+      ],
+      "state": "ready-local",
+      "next_action": "Inspect the retained profiler source, APK, symbols and capture recipe before reuse; verify profileable/release settings and compatibility with the public signer. Prepare the minimal reproducible build/audit/signing handoff for the authorized operator and the existing approximately 20-second 99-Hz warmed Helio G85 capture. Do not publish a diagnostic, assume the old debug APK is a compatible update, ask willingness again or access a device.",
+      "acceptance": "The exact profiler source, settings, symbols, compatible signing/build recipe and capture instructions are reviewed and retained; any produced candidate is audited and immutable. Private transfer authorization and the actual reporter capture remain on warmed-performance; no measured improvement is claimed.",
+      "checkpoint": "docs/artifacts/2026-09-13/maintenance-ready-actions.md",
+      "priority_reason": "The reporter is already willing and signing capability exists; local preparation should not wait for the external transfer/capture gate."
+    }
+  ],
+  "priority_review": {
+    "date": "2026-09-13",
+    "reason": "Separate locally executable investigation/preparation from reporter, transfer and hardware gates. The active issue-248 investigator retains ownership. Android code80 materials are prepared; publication must be verified separately. No new device or gameplay acceptance is asserted.",
+    "evidence": "docs/artifacts/2026-09-13/maintenance-ready-actions.md"
+  }
+}

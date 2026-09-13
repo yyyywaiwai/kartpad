@@ -86,6 +86,22 @@ if missing:
 PY
 }
 
+assert_checked_label() {
+  python3 - "$tree" "$1" <<'PY'
+import sys
+import xml.etree.ElementTree as ET
+
+tree, expected = sys.argv[1:]
+for node in ET.parse(tree).getroot().iter("node"):
+    if node.attrib.get("text") == expected:
+        if node.attrib.get("checked") != "true":
+            raise SystemExit(f"ERROR: {expected!r} was not selected after relaunch")
+        break
+else:
+    raise SystemExit(f"ERROR: selected label {expected!r} missing after relaunch")
+PY
+}
+
 assert_icon_count() {
   local expected="$1"
   local actual
@@ -175,8 +191,8 @@ start_menu
 tap_label "Display"
 sleep 1
 dump_tree
-assert_labels "Aspect Ratio…" "Render Resolution…"
-assert_icon_count 2
+assert_labels "FPS Counter Size…" "Aspect Ratio…" "Render Resolution…"
+assert_icon_count 3
 
 start_menu
 tap_label "Game Data & Saves"
@@ -192,7 +208,7 @@ assert_labels \
 assert_icon_count 6
 
 open_top_action "Return to KartPad Menu"
-assert_labels "Resume Mario Kart Wii" "Current game • Paused" "Retro Rewind" "Switch on next launch"
+assert_labels "Mario Kart Wii" "CURRENT GAME · PAUSED" "Resume Game  →" "Retro Rewind" "NEXT LAUNCH" "Use on Next Launch  →"
 
 open_top_action "Multiplayer…"
 assert_labels "Multiplayer" "Local Split-Screen…" "Controller Setup…" "Experimental Server Settings…" "BACK"
@@ -246,6 +262,19 @@ assert_labels \
 
 open_submenu_action "Display" "Render Resolution…"
 assert_labels "Render Resolution" "1× (Native)" "2×" "3×" "4×"
+
+open_submenu_action "Display" "FPS Counter Size…"
+assert_labels "FPS Counter Size" "Small" "Medium" "Large"
+tap_label "Large"
+sleep 1
+fps_preferences="$("$adb" exec-out run-as dev.kartpad.android \
+  cat shared_prefs/kartpad_touch_controls.xml)"
+grep -Eq '<int name="fps_size" value="2"[[:space:]]*/>' <<<"$fps_preferences" || {
+  echo "ERROR: FPS counter size did not persist Large" >&2
+  exit 1
+}
+open_submenu_action "Display" "FPS Counter Size…"
+assert_checked_label "Large"
 
 open_submenu_action "Game Data & Saves" "Remove Stored Game Data…"
 assert_labels "Remove Stored Game Data?" "REMOVE" "CANCEL"
@@ -362,4 +391,4 @@ print(
 PY
 fi
 
-echo "Android menu parity passed: lane=$lane top=8 controls=5 display=2 data=6 actions=16 safe-insets=pass"
+echo "Android menu parity passed: lane=$lane top=8 controls=5 display=3 data=6 actions=17 safe-insets=pass"

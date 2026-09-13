@@ -12,7 +12,7 @@ body:
     id: revision
     attributes:
       label: KartPad version and build
-      placeholder: e.g. 0.4.11 build 26, or 0.4.10-android.1 build 21
+      placeholder: e.g. 0.4.11 build 26, or 0.4.12-android.2 build 23
     validations:
       required: true
   - type: input
@@ -44,7 +44,7 @@ body:
     id: performance-profile
     attributes:
       label: Display and performance settings
-      description: Render resolution, aspect mode, FPS before/during the problem, cold or repeat race, battery/game mode, and charging state if relevant.
+      description: Render resolution, aspect mode, Renderer Validation On/Off on Android, FPS before/during the problem, cold or repeat race, battery/game mode, and charging state if relevant.
   - type: input
     id: report-id
     attributes:

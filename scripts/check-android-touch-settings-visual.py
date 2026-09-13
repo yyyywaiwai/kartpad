@@ -12,11 +12,6 @@ from pathlib import Path
 
 TEXT = (
     "Touch Control Settings",
-    "Render",
-    "1×",
-    "2×",
-    "3×",
-    "4×",
     "Opacity: 82%",
     "All sizes: 100%",
     "Hide on controller",
@@ -26,7 +21,6 @@ TEXT = (
     "DONE",
 )
 DESCRIPTIONS = (
-    "Render resolution",
     "Control opacity",
     "All control sizes",
     "Hide touch controls when controller connected",
@@ -74,8 +68,8 @@ def main() -> None:
         rect = bounds(node.attrib["bounds"])
         if not (0 <= rect[0] < rect[2] <= args.width and 0 <= rect[1] < rect[3] <= args.height):
             raise SystemExit(f"ERROR: settings node is clipped: {rect}")
-    if by_text["1×"].attrib.get("checked") != "true":
-        raise SystemExit("ERROR: native 1x render choice is not selected by default")
+    if "Render" in by_text or "Render resolution" in by_description:
+        raise SystemExit("ERROR: display resolution leaked into touch settings")
 
     opacity = bounds(by_description["Control opacity"].attrib["bounds"])
     all_sizes = bounds(by_description["All control sizes"].attrib["bounds"])
@@ -99,7 +93,7 @@ def main() -> None:
     print(
         "Android touch-settings visual contract passed: "
         f"viewport={width}x{height} text={len(TEXT)} actions={len(DESCRIPTIONS)} "
-        "columns=left-sliders/right-actions render=1x"
+        "columns=left-sliders/right-actions"
     )
 
 

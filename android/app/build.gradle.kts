@@ -15,6 +15,19 @@ val discIoJniRoot = providers.gradleProperty("kartpadDiscIoJniRoot").orNull
 val kartpadProfileable = providers.gradleProperty("kartpadProfileable")
     .map { it.toBooleanStrict() }
     .getOrElse(false)
+val kartpadBuildAssets = layout.buildDirectory.dir("generated/assets/kartpadBuild")
+val prepareKartpadBuildProvenance by tasks.registering(Exec::class) {
+    val output = kartpadBuildAssets.get().file("kartpad-build.json").asFile
+    commandLine("python3", rootProject.file("../scripts/write-build-provenance.py"),
+        "--repo", rootProject.file(".."), "--output", output)
+    if (gameRuntimeSource != null) args("--runtime", gameRuntimeSource)
+    if (translatedShardManifest != null) {
+        args("--translation", file(translatedShardManifest).parentFile.parentFile)
+    }
+    outputs.file(output)
+    // Git state and external prepared/translated trees can change between builds.
+    outputs.upToDateWhen { false }
+}
 // Reuse the shipped Apple artwork byte-for-byte; do not maintain a second logo.
 val kartpadIconResources = layout.buildDirectory.dir("generated/res/kartpadIcon")
 val prepareKartpadIcon by tasks.registering(Copy::class) {
@@ -27,7 +40,7 @@ val kartpadVersionCode = providers.gradleProperty("kartpadVersionCode")
         value.toIntOrNull()?.takeIf { it > 0 }
             ?: error("kartpadVersionCode must be a positive integer")
     }
-    .getOrElse(21)
+    .getOrElse(83)
 val kartpadVersionName = providers.gradleProperty("kartpadVersionName")
     .map { value ->
         require(Regex("[0-9A-Za-z][0-9A-Za-z._-]{0,63}").matches(value)) {
@@ -35,7 +48,7 @@ val kartpadVersionName = providers.gradleProperty("kartpadVersionName")
         }
         value
     }
-    .getOrElse("0.4.10-android.1")
+    .getOrElse("0.4.18-android.1")
 
 android {
     namespace = "dev.kartpad.android"
@@ -94,6 +107,7 @@ android {
     }
     sourceSets.named("main") {
         res.srcDir(kartpadIconResources)
+        assets.srcDir(kartpadBuildAssets)
     }
     if (gameRuntimeSource != null) {
         sourceSets.named("main") {
@@ -123,6 +137,7 @@ android {
 
 tasks.named("preBuild") {
     dependsOn(prepareKartpadIcon)
+    dependsOn(prepareKartpadBuildProvenance)
 }
 
 kotlin {

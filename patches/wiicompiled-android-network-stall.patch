@@ -1,0 +1,46 @@
+diff --git a/src/hle/net/network_socket.cpp b/src/hle/net/network_socket.cpp
+--- a/src/hle/net/network_socket.cpp
++++ b/src/hle/net/network_socket.cpp
+@@ -1,3 +1,4 @@
++#include <kartpad/android/network_stall.h>
+ #include "network_internal.h"
+ 
+ #include <kartpad/network/blocking_stream_wait.h>
+@@ -174,6 +175,9 @@
+ }
+ 
+ int32_t HandleIpTopIoctl(uint32_t cmd, uint32_t inBuf, uint32_t inLen, uint32_t outBuf, uint32_t outLen) {
++#if defined(__ANDROID__)
++    kartpad::android::NetworkCallTimer stallTimer("socket_ioctl", cmd);
++#endif
+     switch (cmd) {
+     case IOCTL_SO_INITINTERFACE:
+     case IOCTL_SO_SETINTERFACE:
+@@ -449,6 +453,9 @@
+ }
+ 
+ int32_t HandleIpTopIoctlv(uint32_t cmd, const std::vector<IoVector>& in, const std::vector<IoVector>& out) {
++#if defined(__ANDROID__)
++    kartpad::android::NetworkCallTimer stallTimer("socket_ioctlv", cmd);
++#endif
+     switch (cmd) {
+     case IOCTLV_SO_STARTUP:
+         EnsureSocketRuntime();
+diff --git a/src/hle/net/network_ssl.cpp b/src/hle/net/network_ssl.cpp
+--- a/src/hle/net/network_ssl.cpp
++++ b/src/hle/net/network_ssl.cpp
+@@ -1,3 +1,4 @@
++#include <kartpad/android/network_stall.h>
+ #include "network_internal.h"
+ #include "kartpad/network/private_wfc.h"
+ 
+@@ -802,6 +803,9 @@
+ }
+ 
+ int32_t HandleSslIoctlv(uint32_t cmd, const std::vector<IoVector>& in, const std::vector<IoVector>& out) {
++#if defined(__ANDROID__)
++    kartpad::android::NetworkCallTimer stallTimer("ssl_ioctlv", cmd);
++#endif
+ 
+     switch (cmd) {
+     case IOCTLV_NET_SSL_NEW: {

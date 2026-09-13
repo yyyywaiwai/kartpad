@@ -11,9 +11,9 @@ import zipfile
 from pathlib import Path, PurePosixPath
 
 
-RELEASE_TAG = "v0.4.11"
-APP_VERSION = "0.4.11"
-APP_BUILD = "26"
+from ios_release import (
+    RELEASE_TAG, APP_VERSION, APP_BUILD, accepted_build, verify_source_equivalence,
+)
 FORBIDDEN_SUFFIXES = {
     ".iso", ".gcm", ".gcz", ".ciso", ".wbfs", ".wia", ".rvz",
     ".gci", ".sav", ".log", ".mobileprovision", ".p12", ".p8",
@@ -25,6 +25,8 @@ REQUIRED_ENTRIES = {
     "KartPadBuilderProvenance.json",
     "INSTALL_IPA.md",
     "RELEASE_NOTES.md",
+    "SOURCE_AND_REBUILD.md",
+    "Payload/KartPad.app/kartpad-build.json",
     "LICENSES/GPL-3.0.txt",
     "RIGHTS_AND_LICENSES.md",
     "THIRD_PARTY_NOTICES.md",
@@ -57,6 +59,8 @@ def main() -> int:
     expected_commit = args.source_commit or subprocess.check_output(
         ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
     ).strip()
+
+    verify_source_equivalence(repo, expected_commit)
 
     with zipfile.ZipFile(ipa) as archive:
         bad_member = archive.testzip()
@@ -113,6 +117,9 @@ def main() -> int:
                 if mode and extracted.is_file():
                     extracted.chmod(mode)
             app = root / "Payload/KartPad.app"
+            for key, expected in accepted_build(app).items():
+                if provenance.get(key) != expected:
+                    fail(f"unexpected compilation provenance {key}")
             subprocess.run(
                 [str(repo / "scripts/audit-ios-game-app.sh"), str(app), "IOS"],
                 check=True,

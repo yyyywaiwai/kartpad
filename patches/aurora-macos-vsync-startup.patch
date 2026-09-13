@@ -1,0 +1,40 @@
+--- a/include/aurora/aurora.h
++++ b/include/aurora/aurora.h
+@@ -87,8 +87,8 @@
+   AuroraBackend desiredBackend;
+   uint32_t msaa;
+   uint16_t maxTextureAnisotropy;
+-  // No vsync knob exists: the swapchain is always configured for a
+-  // non-blocking present mode (Immediate, else Mailbox). See best_present_mode.
++  // macOS startup-only opt-in. False preserves the existing presentation policy.
++  bool vsync;
+   bool startFullscreen;
+   bool allowJoystickBackgroundEvents;
+   bool pauseOnFocusLost;
+--- a/lib/webgpu/gpu.cpp
++++ b/lib/webgpu/gpu.cpp
+@@ -113,8 +113,8 @@
+   return {budgeted.width, budgeted.height};
+ }
+ 
+-// V-Sync is never enabled: the guest drives its own pacing, and blocking in Present() couples the
+-// whole machine to the monitor (a 120 FPS target on a 75 Hz display runs in slow motion).
++// The default preserves unthrottled presentation. macOS can opt into FIFO at startup;
++// refresh-limited presentation still needs pacing and audio validation.
+ wgpu::PresentMode best_present_mode() {
+   const auto supports = [](const wgpu::PresentMode candidate) {
+     for (size_t i = 0; i < g_surfaceCapabilities.presentModeCount; ++i) {
+@@ -124,6 +124,13 @@
+     }
+     return false;
+   };
++  if (g_config.vsync && g_backendType == wgpu::BackendType::Metal) {
++    if (supports(wgpu::PresentMode::Fifo)) {
++      Log.info("VSync requested: selecting Fifo (restart required to change)");
++      return wgpu::PresentMode::Fifo;
++    }
++    Log.warn("VSync requested but Fifo is unavailable; using the default presentation policy");
++  }
+   // Vulkan prefers Mailbox, every other backend Immediate. Under window capture the Vulkan driver
+   // cannot flip and Immediate leaks about a megabyte per present until the device is lost.
+   const bool preferMailbox = g_backendType == wgpu::BackendType::Vulkan;

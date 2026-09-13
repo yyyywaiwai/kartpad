@@ -48,18 +48,42 @@ int main() {
                         mapped_buttons.buttons == kAllExpected,
                     "standard SDL buttons must map to Classic buttons");
 
-  const ControllerButtonMapping swapped{1, 0, 2, 3, 4};
+  const ControllerButtonMapping swapped{1, 0, 2, 3, 4, 5, 6};
   passed &= Require(IsValidControllerButtonMapping(swapped),
                     "A/B swap must be a valid permutation");
   passed &= Require(
       ApplyControllerButtonMapping(kGamepadSouth, swapped) == kGamepadEast &&
           ApplyControllerButtonMapping(kGamepadEast, swapped) == kGamepadSouth,
       "assigning a used physical button must swap game assignments");
-  const ControllerButtonMapping invalid{0, 0, 2, 3, 4};
+  const ControllerButtonMapping invalid{0, 0, 2, 3, 4, 5, 6};
   passed &= Require(!IsValidControllerButtonMapping(invalid) &&
                         ApplyControllerButtonMapping(kGamepadSouth, invalid) ==
                             kGamepadSouth,
                     "invalid mappings must fail closed to default");
+
+  const ControllerButtonMapping wheelieOnRightShoulder{0, 1, 2, 3, 4, 6, 5};
+  passed &= Require(IsValidControllerButtonMapping(wheelieOnRightShoulder),
+                    "right shoulder and D-pad Up reassignment must be a valid swap");
+  passed &= Require(
+      ApplyControllerButtonMapping(kGamepadRightShoulder,
+                                   wheelieOnRightShoulder) == kGamepadDpadUp &&
+          ApplyControllerButtonMapping(kGamepadDpadUp,
+                                       wheelieOnRightShoulder) == kGamepadRightShoulder,
+      "right shoulder to D-pad Up must swap the existing R action");
+
+  passed &= Require(
+      ApplyControllerButtonMapping(0, wheelieOnRightShoulder) == 0 &&
+          ApplyControllerButtonMapping(kGamepadRightShoulder | kGamepadDpadUp,
+                                       wheelieOnRightShoulder) ==
+              (kGamepadRightShoulder | kGamepadDpadUp),
+      "release clears mapped actions and simultaneous inputs preserve both actions");
+  constexpr uint32_t directButtons = kGamepadDpadDown | kGamepadDpadLeft |
+      kGamepadDpadRight | kGamepadStart;
+  passed &= Require(
+      ApplyControllerButtonMapping(directButtons | kGamepadRightShoulder,
+                                   wheelieOnRightShoulder) ==
+          (directButtons | kGamepadDpadUp),
+      "other D-pad directions and Start remain direct during remapped input");
 
   RawGamepadState direct;
   direct.connected = true;

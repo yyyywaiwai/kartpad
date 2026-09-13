@@ -37,6 +37,7 @@ wgpu::Buffer buffer(wgpu::Device device, size_t size, wgpu::BufferUsage usage) {
     wgpu::BufferDescriptor desc{.usage = usage, .size = size};
     return device.CreateBuffer(&desc);
 }
+#include "draw_probe.h"
 std::string shader(bool packed) {
     std::string s = kHelpers;
     s += "\nstruct Uniform { head: vec4u, offsets: ";
@@ -176,12 +177,16 @@ void run(wgpu::Instance instance, wgpu::Adapter adapter, bool robustness, std::o
         report<<"ERROR robustness="<<robustness<<" uniform="<<(packed?"vec4":"scalar")<<": "<<e.what()<<"\n";
       }
     }
+    for (bool packed : {false, true}) {
+        try { drawProbe(instance, device, *errors, robustness, packed, report); }
+        catch (const std::exception& e) { report<<"ERROR draw robustness="<<robustness<<" uniform="<<(packed?"vec4":"scalar")<<": "<<e.what()<<"\n"; }
+    }
     queue={}; device.Destroy();
 }
 std::string diagnose() {
     std::ostringstream report;
-    report<<"KartPad synthetic renderer probe 1\nHelper SHA256: "<<kHelperSha<<"\n";
-    report<<"No game data read. Validation enabled. Compute readback; not gameplay acceptance.\n";
+    report<<"KartPad synthetic renderer probe 2\nHelper SHA256: "<<kHelperSha<<"\n";
+    report<<"No game data read. Validation enabled. Compute and indexed-draw readback; not gameplay acceptance.\n";
     try {
         const auto feature=wgpu::InstanceFeatureName::TimedWaitAny;
         wgpu::InstanceDescriptor desc{.requiredFeatureCount=1,.requiredFeatures=&feature};

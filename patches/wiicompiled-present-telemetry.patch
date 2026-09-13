@@ -1,9 +1,13 @@
 diff --git a/src/settings_overlay.cpp b/src/settings_overlay.cpp
 --- a/src/settings_overlay.cpp
 +++ b/src/settings_overlay.cpp
-@@ -714,8 +714,30 @@ void DrawGraphicsSettings() {
+@@ -714,8 +714,34 @@ void DrawGraphicsSettings() {
  }
  
++#if defined(__ANDROID__)
++float g_androidFpsOverlayScale = 1.0f;
++#endif
++
  void DrawFpsOverlay() {
 +    static uint64_t lastTelemetryPresentCount = 0;
      AuroraPresentTiming presentTiming{};
@@ -32,13 +36,29 @@ diff --git a/src/settings_overlay.cpp b/src/settings_overlay.cpp
      if (!g_showFps) {
          return;
      }
-@@ -737,6 +759,9 @@ void DrawFpsOverlay() {
+@@ -733,12 +757,25 @@ void DrawFpsOverlay() {
+                                          ImGuiWindowFlags_NoNav |
+                                          ImGuiWindowFlags_NoSavedSettings;
+     if (ImGui::Begin("FPS Overlay", nullptr, kFlags)) {
++#if defined(__ANDROID__)
++        ImGui::SetWindowFontScale(g_androidFpsOverlayScale);
++#endif
+         if (presentTiming.sampleCount == 0) {
+             ImGui::TextUnformatted("FPS: --");
+         } else {
              // Present timing includes the additional frames produced by
              // interpolation, so this remains the actual displayed FPS.
              ImGui::Text("FPS: %.1f", presentTiming.framesPerSecond);
++#if defined(__ANDROID__)
++            ImGui::Text("Frame ms: p50 %.1f  p95 %.1f",
++                        presentTiming.p50FrameTimeMs, presentTiming.p95FrameTimeMs);
++            ImGui::Text("p99 %.1f  worst %.1f",
++                        presentTiming.p99FrameTimeMs, presentTiming.worstFrameTimeMs);
++#else
 +            ImGui::Text("Frame ms: p50 %.1f  p95 %.1f  p99 %.1f  worst %.1f",
 +                        presentTiming.p50FrameTimeMs, presentTiming.p95FrameTimeMs,
 +                        presentTiming.p99FrameTimeMs, presentTiming.worstFrameTimeMs);
++#endif
              // Replay-unsafe frames hold the presented cadence with duplicated
              // slots, so the counter alone reads 180 while the motion on screen
              // is 60 Hz. Surface the divergence instead of hiding it.

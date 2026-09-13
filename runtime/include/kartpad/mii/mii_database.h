@@ -106,9 +106,8 @@ inline DatabaseResult ValidateMii(std::span<const uint8_t> block) {
         return {false, "The selected Mii file is empty."};
     }
     const uint16_t header = ReadBigEndian16(block, 0);
-    if ((header & 0x8000u) != 0) {
-        return {false, "The selected Mii is marked invalid."};
-    }
+    // RFLiCharData's high header bit is padding0, not an invalid flag.
+    // Raw database exporters preserve it; validate the actual fields below.
     const uint8_t month = static_cast<uint8_t>((header >> 10) & 0x0Fu);
     const uint8_t day = static_cast<uint8_t>((header >> 5) & 0x1Fu);
     const uint8_t color = static_cast<uint8_t>((header >> 1) & 0x0Fu);

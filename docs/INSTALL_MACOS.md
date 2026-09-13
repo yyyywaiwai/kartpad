@@ -1,18 +1,20 @@
 # Install KartPad on Apple Silicon Mac
 
-KartPad 0.4.11 (build 26) is an ad-hoc-signed native arm64 app for Apple Silicon Macs
+KartPad 0.4.17 (build 39) is an ad-hoc-signed native arm64 app for Apple Silicon Macs
 running macOS 14 or newer. It contains the Original Mario Kart Wii and Retro
 Rewind executable profiles but no disc image, extracted game assets, Retro
 Rewind pack, saves, account data, or Apple signing identity.
 
-**Update before online play.** This build corrects the console-serial collision
+**Update before online play.** This build retains the console-serial correction
 reported in [#94](https://github.com/chrissotraidis/kartpad/issues/94). It preserves
 identities, friend codes and saves; existing incorrect server-side history or
 bans may need service-admin review. Do not reset identities to work around them.
 
-1. Download `KartPad-v0.4.11-macos.1-arm64.zip` and `SHA256SUMS` from the
-   [corrected Mac release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-macos.1).
-2. Run `shasum -a 256 -c SHA256SUMS`, then extract the ZIP and move
+1. Download `KartPad-v0.4.17-macos.1-arm64.zip` and `SHA256SUMS-macos` from the
+   [corrected Mac release](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.17-macos.1).
+2. Run `shasum -a 256 KartPad-v0.4.17-macos.1-arm64.zip` and compare the
+   result with the ZIP row in `SHA256SUMS-macos`. The shared source archive is optional
+   for normal installation. Then extract the ZIP and move
    `KartPad.app` to Applications after quitting the old app. Replace only the
    application, not its Application Support folder or your game-data folders.
 3. Open KartPad. If Gatekeeper blocks the ad-hoc-signed community app,
@@ -22,10 +24,17 @@ bans may need service-admin review. Do not reset identities to work around them.
    It must contain both `sys/` and `files/`; KartPad validates the disc identity
    and executable hash before launching.
 5. To use Retro Rewind, choose **Data → Choose Retro Rewind Data…** and select
-   the `RetroRewind6` folder from the exact supported 6.12.7 full pack. Then
+   the `RetroRewind6` folder from the exact supported 6.12.8 full pack. Then
    choose **Game → Retro Rewind**, quit, and reopen KartPad. Use **Game →
    Original Mario Kart Wii** and reopen to switch back. Saves and settings are
    kept separately from the selected game-data folders.
+
+If **Unsupported Retro Rewind Data** appears, use the exact pack version shown
+in the alert. A newer pack needs a KartPad build that explicitly supports it;
+check the [release notes](https://github.com/chrissotraidis/kartpad/releases)
+before updating the app. KartPad does not automatically update Retro Rewind.
+Keep your existing data and saves; a rejected folder selection does not modify
+the folder.
 
 ## Menus and input
 
@@ -49,13 +58,26 @@ Regenerable graphics caches live under `~/Library/Caches/KartPad`. Replacing
 the app does not remove either folder, but back up important saves before
 manually deleting application data.
 
+## Experimental Wii Remote and Nunchuk
+
+Enable **Controls → Experimental Wii Remote + Nunchuk**, use the Wii Remote's
+red **SYNC** button to pair, attach the Nunchuk, then select **Wii Remote +
+Nunchuk (Experimental)** in Controller Settings. The intended hardware is an
+original `RVL-CNT-01` or Wii Remote Plus `RVL-CNT-01-TR`.
+
+This opt-in path pairs through the Mac's Bluetooth hardware without a DolphinBar
+and hands input to SDL. It uses private macOS Bluetooth interfaces and is not a
+Mac App Store workflow. Actual pairing, Nunchuk input, reconnect and long-session
+behavior need wider hardware testing. iPhone/iPad do not provide this direct
+pairing path; a similarly named informational menu is not support for it.
+
 ## Build it yourself
 
-Install the prerequisites listed in the README, then run:
+Install the [Apple build prerequisites](BUILDING.md#prerequisites), then run:
 
 ```sh
 ./scripts/self-build-macos.sh /path/to/your/Mario-Kart-Wii.wbfs
-open build/KartPad-self-built.app
+open build/KartPad.app
 ```
 
 The workflow fetches and verifies pinned public dependencies and the exact

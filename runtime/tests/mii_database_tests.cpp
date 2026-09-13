@@ -8,7 +8,66 @@
 #include <string>
 #include <vector>
 
+static void TestExportedMiiHeader() {
+    // Synthetic RFL_DB record, exported as the same 74-byte slice used by
+    // rfl_mii_extractor. The high header bit is RFLiCharData::padding0.
+    constexpr std::array<uint8_t, 6> mac{2, 17, 171, 16, 32, 48};
+    for (const uint16_t flags : {0x0000u, 0x4000u, 0x8000u, 0xC000u}) {
+        auto source = kartpad::mii::CreateSeedDatabase(mac);
+        auto record = std::span<uint8_t>(source).subspan(4, 74);
+        kartpad::mii::WriteBigEndian16(record, 0, flags | 0x33F7u);
+        kartpad::mii::WriteMiiName(record, 2, "Exported");
+        kartpad::mii::WriteBigEndian32(record, 0x18, 0x80000002u);
+        kartpad::mii::UpdateDatabaseCrc(source);
+        const std::vector<uint8_t> exported(source.begin() + 4,
+                                             source.begin() + 4 + 74);
+        const auto validation = kartpad::mii::ValidateMii(exported);
+        assert(validation);
+        assert(kartpad::mii::ListMiis(source).size() == 1);
+
+        auto destination = kartpad::mii::CreateSeedDatabase(mac);
+        const auto before = destination;
+        assert(kartpad::mii::ImportMii(destination, exported));
+        assert(kartpad::mii::ValidateDatabase(destination));
+        const auto records = kartpad::mii::ListMiis(destination);
+        assert(records.size() == 2);
+        assert(records[1].name == "Exported");
+        assert(records[1].favoriteColor == 11);
+        assert(std::equal(exported.begin(), exported.end(), destination.begin() + 78));
+        // Import may change only its new slot and the database checksum.
+        for (std::size_t i = 0; i < destination.size(); ++i) {
+            if ((i >= 78 && i < 152) ||
+                (i >= kartpad::mii::kDatabaseCrcOffset &&
+                 i < kartpad::mii::kDatabaseCrcOffset + 2)) continue;
+            assert(destination[i] == before[i]);
+        }
+        const auto after = destination;
+        assert(!kartpad::mii::ImportMii(destination, exported));
+        assert(destination == after);
+
+        // Padding does not excuse malformed metadata, names, IDs or size.
+        for (const std::size_t offset : {0u, 1u, 0x16u, 0x17u, 2u, 0x18u}) {
+            auto invalid = exported;
+            if (offset == 0) invalid[0] |= 0x3C; // month 15
+            else if (offset == 1) invalid[1] |= 0x1E; // color 15
+            else if (offset == 2) std::fill_n(invalid.begin() + 2, 20, 0);
+            else if (offset == 0x18) std::fill_n(invalid.begin() + 0x18, 4, 0);
+            else invalid[offset] = 128;
+            assert(!kartpad::mii::ValidateMii(invalid));
+            assert(!kartpad::mii::ImportMii(destination, invalid));
+            assert(destination == after);
+        }
+        assert(!kartpad::mii::ValidateMii(std::span(exported).first(73)));
+        auto oversized = exported;
+        oversized.push_back(0);
+        assert(!kartpad::mii::ValidateMii(oversized));
+    }
+    assert(!kartpad::mii::ValidateMii(std::vector<uint8_t>(74, 0)));
+    assert(!kartpad::mii::ValidateMii(std::vector<uint8_t>(74, 0xFF)));
+}
+
 int main() {
+    TestExportedMiiHeader();
     constexpr std::array<uint8_t, 9> crcVector{
         '1', '2', '3', '4', '5', '6', '7', '8', '9'};
     assert(kartpad::mii::Crc32(crcVector) == 0xCBF43926u);
@@ -132,7 +191,7 @@ int main() {
     assert(!kartpad::mii::RemoveMii(database, records[0].slot));
 
     auto invalid = imported;
-    invalid[0] |= 0x80;
+    invalid[0x16] = 128;
     assert(!kartpad::mii::ValidateMii(invalid));
     assert(!kartpad::mii::ValidateMii(
         std::span<const uint8_t>(invalid.data(), invalid.size() - 1)));

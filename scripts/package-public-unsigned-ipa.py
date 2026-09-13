@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 
-RELEASE_TAG = "v0.4.11"
-APP_VERSION = "0.4.11"
-APP_BUILD = "26"
+from ios_release import (
+    RELEASE_TAG, APP_VERSION, APP_BUILD, accepted_build, verify_source_equivalence,
+)
 
 
 def fail(message: str) -> None:
@@ -26,11 +26,10 @@ def main() -> int:
         "output",
         type=Path,
         nargs="?",
-        help="Output IPA path (defaults to artifacts/KartPad-v0.4.11-ios-unsigned.ipa)",
+        help="Output IPA path (defaults to artifacts/KartPad-v0.4.17-ios.1-unsigned.ipa)",
     )
-    parser.add_argument("--release-tag", default=RELEASE_TAG)
-    parser.add_argument("--release-notes", type=Path)
-    parser.add_argument("--build-root", type=Path, help="Original Xcode build directory containing _deps")
+    parser.add_argument("--dependency-build", type=Path, help="Original Xcode build containing dependency license files")
+    parser.add_argument("--reference-root", type=Path, help="Pinned reference checkout root (normally repo/ref)")
     args = parser.parse_args()
 
     repo = Path(__file__).resolve().parents[1]
@@ -41,7 +40,7 @@ def main() -> int:
     output = (
         args.output.resolve()
         if args.output
-        else repo / "artifacts/KartPad-v0.4.11-ios-unsigned.ipa"
+        else repo / "artifacts/KartPad-v0.4.17-ios.1-unsigned.ipa"
     )
     if subprocess.check_output(
         ["git", "-C", str(repo), "status", "--porcelain", "--untracked-files=all"],
@@ -70,24 +69,28 @@ def main() -> int:
     ).returncode == 0:
         fail("public IPA input app is still signed")
 
-    xcode_build = args.build_root.resolve() if args.build_root else app.parents[1]
+    compiled = accepted_build(app)
+    verify_source_equivalence(repo, source_commit)
+    xcode_build = args.dependency_build or app.parents[1]
+    reference_root = args.reference_root or repo / "ref"
     additional_entries = {
         "INSTALL_IPA.md": repo / "docs/INSTALL_IPA.md",
-        "RELEASE_NOTES.md": args.release_notes.resolve() if args.release_notes else repo / "docs/releases/v0.4.11.md",
+        "RELEASE_NOTES.md": repo / "docs/releases/v0.4.17-ios.1.md",
+        "SOURCE_AND_REBUILD.md": repo / "docs/releases/v0.4.17-ios.1-source.md",
         "MULTIPLAYER.md": repo / "docs/MULTIPLAYER.md",
         "LICENSE": repo / "LICENSE",
         "LICENSES/GPL-3.0.txt": repo / "LICENSES/GPL-3.0.txt",
         "RIGHTS_AND_LICENSES.md": repo / "RIGHTS_AND_LICENSES.md",
         "THIRD_PARTY_NOTICES.md": repo / "THIRD_PARTY_NOTICES.md",
         "ThirdPartyLicenses/Abseil-Apache-2.0.txt": xcode_build / "_deps/abseil-cpp-src/LICENSE",
-        "ThirdPartyLicenses/Aurora-MIT.txt": repo / "ref/upstream/Wiicompiled/aurora-main/LICENSE",
-        "ThirdPartyLicenses/Dolphin-COPYING.txt": repo / "ref/upstream/dolphin/COPYING",
-        "ThirdPartyLicenses/Dolphin-Externals.md": repo / "ref/upstream/dolphin/Externals/licenses.md",
+        "ThirdPartyLicenses/Aurora-MIT.txt": reference_root / "upstream/Wiicompiled/aurora-main/LICENSE",
+        "ThirdPartyLicenses/Dolphin-COPYING.txt": reference_root / "upstream/dolphin/COPYING",
+        "ThirdPartyLicenses/Dolphin-Externals.md": reference_root / "upstream/dolphin/Externals/licenses.md",
         "ThirdPartyLicenses/FreeType.txt": xcode_build / "_deps/freetype-src/LICENSE.TXT",
-        "ThirdPartyLicenses/Minizip-NG.txt": repo / "ref/upstream/dolphin/Externals/minizip-ng/minizip-ng/LICENSE",
+        "ThirdPartyLicenses/Minizip-NG.txt": reference_root / "upstream/dolphin/Externals/minizip-ng/minizip-ng/LICENSE",
         "ThirdPartyLicenses/SDL3-Zlib.txt": xcode_build / "_deps/sdl-src/LICENSE.txt",
         "ThirdPartyLicenses/Tracy-BSD-3-Clause.txt": xcode_build / "_deps/tracy-src/LICENSE",
-        "ThirdPartyLicenses/WiiCompiled-GPL-3.0.txt": repo / "ref/upstream/Wiicompiled/LICENSE",
+        "ThirdPartyLicenses/WiiCompiled-GPL-3.0.txt": reference_root / "upstream/Wiicompiled/LICENSE",
         "ThirdPartyLicenses/fmt-MIT.txt": xcode_build / "_deps/fmt-src/LICENSE",
         "ThirdPartyLicenses/imgui-MIT.txt": xcode_build / "_deps/imgui-src/LICENSE.txt",
         "ThirdPartyLicenses/libpng.txt": xcode_build / "_deps/png-src/LICENSE",
@@ -99,7 +102,8 @@ def main() -> int:
         fail(f"missing release notices: {', '.join(missing_notices)}")
     provenance = {
         "schemaVersion": 1,
-        "releaseTag": args.release_tag,
+        **compiled,
+        "releaseTag": RELEASE_TAG,
         "sourceCommit": source_commit,
         "appVersion": APP_VERSION,
         "appBuild": APP_BUILD,
