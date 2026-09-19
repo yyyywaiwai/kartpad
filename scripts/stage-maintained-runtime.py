@@ -10,6 +10,7 @@ import sys
 from pathlib import Path
 import shutil
 import subprocess
+import tempfile
 
 PLATFORMS = ("macos", "ios", "android", "tvos")
 
@@ -83,11 +84,11 @@ SSE2NEON_SHA256 = "44b9fa3dec3a52ea473246e04b9f692a4e5b0ed654299eef7fe7ec3049e22
 ANDROID_TRACE_HEADER = "aurora-main/lib/kartpad_android_trace_scope.h"
 
 
-def verify(repo: Path, platform: str, destination: Path) -> str:
+def verify(repo: Path, platform: str, destination: Path, *, expected_files=None) -> str:
     source, actual = source_checkout(repo, platform, initialize=False)
     if not destination.is_dir() or destination.is_symlink():
         raise ValueError(f"missing prepared source: {destination}; prepare a fresh runtime source")
-    files = maintained_files(source)
+    files = maintained_files(source) if expected_files is None else expected_files
     generated = {PROFILE_HEADER, SSE2NEON_HEADER}
     if platform == "android":
         generated.add(ANDROID_TRACE_HEADER)
@@ -123,15 +124,41 @@ def verify(repo: Path, platform: str, destination: Path) -> str:
     return actual
 
 
+def verify_japanese_ios(repo: Path, destination: Path, data: Path) -> str:
+    # Rebuild the expected port from the pinned source and validated game data;
+    # never trust a manifest supplied by the prepared tree itself.
+    sys.path.insert(0, str(repo / "builder"))
+    from kartpad_builder.rmcj01 import prepare
+    with tempfile.TemporaryDirectory(prefix="verify-rmcj-", dir=repo / "build") as build, \
+         tempfile.TemporaryDirectory(prefix="verify-rmcj-", dir=repo / "private") as work:
+        runtime = Path(build) / "runtime"
+        stage(repo, "ios", runtime)
+        prepare(repo, data, Path(work), runtime)
+        cmake = runtime / "cmake/PublicProducts.cmake"
+        cmake.write_text(cmake.read_text().replace(
+            "XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER dev.kartpad.app",
+            "XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER dev.kartpad.rmcj01.ios"))
+        files = {p.relative_to(runtime).as_posix(): p for p in runtime.rglob("*")
+                 if p.is_file() or p.is_symlink()}
+        return verify(repo, "ios", destination, expected_files=files)
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--verify", action="store_true", help="Reject stale or modified prepared source before building")
+    parser.add_argument("--japan-data", type=Path, help="Validate the deterministic Japanese iOS port")
     parser.add_argument("platform", choices=PLATFORMS)
     parser.add_argument("destination", type=Path)
     args = parser.parse_args()
     try:
         operation = verify if args.verify else stage
-        revision = operation(Path(__file__).resolve().parents[1], args.platform, args.destination)
+        repo = Path(__file__).resolve().parents[1]
+        if args.japan_data is not None:
+            if not args.verify or args.platform != "ios":
+                raise ValueError("--japan-data requires --verify ios")
+            revision = verify_japanese_ios(repo, args.destination, args.japan_data.resolve())
+        else:
+            revision = operation(repo, args.platform, args.destination)
     except (ValueError, OSError, subprocess.CalledProcessError) as error:
         parser.exit(1, f"ERROR: {error}\n")
     print(f"{'Verified' if args.verify else 'Staged'} maintained {args.platform} runtime at {revision}: {args.destination}")

@@ -22,7 +22,14 @@ files=(
 
 for upstream in "${files[@]}"; do
   name="$(basename "${upstream}")"
-  cmp "${reference}/${upstream}" "${snapshot}/${name}"
+  case "${name}" in
+    SunPadDiagnostics.mm|SunPadControllerMapping.h|SunPadControllerMapping.mm)
+      # KartPad's reviewed lifecycle diagnostics and expanded controller mapping.
+      git -C "${repo_root}" show "221caaf9b9fa6d5e0a97ddb417d5523f26492b25:apple/third_party/sunpad/${name}" | \
+        cmp - "${snapshot}/${name}"
+      ;;
+    *) cmp "${reference}/${upstream}" "${snapshot}/${name}" ;;
+  esac
 done
 
 expected_commit="e43f0ea6b797e5110787171957c9dc3c6213269c"
@@ -33,4 +40,4 @@ if [[ "${actual_commit}" != "${expected_commit}" ]]; then
 fi
 
 cmp "${reference}/LICENSE" "${repo_root}/LICENSES/GPL-3.0.txt"
-echo "SunPad overlay snapshot is byte-identical at ${expected_commit}"
+echo "SunPad overlay snapshot verified with pinned KartPad diagnostics at ${expected_commit}"

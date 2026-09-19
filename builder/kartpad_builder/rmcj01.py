@@ -19,6 +19,19 @@ REL_BASE = 0x8050FC60
 JAPAN_WFC_PAYLOAD_SHA256 = "5a97dbe12aa9c41ce529d32830740d1eabb970474a3125be4bab5f4600ae29e7"
 
 
+def validate_retro_version(repo: Path, translation: Path) -> None:
+    if "set(MKW_HAVE_RETRO_REWIND_SHARDS ON)" not in (translation / "build_shards/shards.cmake").read_text():
+        return
+    release = json.loads((repo / "builder/profiles/mkwii-rmcp01-rev0.json").read_text())["retroRewind"]
+    metadata = translation / "base_translation_mod_awareness.json"
+    if not metadata.is_file():
+        raise BuildError("Missing Retro Rewind translation identity; regenerate the Japanese graph")
+    profiles = json.loads(metadata.read_text()).get("profiles", [])
+    if not any(p.get("profile") == "retro-rewind" and p.get("region") == "J"
+               and p.get("codePulSha256") == release["codePul"]["sha256"] for p in profiles):
+        raise BuildError(f"Japanese Retro Rewind translation is not {release['version']}; regenerate it before building")
+
+
 def prepare_retro(repo: Path, output: Path, retro_root: Path, payload: Path) -> Path:
     """Add a pinned Japanese mod manifest to an already prepared private port."""
     if not output.is_relative_to(repo / "private"):

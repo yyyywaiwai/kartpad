@@ -28,7 +28,18 @@ case "${product}" in
   *) echo "ERROR: product must be base, retro-rewind, or dual" >&2; exit 64 ;;
 esac
 
-python3 "${repo_root}/scripts/stage-maintained-runtime.py" --verify ios "${runtime_source}"
+region_verification=()
+if [[ "${KARTPAD_IOS_AUDIT_REGION:-P}" == J ]]; then
+  PYTHONPATH="${repo_root}/builder${PYTHONPATH:+:${PYTHONPATH}}" python3 - "${repo_root}" "${translation_root}" <<'PYCODE'
+import sys
+from pathlib import Path
+from kartpad_builder.rmcj01 import validate_retro_version
+validate_retro_version(Path(sys.argv[1]), Path(sys.argv[2]))
+PYCODE
+  region_verification=(--japan-data "${KARTPAD_RMCJ_DATA:?Japanese build requires its validated data path}")
+fi
+python3 "${repo_root}/scripts/stage-maintained-runtime.py" --verify ios "${runtime_source}" \
+  ${region_verification[@]+"${region_verification[@]}"}
 
 if [[ ! -f "${runtime_source}/CMakeLists.txt" ]] ||
    ! rg -q 'MKW_KARTPAD_REPO_ROOT' "${runtime_source}/cmake/PublicProducts.cmake"; then

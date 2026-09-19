@@ -93,6 +93,26 @@ class MaintainedRuntimeStagingTests(unittest.TestCase):
         override.start()
         self.addCleanup(override.stop)
 
+    def test_japanese_verification_rebuilds_expected_port_and_rejects_tampering(self):
+        self.prepare_for_verification()
+        (self.repo / "build").mkdir()
+        (self.repo / "private").mkdir()
+        def port(repo, data, work, runtime):
+            (runtime / "src/main.cpp").write_text("Japanese runtime")
+            (runtime / "cmake").mkdir()
+            (runtime / "cmake/PublicProducts.cmake").write_text(
+                "XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER dev.kartpad.app")
+            (runtime / "kartpad-region-port.json").write_text('{"region":"J"}')
+        port(self.repo, None, None, self.destination)
+        cmake = self.destination / "cmake/PublicProducts.cmake"
+        cmake.write_text(cmake.read_text().replace("dev.kartpad.app", "dev.kartpad.rmcj01.ios"))
+        with patch("kartpad_builder.rmcj01.prepare", side_effect=port):
+            self.assertEqual(STAGING.verify_japanese_ios(
+                self.repo, self.destination, self.repo / "data"), self.revision)
+            (self.destination / "src/main.cpp").write_text("tampered")
+            with self.assertRaisesRegex(ValueError, "prepared source differs"):
+                STAGING.verify_japanese_ios(self.repo, self.destination, self.repo / "data")
+
     def test_verify_accepts_matching_source_and_rejects_successive_source_edits(self):
         self.prepare_for_verification()
         self.assertEqual(STAGING.verify(self.repo, "ios", self.destination), self.revision)

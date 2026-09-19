@@ -45,7 +45,7 @@ path.write_text(path.read_text().replace(
     'XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER dev.kartpad.app',
     'XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER dev.kartpad.rmcj01.ios'))
 PY
-KARTPAD_IOS_HOST_ROOT="$work/host" KARTPAD_IOS_AUDIT_REGION=J \
+KARTPAD_RMCJ_DATA="$data" KARTPAD_IOS_HOST_ROOT="$work/host" KARTPAD_IOS_AUDIT_REGION=J \
   "$repo/scripts/build-ios-device-game-app.sh" "$runtime" "$build" "$translation" "$product" \
   > "$work/build.log" 2>&1
 echo "Japanese unsigned iOS app: $build/Release-iphoneos/KartPad.app"

@@ -16,7 +16,7 @@ from kartpad_builder.errors import BuildError
 from kartpad_builder.pipeline import _validate_extraction, build, extract, translate, write_translator_manifest
 from kartpad_builder.profiles import Profile, ProfileError, load_profiles, select_profile, validate_profile
 from kartpad_builder.region_audit import AddressRange, audit_region, map_address, read_address_map, read_dol_layout
-from kartpad_builder.rmcj01 import JAPAN_WFC_PAYLOAD_SHA256, REL_BASE, rel_layout, prepare_retro
+from kartpad_builder.rmcj01 import JAPAN_WFC_PAYLOAD_SHA256, REL_BASE, rel_layout, prepare_retro, validate_retro_version
 from kartpad_builder.retro_rewind import validate_rwfc_payload
 
 
@@ -82,6 +82,24 @@ class JapaneseProfileTests(unittest.TestCase):
             with self.assertRaisesRegex(BuildError, "prepared Japanese base"):
                 prepare_retro(repo, output, repo / "missing-pack", repo / "missing-payload")
             self.assertFalse((output / "retro.yml").exists())
+
+    def test_retro_build_rejects_missing_stale_and_wrong_region_translation(self):
+        release = json.loads((PROFILES / "mkwii-rmcp01-rev0.json").read_text())["retroRewind"]
+        with tempfile.TemporaryDirectory() as temp:
+            graph = Path(temp)
+            (graph / "build_shards").mkdir()
+            (graph / "build_shards/shards.cmake").write_text("set(MKW_HAVE_RETRO_REWIND_SHARDS ON)")
+            metadata = graph / "base_translation_mod_awareness.json"
+            with self.assertRaises(BuildError):
+                validate_retro_version(REPO, graph)
+            for region, digest in (("J", "old-pack"), ("P", release["codePul"]["sha256"])):
+                metadata.write_text(json.dumps({"profiles": [{"profile": "retro-rewind",
+                    "region": region, "codePulSha256": digest}]}))
+                with self.assertRaises(BuildError):
+                    validate_retro_version(REPO, graph)
+            metadata.write_text(json.dumps({"profiles": [{"profile": "retro-rewind",
+                "region": "J", "codePulSha256": release["codePul"]["sha256"]}]}))
+            validate_retro_version(REPO, graph)
 
     def test_ios_build_isolated_from_public_pal_and_other_generated_links(self):
         script = (REPO / "scripts/build-rmcj01-ios.sh").read_text()
