@@ -5,6 +5,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from runtime_sources import runtime_source, assert_runtime_staging, PLATFORMS
 import unittest
 
 REPO = Path(__file__).resolve().parents[1]
@@ -81,44 +82,24 @@ int main(int argc, char**) {
 
 class ScSerialTests(unittest.TestCase):
     def test_preparation_covers_all_platforms(self):
-        for script in ('prepare-ios-game-runtime.sh', 'prepare-g7-game-runtime.sh'):
-            self.assertIn('wiicompiled-sc-serial.patch', (REPO / 'scripts' / script).read_text())
-        # Android's common preparation and tvOS both inherit the iOS patch stack.
-        android = REPO / 'scripts/prepare-android-game-runtime.sh'
-        if android.exists():
-            self.assertIn('prepare-ios-game-runtime.sh', android.read_text())
-        self.assertIn('prepare-ios-game-runtime.sh', (REPO / 'scripts/prepare-tvos-game-runtime.sh').read_text())
+        for platform in PLATFORMS:
+            assert_runtime_staging(self, platform)
 
-    def test_actual_override_before_and_after_backport(self):
-        upstream = REPO / 'ref/upstream/Wiicompiled/runtime/src/hle/sc.cpp'
-        if not upstream.exists():
-            self.skipTest('pinned WiiCompiled reference required for compiled regression')
-        with tempfile.TemporaryDirectory() as directory:
-            stage = Path(directory)
-            (stage / 'src/hle').mkdir(parents=True)
-            shutil.copyfile(upstream, stage / 'src/hle/sc.cpp')
-
-            def run_override():
-                source = (stage / 'src/hle/sc.cpp').read_text()
+    def test_actual_override_in_every_maintained_runtime(self):
+        for platform in PLATFORMS:
+            with self.subTest(platform=platform), tempfile.TemporaryDirectory() as directory:
+                stage = Path(directory)
+                source = runtime_source(platform, "runtime/src/hle/sc.cpp")
                 override = re.search(r'extern "C" uint32_t SCGetProductSN_HLE\(uint32_t serialAddress\)\n\{.*?\n\}', source, re.S)
                 self.assertIsNotNone(override)
                 (stage / 'test.cpp').write_text(HARNESS.replace('@OVERRIDE@', override.group()))
                 subprocess.run([os.environ.get('CXX', 'c++'), '-std=c++17', '-Wall', '-Wextra', '-Werror',
-                                '-fsanitize=address,undefined', '-I', str(stage / 'include'),
+                                '-fsanitize=address,undefined', '-I', str(REPO / 'vendor/runtimes' / platform / 'runtime/include'),
                                 str(stage / 'test.cpp'), '-o', str(stage / 'test')], check=True, capture_output=True)
-                return subprocess.run([str(stage / 'test')], capture_output=True, text=True)
-
-            before = run_override()
-            self.assertNotEqual(before.returncode, 0, 'old override must fail regression')
-            self.assertIn('accept exactly four-byte output', before.stderr)
-            legacy = subprocess.check_output([str(stage / 'test'), '--probe'], text=True)
-            self.assertEqual(legacy.splitlines(), ['926431286', '926431286'])
-            subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-d', str(stage),
-                            '-i', str(REPO / 'patches/wiicompiled-sc-serial.patch')], check=True, capture_output=True)
-            after = run_override()
-            self.assertEqual(after.returncode, 0, after.stdout + after.stderr)
-            fixed = subprocess.check_output([str(stage / 'test'), '--probe'], text=True)
-            self.assertEqual(fixed.splitlines(), ['788600001', '788699999'])
+                result = subprocess.run([str(stage / 'test')], capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+                fixed = subprocess.check_output([str(stage / 'test'), '--probe'], text=True)
+                self.assertEqual(fixed.splitlines(), ['788600001', '788699999'])
 
 
 if __name__ == '__main__':

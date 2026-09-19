@@ -3,13 +3,14 @@
 from pathlib import Path
 import subprocess, sys, tempfile
 root = Path(__file__).resolve().parents[1]
-source = Path(sys.argv[1]).resolve()
+source = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else root / 'vendor/runtimes/macos/runtime'
+aurora = source / 'aurora-main' if (source / 'aurora-main').is_dir() else source.parent / 'aurora-main'
 def function(text, name):
     start=text.index(name); end=text.index('{',start)+1; depth=1
     while depth:
         depth+=(text[end]=='{')-(text[end]=='}'); end+=1
     return text[start:end]
-selector=function((source/'aurora-main/lib/webgpu/gpu.cpp').read_text(),'wgpu::PresentMode best_present_mode()')
+selector=function((aurora/'lib/webgpu/gpu.cpp').read_text(),'wgpu::PresentMode best_present_mode()')
 selector_test=r'''
 #include <cassert>
 #include <cstddef>
@@ -71,6 +72,7 @@ restart=ui.split('if([key isEqual:@"video.vsync"]) {',1)[1].split('\n  }',1)[0]
 assert '[self refreshSettings];return;' in restart and 'KartPadRequestSettingsReload' not in restart
 assert 'c.vsync.value_or(false)' in ui
 assert 'auroraConfig.vsync = RuntimeConfigFile::Get().vsync.value_or(false)' in (source/'src/main.cpp').read_text()
-for path in (root/'scripts').glob('prepare-*-runtime.sh'):
-    if path.name!='prepare-g7-game-runtime.sh': assert 'macos-vsync-startup.patch' not in path.read_text()
+for platform in ('ios', 'android', 'tvos'):
+    other_main = (root / 'vendor/runtimes' / platform / 'runtime/src/main.cpp').read_text()
+    assert 'auroraConfig.vsync = RuntimeConfigFile::Get().vsync.value_or(false)' not in other_main
 print('PASS: real selector capability matrix; native config persistence across processes, malformed/default values, unrelated key preservation, save failure; restart-only UI contract and macOS preparation isolation')

@@ -73,6 +73,26 @@ void TestRegistrationAndReconnect() {
   [bridge reconcileControllerList:@[]];
 }
 
+void TestSharedAndTriggerMapping() {
+  auto defaults=SunPadDefaultControllerButtonMapping();
+  auto shared=SunPadControllerButtonMappingBySharing(defaults, SunPadPhysicalControllerButtonRightShoulder, SunPadButtonDpadUp);
+  KartPadPhysicalControllerSample sample; sample.rightShoulder=true;
+  auto pressed=KartPadAdaptPhysicalControllerSample(sample,shared);
+  Require((pressed.buttons & (SunPadButtonR|SunPadButtonDpadUp))==(SunPadButtonR|SunPadButtonDpadUp), "shared drift/trick missing");
+  sample.rightShoulder=false;
+  Require(KartPadAdaptPhysicalControllerSample(sample,shared).buttons==0,"shared actions stuck on release");
+  auto items=SunPadControllerButtonMappingByAssigning(defaults,SunPadPhysicalControllerButtonLeftShoulder,SunPadButtonL);
+  sample.faceButtons=SunPadPhysicalControllerButtonLeftShoulder;
+  Require(KartPadAdaptPhysicalControllerSample(sample,items).buttons==SunPadButtonL,"L1 item preset wrong");
+  sample.faceButtons=(SunPadPhysicalControllerButton)0; sample.leftTrigger=1;
+  Require(KartPadAdaptPhysicalControllerSample(sample,items).buttons==SunPadButtonZ,"trigger swap missing");
+  for(auto game : {SunPadButtonDpadUp,SunPadButtonDpadDown,SunPadButtonDpadLeft,SunPadButtonDpadRight}) {
+    auto mapped=SunPadControllerButtonMappingBySharing(defaults,SunPadPhysicalControllerButtonLeftTrigger,game);
+    auto buttons=KartPadAdaptPhysicalControllerSample(sample,mapped).buttons;
+    Require((buttons & game)!=0 && (buttons & SunPadButtonL)!=0,"trigger/D-pad shared mapping missing");
+  }
+}
+
 void TestControllerSampleMapping() {
   KartPadPhysicalControllerSample sample;
   sample.faceButtons = static_cast<SunPadPhysicalControllerButton>(
@@ -123,6 +143,7 @@ int main() {
     try {
       TestExactSunPadSlotReconciliation();
       TestControllerSampleMapping();
+      TestSharedAndTriggerMapping();
       TestRegistrationAndReconnect();
       std::cout << "KartPad mobile physical-controller bridge passed\n";
       return EXIT_SUCCESS;

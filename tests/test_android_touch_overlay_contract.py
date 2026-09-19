@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from runtime_sources import runtime_source, assert_runtime_staging
 import unittest
 from pathlib import Path
 
@@ -367,7 +368,7 @@ class AndroidTouchOverlayContractTests(unittest.TestCase):
         self.assertIn("R.drawable.ic_kartpad_folder", activity)
         self.assertIn("R.drawable.ic_kartpad_report", activity)
         self.assertIn("DEBUG_EXTRA_MENU", activity)
-        runtime_patch = (REPO / "patches/wiicompiled-android-runtime-settings.patch").read_text()
+        runtime_patch = runtime_source('android', 'runtime/src/settings_overlay.cpp')
         self.assertIn("PublishDisplaySettings", native)
         self.assertNotIn("AuroraGetSurfaceSize", native)
         self.assertIn("ConsumeDisplaySettings", runtime_patch)
@@ -379,8 +380,8 @@ class AndroidTouchOverlayContractTests(unittest.TestCase):
         self.assertIn("putInt(FPS_SIZE, value.coerceIn(0, 2))", settings)
         self.assertIn("KartPadTouchSettings.fpsSize(this)", activity)
         self.assertIn("ImGui::SetWindowFontScale(g_androidFpsOverlayScale)",
-                      (REPO / "patches/wiicompiled-present-telemetry.patch").read_text())
-        telemetry_patch = (REPO / "patches/wiicompiled-present-telemetry.patch").read_text()
+                      runtime_source('android', 'runtime/src/settings_overlay.cpp'))
+        telemetry_patch = runtime_source('android', 'runtime/src/settings_overlay.cpp')
         self.assertIn('ImGui::Text("Frame ms: p50 %.1f  p95 %.1f"', telemetry_patch)
         self.assertIn('ImGui::Text("p99 %.1f  worst %.1f"', telemetry_patch)
         self.assertIn("constexpr float kFpsScales[]{1.0f, 1.5f, 2.0f}", runtime_patch)
@@ -418,7 +419,7 @@ class AndroidTouchOverlayContractTests(unittest.TestCase):
         activity = (REPO / "android/app/src/main/java/dev/kartpad/android/KartPadActivity.kt").read_text()
         native = (REPO / "android/app/src/main/cpp/kartpad_controller_slots_jni.cpp").read_text()
         fixture = (REPO / "android/app/src/main/cpp/kartpad_controller_slots_fixture_jni.cpp").read_text()
-        patch = (REPO / "patches/aurora-android-gamepad-assignment.patch").read_text()
+        patch = runtime_source('android', 'aurora-main/include/aurora/input.hpp', 'aurora-main/lib/input.cpp')
         prepare = (REPO / "scripts/prepare-android-game-runtime.sh").read_text()
         self.assertIn("for (player in 0 until 4)", activity)
         self.assertIn('"Player ${player + 1}', activity)
@@ -435,7 +436,7 @@ class AndroidTouchOverlayContractTests(unittest.TestCase):
             "g_portPreferences[player].identity = controller_identity(selected)", patch,
         )
         self.assertIn("assign_player_index(controller, -1)", patch)
-        self.assertIn("aurora-android-gamepad-assignment.patch", prepare)
+        assert_runtime_staging(self, 'android')
 
     def test_z_has_clear_spacing_from_x(self) -> None:
         source = (REPO / "android/app/src/main/java/dev/kartpad/android/KartPadOverlayView.kt").read_text()
@@ -559,7 +560,7 @@ class AndroidTouchOverlayContractTests(unittest.TestCase):
         activity = (REPO / "android/app/src/main/java/dev/kartpad/android/KartPadActivity.kt").read_text()
         store = (REPO / "android/app/src/main/java/dev/kartpad/android/KartPadControllerMapping.kt").read_text()
         native = (REPO / "runtime/include/kartpad/android/controller_mapping.hpp").read_text()
-        patch = (REPO / "patches/wiicompiled-android-controller-mapping.patch").read_text()
+        patch = runtime_source('android', 'runtime/src/hle/input/kpad.cpp')
         self.assertIn('arrayOf("A", "B", "X", "Y", "Z", "R", "D-pad Up")', store)
         self.assertIn('"Right Shoulder"', store)
         self.assertIn('"D-pad Up"', store)
@@ -604,15 +605,15 @@ class AndroidTouchOverlayContractTests(unittest.TestCase):
 
     def test_runtime_preparation_applies_touch_bridge(self) -> None:
         script = (REPO / "scripts/prepare-android-game-runtime.sh").read_text()
-        self.assertIn("wiicompiled-android-touch-input.patch", script)
+        assert_runtime_staging(self, 'android')
 
     def test_touch_c_stick_reaches_both_guest_status_formats(self) -> None:
-        patch = (REPO / "patches/wiicompiled-android-touch-input.patch").read_text()
+        patch = runtime_source('android', 'runtime/src/hle/input/kpad.cpp')
         self.assertIn("statusPtr + 0x74, touchInput.right_stick_x", patch)
         self.assertIn("statusPtr + 0x78, touchInput.right_stick_y", patch)
         self.assertIn("statusPtr + 0x30, static_cast<uint16_t>(rightStickX)", patch)
         self.assertIn("statusPtr + 0x32, static_cast<uint16_t>(rightStickY)", patch)
-        patch = (REPO / "patches/wiicompiled-android-touch-input.patch").read_text()
+        patch = runtime_source('android', 'runtime/src/hle/input/kpad.cpp')
         self.assertIn('"kartpad/android/touch_input.h"', patch)
         self.assertIn("ConsumeTouchInput()", patch)
         self.assertIn("CoreButtonsForClassic(touchInput.buttons)", patch)

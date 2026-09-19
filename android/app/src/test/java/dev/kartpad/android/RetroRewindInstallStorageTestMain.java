@@ -14,6 +14,10 @@ public final class RetroRewindInstallStorageTestMain {
     public static void main(String[] args) throws Exception {
         Path temporary = Files.createTempDirectory("kartpad-storage-test-");
         try {
+            testLaunchIsolation(temporary.resolve("invalid-install"), "RetroRewind");
+            testLaunchIsolation(temporary.resolve("invalid-rollback"), "RetroRewind.rollback-broken");
+            testOriginalLeavesPendingRecovery(temporary.resolve("launch-pending"));
+            testLockFailureCleanup(temporary.resolve("lock-failure"));
             testRecovery(temporary.resolve("recovery"));
             testAmbiguousRecovery(temporary.resolve("ambiguous"));
             testActivation(temporary.resolve("activation"));
@@ -25,10 +29,81 @@ public final class RetroRewindInstallStorageTestMain {
             testScopeChecks(temporary.resolve("scope"));
             testSymlinkBoundary(temporary.resolve("symlink"));
             testRollbackSymlinkBoundary(temporary.resolve("rollback-symlink"));
-            System.out.println("Retro install storage: 13 cases passed");
+            System.out.println("Retro install storage: 17 cases passed");
         } finally {
             deleteTree(temporary);
         }
+    }
+
+    private static void testLockFailureCleanup(Path root) throws Exception {
+        File files = Files.createDirectories(root).toFile();
+        Path support = Files.createDirectories(RetroRewindInstallStorage.supportRoot(files));
+        Path outside = Files.writeString(root.resolve("outside"), "untouched");
+        Path lockPath = support.resolve("RetroRewind.transaction.lock");
+        Files.createSymbolicLink(lockPath, outside);
+        boolean rejected = false;
+        try (var lock = RetroRewindInstallStorage.tryInstallLock(files)) {
+            expect(lock == null, "symlink lock was acquired");
+        } catch (IOException expected) {
+            rejected = true;
+        }
+        expect(rejected, "symlink lock was not rejected");
+        expect(Files.readString(outside).equals("untouched"), "lock followed symlink");
+        Files.delete(lockPath);
+        try (var lock = RetroRewindInstallStorage.tryInstallLock(files)) {
+            expect(lock != null, "failed acquisition leaked process guard");
+        }
+        try (var lock = RetroRewindInstallStorage.tryInstallLock(files)) {
+            expect(lock != null, "closing lock leaked process guard");
+        }
+    }
+
+    private static void testLaunchIsolation(Path root, String malformedName) throws Exception {
+        File files = Files.createDirectories(root).toFile();
+        Path support = Files.createDirectories(RetroRewindInstallStorage.supportRoot(files));
+        Path malformed = support.resolve(malformedName);
+        write(malformed, "invalid directory, preserve for recovery");
+        Path save = support.resolve("NAND/title/00010004/524d4350/data/rksys.dat");
+        Files.createDirectories(save.getParent());
+        write(save, "existing Original progress");
+
+        // The old unconditional launch recovery throws for both of these real
+        // filesystem faults. Original must still be able to prepare its runtime.
+        boolean rejected = false;
+        try {
+            RetroRewindInstallStorage.recoverForLaunch(files, "retro_rewind");
+        } catch (IOException expected) {
+            rejected = true;
+        }
+        expect(rejected, "malformed Retro state was not rejected");
+        RetroRewindInstallStorage.recoverForLaunch(files, "base");
+        expect(Files.readString(malformed).equals("invalid directory, preserve for recovery"),
+                "Original launch changed malformed Retro state");
+        expect(Files.readString(save).equals("existing Original progress"),
+                "launch changed Original progress");
+    }
+
+    private static void testOriginalLeavesPendingRecovery(Path root) throws Exception {
+        File files = Files.createDirectories(root).toFile();
+        Path support = RetroRewindInstallStorage.supportRoot(files);
+        Path staging = Files.createDirectories(support.resolve("RetroRewind.import-pending"));
+        write(staging.resolve("partial"), "partial pack");
+        Path rollback = Files.createDirectories(support.resolve("RetroRewind.rollback-pending"));
+        write(rollback.resolve("progress"), "existing Retro progress");
+
+        RetroRewindInstallStorage.recoverForLaunch(files, "base");
+        expect(Files.readString(staging.resolve("partial")).equals("partial pack"),
+                "Original launch removed Retro staging");
+        expect(Files.readString(rollback.resolve("progress")).equals("existing Retro progress"),
+                "Original launch moved Retro rollback");
+        expect(!Files.exists(support.resolve("RetroRewind")),
+                "Original launch activated a Retro rollback");
+
+        RetroRewindInstallStorage.recoverForLaunch(files, "retro_rewind");
+        expect(!Files.exists(staging), "Retro launch did not recover staging");
+        expect(Files.readString(support.resolve("RetroRewind/progress"))
+                        .equals("existing Retro progress"),
+                "Retro launch did not restore rollback progress");
     }
 
     private static void testRecovery(Path root) throws Exception {

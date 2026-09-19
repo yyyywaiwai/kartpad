@@ -12,62 +12,122 @@ internal object KartPadDiagnosticExport {
     private const val MAX_FILE_BYTES = 4L * 1024 * 1024
     private const val MAX_FILES = 12
 
-    fun write(context: Context, destination: Uri) {
-        val root = File(context.filesDir, "KartPad/Logs").canonicalFile
-        // Only bounded tails of runtime text logs, never game data, NAND or config.
-        val files = if (root.isDirectory) root.walkTopDown().maxDepth(3)
-            .filter { it.isFile && it.extension in setOf("log", "txt") }
-            .filter { it.canonicalPath.startsWith(root.path + File.separator) }
-            .sortedByDescending { it.lastModified() }.take(MAX_FILES).toList() else emptyList()
+    data class Session(val id: String, val modified: Long)
+
+    private fun logsRoot(context: Context): File {
+        val root = File(context.filesDir.canonicalFile, "KartPad/Logs")
+        require(root.absoluteFile == root.canonicalFile) { "The log directory must not be a symbolic link." }
+        return root
+    }
+
+    fun sessions(context: Context): List<Session> {
+        val root = logsRoot(context)
+        return root.listFiles().orEmpty().filter { directory ->
+            directory.isDirectory && directory.absoluteFile == directory.canonicalFile &&
+                File(directory, "console.log").let { it.isFile && it.absoluteFile == it.canonicalFile }
+        }.map { Session(it.name, File(it, "console.log").lastModified()) }
+            .sortedByDescending { it.modified }
+    }
+
+    /** One attachable text file; only the selected runtime session, never saves or identity files. */
+    fun writeText(context: Context, destination: Uri, sessionId: String) {
+        val root = logsRoot(context)
+        val session = sessions(context).firstOrNull { it.id == sessionId }
+            ?: error("The selected game session is no longer available. Choose it again.")
+        val directory = File(root, session.id)
+        val files = directory.listFiles().orEmpty().filter {
+            it.isFile && it.absoluteFile == it.canonicalFile &&
+                (it.name == "console.log" || (it.name.startsWith("crash_") && it.extension == "txt"))
+        }.sortedWith(compareByDescending<File> { it.name == "console.log" }.thenByDescending { it.lastModified() })
+            .take(MAX_FILES)
+        val output = context.contentResolver.openOutputStream(destination, "w")
+            ?: error("The chosen destination could not be opened.")
+        output.buffered().use { out ->
+            out.write(buildString {
+                appendLine("KartPad diagnostic log — modified WiiCompiled build")
+                appendLine("Review before attaching on GitHub. Nothing was uploaded.")
+                appendLine("Export-time app: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                appendLine("Export-time device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}; API ${android.os.Build.VERSION.SDK_INT}")
+                appendLine("Selected session: ${session.id}; console last written (Unix ms): ${session.modified}")
+                appendLine("Older session version must be read from its console header; otherwise unknown.")
+                appendLine("Only console.log and crash text from this session follow. Each is capped at 256 KiB.")
+            }.toByteArray())
+            for (file in files) {
+                out.write("\n--- ${file.name} ---\n".toByteArray())
+                RandomAccessFile(file, "r").use { input ->
+                    val size = input.length()
+                    val cap = 256 * 1024
+                    if (size <= cap) {
+                        val bytes = ByteArray(size.toInt())
+                        input.readFully(bytes)
+                        out.write(bytes)
+                    } else {
+                        val header = ByteArray(16 * 1024)
+                        input.readFully(header)
+                        out.write(header)
+                        val marker = "\n[KartPad: middle omitted; recent tail follows]\n".toByteArray()
+                        out.write(marker)
+                        val tail = ByteArray(cap - header.size - marker.size)
+                        input.seek(size - tail.size)
+                        input.readFully(tail)
+                        out.write(tail)
+                    }
+                }
+            }
+        }
+    }
+
+    fun write(context: Context, destination: Uri, sessionId: String? = null) {
+        val root = logsRoot(context)
+        val available = sessions(context)
+        val session = if (sessionId == null) available.firstOrNull()
+            else available.firstOrNull { it.id == sessionId }
+                ?: error("The selected game session is no longer available. Choose it again.")
+        val directory = session?.let { File(root, it.id).canonicalFile }
+        // One game session only. Root-level health history may cover unrelated runs.
+        val files = directory?.listFiles().orEmpty()
+            .filter { it.isFile && (it.name == "console.log" || (it.name.startsWith("crash_") && it.extension == "txt")) }
+            .filter { it.absoluteFile == it.canonicalFile }
+            .sortedWith(compareByDescending<File> { it.name == "console.log" }.thenByDescending { it.lastModified() })
+            .take(MAX_FILES)
         val output = context.contentResolver.openOutputStream(destination, "w")
             ?: error("The chosen destination could not be opened.")
         ZipOutputStream(output.buffered()).use { zip ->
             zip.putNextEntry(ZipEntry("README.txt"))
             zip.write(buildString {
-                appendLine("Private KartPad runtime diagnostics; review before sharing.")
-                appendLine("Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
-                appendLine("Device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}")
-                appendLine("API: ${android.os.Build.VERSION.SDK_INT}")
-                appendLine("Retro Rewind: ${RetroRewindRelease.VERSION}")
-                appendLine("Native KartPadPerf/CPU/GPU metrics and android-health.log use elapsed_ms since boot.")
-                appendLine("report-context.json describes the export time, not the source/version of every older log.")
-                appendLine("Context renderer_validation is null outside the game process; renderer_validation_configured is the saved next-launch setting.")
-                appendLine("Its version_match_only status does not revalidate Retro code or prove online compatibility.")
-                appendLine("KartPadNetWait observes unfinished calls >=1 second; KartPadNetStall describes completed slow calls.")
-                appendLine("Network wait operation codes: 0=socket scalar, 1=socket vector, 2=SSL vector. call is a process-local correlation token.")
-                appendLine("Wait sampling stops in the background and has a 32-record cap; missing records do not rule out networking.")
-                appendLine("Health samples run every 10 seconds while the game activity is resumed.")
-                appendLine("An in-game pause menu may still render; these samples do not identify race state.")
-                appendLine("Health history is bounded to 1 MiB; null means unavailable, not zero.")
-                appendLine("Thermal status and headroom are OS signals, not proof of a single bottleneck.")
-                appendLine("process-exits.json contains up to eight OS exit records for KartPad (Android 11+).")
-                appendLine("Exit timestamps use Unix epoch milliseconds, not elapsed_ms. History may be incomplete.")
-                appendLine("Exit version/profile are null for older builds; current export version is not their version.")
-                appendLine("A user-requested exit can be a manual stop; missing records do not prove no crash.")
-                appendLine("Memory values are last OS samples in KiB, not peak use. No system traces are exported.")
-                appendLine("renderer_validation in health samples identifies opt-in game-renderer checks.")
-                appendLine("Compare the same scene with validation off/on; validation can reduce performance.")
-                appendLine("For renderer warnings/errors, open Logs/<test-session>/console.log and share only relevant reviewed lines.")
-                appendLine("android-health.log contains settings/performance samples, not the main renderer error log.")
-                appendLine("process-exits.json is intentionally outside Logs; a matching unexpected-exit entry is useful only if the app closed.")
-                appendLine("If there are no renderer errors, report whether the image changed with validation off/on.")
-                appendLine("Each log contains at most its last $MAX_FILE_BYTES bytes.")
+                appendLine("Private KartPad diagnostics from a modified WiiCompiled build. Review before sharing.")
+                appendLine("Export-time app version (not necessarily this session): ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
+                appendLine("Export-time device: ${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}; API ${android.os.Build.VERSION.SDK_INT}")
+                appendLine("report-context.json describes export time, not the source/version of older logs.")
+                appendLine("The selected console.log header is retained. If it has no version, the session runtime version is unknown.")
+                appendLine("Selected game session: ${session?.id ?: "none available"}")
+                appendLine("Session console last-written time (Unix ms): ${session?.modified ?: "unavailable"}")
+                appendLine("Read Logs/${session?.id ?: "<no session>"}/console.log and any crash text from the same folder.")
+                appendLine("Runtime logs are from this session. OS-exits separately contains up to three recent app ANR/native-crash traces and their timestamps, when Android retains them.")
+                appendLine("Each log contains at most $MAX_FILE_BYTES bytes: its original header and recent tail, with an explicit gap marker if shortened.")
+                appendLine("Files may contain private details. Share only reviewed relevant text, never this entire private ZIP or game data.")
                 appendLine("Log files: ${files.size}")
             }.toByteArray())
             zip.closeEntry()
             zip.putNextEntry(ZipEntry("report-context.json"))
             zip.write(KartPadReportContext.snapshot(context, null).toString(2).toByteArray())
             zip.closeEntry()
-            zip.putNextEntry(ZipEntry("process-exits.json"))
-            zip.write(KartPadExitDiagnostics.snapshot(context).toByteArray())
-            zip.closeEntry()
+            KartPadExitTraces.write(context, zip)
             val buffer = ByteArray(32 * 1024)
             for (file in files) {
                 zip.putNextEntry(ZipEntry("Logs/" + file.relativeTo(root).invariantSeparatorsPath))
                 RandomAccessFile(file, "r").use { input ->
                     val size = input.length()
-                    input.seek(maxOf(0, size - MAX_FILE_BYTES))
-                    var remaining = minOf(size, MAX_FILE_BYTES)
+                    var remaining = size
+                    if (size > MAX_FILE_BYTES) {
+                        val header = ByteArray(16 * 1024)
+                        input.readFully(header)
+                        zip.write(header)
+                        val marker = "\n\n[KartPad export: middle of log omitted; recent tail follows]\n\n".toByteArray()
+                        zip.write(marker)
+                        remaining = MAX_FILE_BYTES - header.size - marker.size
+                        input.seek(size - remaining)
+                    }
                     while (remaining > 0) {
                         val count = input.read(buffer, 0, minOf(buffer.size.toLong(), remaining).toInt())
                         if (count < 0) break

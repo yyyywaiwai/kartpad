@@ -22,12 +22,16 @@
 #import <QuartzCore/QuartzCore.h>
 #import <TargetConditionals.h>
 #import <UIKit/UIKit.h>
+#import <SafariServices/SafariServices.h>
 #import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 
 #include <algorithm>
 #include <cmath>
 
 extern "C" int g_gxFrameCount;
+#include <atomic>
+static std::atomic<float> gKartPadFpsScale{1.0f};
+extern "C" float KartPadMobileFpsOverlayScale(){return gKartPadFpsScale.load(std::memory_order_relaxed);}
 
 @interface KartPadRuntimeOverlayHost : NSObject <SunPadGameOverlayDelegate,
                                                  UIDocumentPickerDelegate>
@@ -35,14 +39,21 @@ extern "C" int g_gxFrameCount;
 - (void)uninstall;
 - (void)reattachOverlayIfNeeded;
 - (void)runMainMenu;
+- (void)showReportPreview;
 @end
 
-@interface KartPadGameOverlay : SunPadGameOverlay
+@interface KartPadGameOverlay : SunPadGameOverlay <SFSafariViewControllerDelegate>
+@property(nonatomic, strong) NSURL *reportDraftURL;
+- (void)presentReportBrowserURL:(NSURL *)url;
 @property(nonatomic, strong) KartPadFloatingStickView *kartPadMoveStick;
 @property(nonatomic, copy) void (^multiplayerRequested)(void);
 @property(nonatomic, copy) void (^mainMenuRequested)(void);
 @property(nonatomic, copy) void (^motionSteeringRequested)(void);
 @property(nonatomic, copy) void (^miiManagerRequested)(void);
+@property(nonatomic, copy) void (^ghostManagerRequested)(void);
+@property(nonatomic, copy) void (^saveManagerRequested)(void);
+@property(nonatomic, copy) void (^buttonMappingRequested)(void);
+@property(nonatomic, copy) void (^retroManagerRequested)(void);
 @property(nonatomic, copy) void (^wiimoteRequested)(void);
 @property(nonatomic, weak) UIButton *kartPadGasButton;
 @property(nonatomic, strong) UIColor *kartPadGasRestColor;
@@ -77,8 +88,11 @@ extern "C" int g_gxFrameCount;
 - (void)reportProblem;
 - (void)createDiagnosticReportFromPrompt:(UIAlertController *)prompt
                               openGitHub:(BOOL)openGitHub;
+- (void)chooseReportDestinationWithID:(NSString *)reportID
+                               answers:(NSDictionary<NSString *, NSString *> *)answers;
 - (void)openGitHubReportWithID:(NSString *)reportID
-                       answers:(NSDictionary<NSString *, NSString *> *)answers;
+                       answers:(NSDictionary<NSString *, NSString *> *)answers
+                      upstream:(BOOL)upstream;
 @end
 
 namespace {
@@ -665,39 +679,61 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
 
 }  // namespace
 
+// Shared by the cold-start chooser and the suspended-game menu. Preferences
+// never alter the live runtime; switching games keeps the existing restart gate.
+static NSString *const kKartPadDarkModeKey = @"KartPadLauncherDarkMode";
+static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
+
 @interface KartPadFirstLaunchViewController : UIViewController
 @property(nonatomic, copy) void (^modeSelected)(BOOL retroRewind);
 @property(nonatomic, assign) BOOL resumingGame;
 @property(nonatomic, assign) BOOL currentRetroRewind;
 @property(nonatomic, assign) BOOL gameDataReady;
 @property(nonatomic, strong) NSLayoutConstraint *contentWidthConstraint;
-@property(nonatomic, strong) UIStackView *choices;
 @property(nonatomic, strong) UIStackView *content;
 @property(nonatomic, strong) UIStackView *header;
+@property(nonatomic, strong) UIStackView *footer;
+@property(nonatomic, strong) NSMutableArray<UIStackView *> *rows;
+@property(nonatomic, strong) NSMutableArray<UIView *> *rowSurfaces;
 @property(nonatomic, strong) NSMutableArray<UILabel *> *cardTitles;
-@property(nonatomic, strong) NSMutableArray<UIView *> *compactDetails;
+@property(nonatomic, strong) NSMutableArray<UILabel *> *secondaryLabels;
+@property(nonatomic, strong) NSMutableArray<UILabel *> *primaryLabels;
+@property(nonatomic, strong) NSMutableArray<UIView *> *dividers;
+@property(nonatomic, strong) NSMutableArray<UIButton *> *actionButtons;
+@property(nonatomic, strong) UISwitch *themeSwitch;
+@property(nonatomic, strong) UIButton *preferenceButton;
+@property(nonatomic, strong) UIImageView *checker;
 @end
 
 @implementation KartPadFirstLaunchViewController
+
+- (UIColor *)racingRed {
+  return self.themeSwitch.on ? [UIColor colorWithRed:1 green:0.20 blue:0.26 alpha:1]
+                            : [UIColor colorWithRed:0.80 green:0.035 blue:0.12 alpha:1];
+}
 
 - (UILabel *)label:(NSString *)text style:(UIFontTextStyle)style secondary:(BOOL)secondary {
   UILabel *label = [UILabel new];
   label.text = text;
   label.font = [UIFont preferredFontForTextStyle:style];
   label.adjustsFontForContentSizeCategory = YES;
-  label.textColor = secondary
-      ? [UIColor colorWithRed:0.70 green:0.75 blue:0.82 alpha:1] : UIColor.whiteColor;
+  label.textColor = secondary ? UIColor.secondaryLabelColor : UIColor.labelColor;
   label.numberOfLines = 0;
+  [(secondary ? self.secondaryLabels : self.primaryLabels) addObject:label];
   return label;
 }
 
 - (UIButton *)link:(NSString *)title symbol:(NSString *)symbol action:(void (^)(void))action {
   UIButtonConfiguration *configuration = [UIButtonConfiguration plainButtonConfiguration];
   configuration.title = title;
-  configuration.image = [UIImage systemImageNamed:symbol];
+  configuration.image = symbol.length ? [UIImage systemImageNamed:symbol] : nil;
   configuration.imagePadding = 8;
-  configuration.baseForegroundColor = [UIColor colorWithRed:0.48 green:0.75 blue:1 alpha:1];
-  configuration.contentInsets = NSDirectionalEdgeInsetsMake(12, 0, 12, 12);
+  configuration.baseForegroundColor = [UIColor colorWithDynamicProvider:^UIColor *(UITraitCollection *traits) {
+    return traits.userInterfaceStyle == UIUserInterfaceStyleDark
+        ? [UIColor colorWithRed:1 green:0.20 blue:0.26 alpha:1]
+        : [UIColor colorWithRed:0.80 green:0.035 blue:0.12 alpha:1];
+  }];
+  configuration.contentInsets = NSDirectionalEdgeInsetsMake(10, 0, 10, 4);
   UIButton *button = [UIButton buttonWithConfiguration:configuration primaryAction:
       [UIAction actionWithHandler:^(__kindof UIAction *event) { action(); }]];
   [button.heightAnchor constraintGreaterThanOrEqualToConstant:44].active = YES;
@@ -775,180 +811,265 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
     [content.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-48],
   ]];
   UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:help];
-  navigation.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
+  navigation.overrideUserInterfaceStyle = self.overrideUserInterfaceStyle;
   navigation.modalPresentationStyle = UIModalPresentationFormSheet;
   navigation.preferredContentSize = CGSizeMake(620, 640);
   [self presentViewController:navigation animated:YES completion:nil];
 }
 
+
+- (UIView *)divider {
+  UIView *line = [UIView new];
+  [line.heightAnchor constraintEqualToConstant:1].active = YES;
+  [self.dividers addObject:line];
+  return line;
+}
+
+- (void)updatePreferenceTitle {
+  NSString *value = [NSUserDefaults.standardUserDefaults stringForKey:kKartPadPreferredGameKey];
+  NSString *title = [value isEqualToString:@"base"] ? @"Mario Kart Wii"
+      : ([value isEqualToString:@"retro_rewind"] ? @"Retro Rewind" : @"Ask every time");
+  UIButtonConfiguration *configuration = self.preferenceButton.configuration;
+  configuration.title = title;
+  self.preferenceButton.configuration = configuration;
+  self.preferenceButton.accessibilityLabel = @"Game on launch";
+  self.preferenceButton.accessibilityValue = title;
+}
+
+- (void)showLaunchPreference {
+  UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"On Launch"
+      message:@"Choose a game to open automatically. You can always return here from the in-game menu."
+      preferredStyle:UIAlertControllerStyleActionSheet];
+  NSArray<NSString *> *titles = @[@"Ask every time", @"Mario Kart Wii", @"Retro Rewind"];
+  NSArray<NSString *> *values = @[@"ask", @"base", @"retro_rewind"];
+  __weak KartPadFirstLaunchViewController *weakSelf = self;
+  for (NSUInteger i = 0; i < titles.count; ++i) {
+    NSString *value = values[i];
+    [alert addAction:[UIAlertAction actionWithTitle:titles[i] style:UIAlertActionStyleDefault
+        handler:^(UIAlertAction *action) {
+      [NSUserDefaults.standardUserDefaults setObject:value forKey:kKartPadPreferredGameKey];
+      [weakSelf updatePreferenceTitle];
+    }]];
+  }
+  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+  alert.popoverPresentationController.sourceView = self.preferenceButton;
+  alert.popoverPresentationController.sourceRect = self.preferenceButton.bounds;
+  [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)applyTheme {
+  BOOL dark = self.themeSwitch.on;
+  self.overrideUserInterfaceStyle = dark ? UIUserInterfaceStyleDark : UIUserInterfaceStyleLight;
+  self.view.backgroundColor = dark ? [UIColor colorWithWhite:0.065 alpha:1]
+                                  : [UIColor colorWithRed:0.985 green:0.975 blue:0.95 alpha:1];
+  UIColor *foreground = dark ? [UIColor colorWithWhite:0.97 alpha:1]
+                            : [UIColor colorWithRed:0.045 green:0.065 blue:0.10 alpha:1];
+  UIColor *secondary = dark ? [UIColor colorWithWhite:0.66 alpha:1]
+                           : [UIColor colorWithWhite:0.37 alpha:1];
+  for (UILabel *label in self.primaryLabels) label.textColor = foreground;
+  for (UILabel *label in self.secondaryLabels) label.textColor = secondary;
+  for (UIView *line in self.dividers) line.backgroundColor = [foreground colorWithAlphaComponent:0.15];
+  for (NSUInteger i = 0; i < self.rowSurfaces.count; ++i) {
+    BOOL current = self.resumingGame && self.currentRetroRewind == (i == 1);
+    self.rowSurfaces[i].backgroundColor = current
+        ? [[self racingRed] colorWithAlphaComponent:dark ? 0.10 : 0.065] : UIColor.clearColor;
+    UIButton *button = self.actionButtons[i];
+    UIButtonConfiguration *config = button.configuration;
+    BOOL primary = current || (!self.resumingGame && i == 0);
+    config.baseBackgroundColor = primary ? [UIColor colorWithRed:0.89 green:0.025 blue:0.10 alpha:1] : UIColor.clearColor;
+    config.baseForegroundColor = primary ? UIColor.whiteColor : [self racingRed];
+    button.configuration = config;
+  }
+  self.themeSwitch.onTintColor = [UIColor colorWithRed:0.89 green:0.025 blue:0.10 alpha:1];
+  self.checker.tintColor = dark ? UIColor.whiteColor : UIColor.blackColor;
+  self.checker.alpha = dark ? 1.0 : 0.65;
+}
+
+- (void)themeChanged:(UISwitch *)sender {
+  [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:kKartPadDarkModeKey];
+  [self applyTheme];
+}
+
 - (UIView *)gameCard:(BOOL)retro installedVersion:(NSString *)installedVersion {
   BOOL current = self.resumingGame && self.currentRetroRewind == retro;
   BOOL ready = self.gameDataReady && (!retro || installedVersion.length > 0);
-  UIColor *accent = retro ? [UIColor colorWithRed:0.77 green:0.67 blue:1 alpha:1]
-                          : [UIColor colorWithRed:0.43 green:0.73 blue:1 alpha:1];
-  NSString *status = current ? @"CURRENT GAME · PAUSED"
-      : (self.resumingGame ? @"NEXT LAUNCH"
-      : (ready ? @"READY TO PLAY" : (retro && !self.gameDataReady ? @"BASE GAME REQUIRED" : @"SETUP NEEDED")));
-  UILabel *badge = [self label:status style:UIFontTextStyleCaption1 secondary:NO];
-  badge.textColor = accent;
-  badge.font = [UIFontMetrics.defaultMetrics scaledFontForFont:
-      [UIFont systemFontOfSize:12 weight:UIFontWeightSemibold]];
-  UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:
-      retro ? @"gobackward" : @"flag.checkered"]];
-  icon.tintColor = accent;
-  icon.contentMode = UIViewContentModeScaleAspectFit;
-  icon.isAccessibilityElement = NO;
-  [NSLayoutConstraint activateConstraints:@[
-    [icon.widthAnchor constraintEqualToConstant:32], [icon.heightAnchor constraintEqualToConstant:32],
-  ]];
-  UIView *spacer = [UIView new];
-  UIStackView *top = [[UIStackView alloc] initWithArrangedSubviews:@[icon, spacer, badge]];
-  top.axis = UILayoutConstraintAxisHorizontal;
-  top.alignment = UIStackViewAlignmentCenter;
-  top.spacing = 12;
-  UILabel *title = [self label:retro ? @"Retro Rewind" : @"Mario Kart Wii"
-      style:UIFontTextStyleTitle1 secondary:NO];
+  NSString *status = current ? @"Paused" : (self.resumingGame ? @"Next launch"
+      : (ready ? @"Ready to play" : (retro && !self.gameDataReady ? @"Import Mario Kart Wii first" : @"Setup needed")));
+  UILabel *title = [self label:retro ? @"Retro Rewind" : @"Mario Kart Wii" style:UIFontTextStyleTitle2 secondary:NO];
   title.accessibilityTraits |= UIAccessibilityTraitHeader;
   [self.cardTitles addObject:title];
-  NSString *detail = retro ? @"More tracks, characters and Retro WFC online play. Uses your Mario Kart Wii game data."
-                           : @"Grand Prix, time trials and local races. Your original game, on this device.";
-  UILabel *description = [self label:detail style:UIFontTextStyleBody secondary:YES];
-  NSString *note = retro ? (installedVersion.length > 0
-      ? [NSString stringWithFormat:@"Installed pack · %@", installedVersion]
-      : [NSString stringWithFormat:@"Official pack · %@ · downloaded in the app", KartPadRetroRewindInstaller.requiredVersion])
-      : (self.gameDataReady ? @"Game data imported" : @"PAL (Europe) · ISO / WBFS · RMCP01 rev 0");
-  UILabel *metadata = [self label:note style:UIFontTextStyleFootnote secondary:YES];
-  [self.compactDetails addObjectsFromArray:@[description, metadata]];
+  UILabel *badge = [self label:status style:UIFontTextStyleFootnote secondary:YES];
+  UIStackView *text = [[UIStackView alloc] initWithArrangedSubviews:@[title, badge]];
+  text.axis = UILayoutConstraintAxisVertical;
+  text.spacing = 4;
+  UIImageView *icon = [[UIImageView alloc] initWithImage:[UIImage systemImageNamed:retro ? @"gobackward" : @"flag.checkered"]];
+  icon.tintColor = retro ? [UIColor colorWithRed:1 green:0.68 blue:0.08 alpha:1]
+                        : [UIColor colorWithRed:0.10 green:0.52 blue:1 alpha:1];
+  icon.contentMode = UIViewContentModeScaleAspectFit;
+  icon.isAccessibilityElement = NO;
+  [NSLayoutConstraint activateConstraints:@[[icon.widthAnchor constraintEqualToConstant:36],
+      [icon.heightAnchor constraintEqualToConstant:36]]];
+  UIStackView *identity = [[UIStackView alloc] initWithArrangedSubviews:@[icon, text]];
+  identity.axis = UILayoutConstraintAxisHorizontal;
+  identity.alignment = UIStackViewAlignmentCenter;
+  identity.spacing = 18;
   NSString *actionTitle = current ? @"Resume Game" : (self.resumingGame ? @"Use on Next Launch"
       : (ready ? @"Play Game" : (retro ? @"Set Up Game" : @"Import Game")));
   UIButtonConfiguration *configuration = [UIButtonConfiguration filledButtonConfiguration];
   configuration.title = actionTitle;
-  configuration.image = [UIImage systemImageNamed:current || ready ? @"play.fill" : @"arrow.right"];
+  configuration.image = [UIImage systemImageNamed:@"arrow.right"];
   configuration.imagePlacement = NSDirectionalRectEdgeTrailing;
-  configuration.imagePadding = 10;
-  configuration.baseBackgroundColor = current || (!self.resumingGame && !retro)
-      ? [UIColor colorWithRed:0.16 green:0.47 blue:0.88 alpha:1]
-      : [UIColor colorWithRed:0.19 green:0.23 blue:0.31 alpha:1];
-  configuration.baseForegroundColor = UIColor.whiteColor;
+  configuration.imagePadding = 12;
   configuration.cornerStyle = UIButtonConfigurationCornerStyleMedium;
   configuration.contentInsets = NSDirectionalEdgeInsetsMake(14, 18, 14, 18);
   __weak KartPadFirstLaunchViewController *weakSelf = self;
   UIButton *action = [UIButton buttonWithConfiguration:configuration primaryAction:
       [UIAction actionWithHandler:^(__kindof UIAction *event) {
-    if (weakSelf.modeSelected != nil) weakSelf.modeSelected(retro);
+    if (weakSelf.modeSelected) weakSelf.modeSelected(retro);
   }]];
+  action.configurationUpdateHandler = ^(UIButton *button) {
+    if (UIAccessibilityIsReduceMotionEnabled()) return;
+    [UIView animateWithDuration:0.12 delay:0 options:UIViewAnimationOptionBeginFromCurrentState | UIViewAnimationOptionAllowUserInteraction animations:^{
+      button.transform = button.highlighted ? CGAffineTransformMakeScale(0.97, 0.97) : CGAffineTransformIdentity;
+    } completion:nil];
+  };
   action.accessibilityIdentifier = retro ? @"kartpad.mode.retro-rewind" : @"kartpad.mode.original";
-  action.accessibilityLabel = [actionTitle containsString:title.text] ? actionTitle
-      : [NSString stringWithFormat:@"%@, %@", actionTitle, title.text];
-  action.accessibilityHint = status;
-  [action.heightAnchor constraintGreaterThanOrEqualToConstant:50].active = YES;
-  UIView *gap = [UIView new];
-  UIStackView *content = [[UIStackView alloc] initWithArrangedSubviews:
-      @[top, title, description, metadata, gap, action]];
-  content.axis = UILayoutConstraintAxisVertical;
-  content.spacing = 12;
-  [content setCustomSpacing:18 afterView:top];
-  content.translatesAutoresizingMaskIntoConstraints = NO;
-  UIView *card = [UIView new];
-  card.backgroundColor = [UIColor colorWithRed:0.075 green:0.10 blue:0.15 alpha:1];
-  card.layer.cornerRadius = 20;
-  card.layer.borderWidth = 1;
-  card.layer.borderColor = [UIColor colorWithRed:0.17 green:0.21 blue:0.28 alpha:1].CGColor;
-  [card addSubview:content];
+  action.accessibilityLabel = [NSString stringWithFormat:@"%@, %@", actionTitle, title.text];
+  action.accessibilityHint = [NSString stringWithFormat:@"%@. %@", status, retro
+      ? (installedVersion.length ? [NSString stringWithFormat:@"Installed pack %@", installedVersion] : @"Optional official pack, downloaded in the app")
+      : (self.gameDataReady ? @"Game data imported" : @"PAL Europe ISO or WBFS, RMCP01 revision zero")];
+  [action.heightAnchor constraintGreaterThanOrEqualToConstant:48].active = YES;
+  [action.widthAnchor constraintGreaterThanOrEqualToConstant:190].active = YES;
+  [action setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  [self.actionButtons addObject:action];
+  UIStackView *row = [[UIStackView alloc] initWithArrangedSubviews:@[identity, action]];
+  row.axis = UILayoutConstraintAxisHorizontal;
+  row.alignment = UIStackViewAlignmentCenter;
+  row.spacing = 16;
+  row.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.rows addObject:row];
+  UIView *surface = [UIView new];
+  surface.layer.cornerRadius = 14;
+  [surface addSubview:row];
+  [self.rowSurfaces addObject:surface];
   [NSLayoutConstraint activateConstraints:@[
-    [content.leadingAnchor constraintEqualToAnchor:card.leadingAnchor constant:24],
-    [content.trailingAnchor constraintEqualToAnchor:card.trailingAnchor constant:-24],
-    [content.topAnchor constraintEqualToAnchor:card.topAnchor constant:24],
-    [content.bottomAnchor constraintEqualToAnchor:card.bottomAnchor constant:-24],
-    [gap.heightAnchor constraintGreaterThanOrEqualToConstant:0],
+    [row.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor constant:18],
+    [row.trailingAnchor constraintEqualToAnchor:surface.trailingAnchor constant:-18],
+    [row.topAnchor constraintEqualToAnchor:surface.topAnchor constant:16],
+    [row.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor constant:-16],
   ]];
-  return card;
+  if (current) {
+    UIView *indicator = [UIView new];
+    indicator.backgroundColor = [UIColor colorWithRed:1 green:0.15 blue:0.23 alpha:1];
+    indicator.layer.cornerRadius = 2;
+    indicator.translatesAutoresizingMaskIntoConstraints = NO;
+    [surface addSubview:indicator];
+    [NSLayoutConstraint activateConstraints:@[
+      [indicator.widthAnchor constraintEqualToConstant:4],
+      [indicator.leadingAnchor constraintEqualToAnchor:surface.leadingAnchor],
+      [indicator.topAnchor constraintEqualToAnchor:surface.topAnchor constant:8],
+      [indicator.bottomAnchor constraintEqualToAnchor:surface.bottomAnchor constant:-8],
+    ]];
+  }
+  return surface;
 }
 
 - (void)viewDidLoad {
   [super viewDidLoad];
-  self.compactDetails = [NSMutableArray array];
+  self.rows = [NSMutableArray array];
+  self.rowSurfaces = [NSMutableArray array];
+  self.actionButtons = [NSMutableArray array];
+  self.primaryLabels = [NSMutableArray array];
+  self.secondaryLabels = [NSMutableArray array];
   self.cardTitles = [NSMutableArray array];
-  self.overrideUserInterfaceStyle = UIUserInterfaceStyleDark;
-  self.view.backgroundColor = [UIColor colorWithRed:0.035 green:0.05 blue:0.08 alpha:1];
+  self.dividers = [NSMutableArray array];
+  self.themeSwitch = [UISwitch new];
+  id savedTheme = [NSUserDefaults.standardUserDefaults objectForKey:kKartPadDarkModeKey];
+  self.themeSwitch.on = savedTheme == nil || [savedTheme boolValue];
+  self.themeSwitch.accessibilityLabel = @"Dark mode";
+  self.themeSwitch.accessibilityIdentifier = @"kartpad.theme.dark";
+  [self.themeSwitch addTarget:self action:@selector(themeChanged:) forControlEvents:UIControlEventValueChanged];
   UIImageView *mark = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"KartPadLogo"]];
   mark.contentMode = UIViewContentModeScaleAspectFit;
   mark.isAccessibilityElement = NO;
-  [NSLayoutConstraint activateConstraints:@[
-    [mark.widthAnchor constraintEqualToConstant:48], [mark.heightAnchor constraintEqualToConstant:48],
-  ]];
+  [NSLayoutConstraint activateConstraints:@[[mark.widthAnchor constraintEqualToConstant:48],
+      [mark.heightAnchor constraintEqualToConstant:48]]];
   UILabel *brand = [self label:@"KartPad" style:UIFontTextStyleTitle1 secondary:NO];
-  brand.font = [UIFontMetrics.defaultMetrics scaledFontForFont:
-      [UIFont systemFontOfSize:30 weight:UIFontWeightBold]];
-  UILabel *platform = [self label:@"Mario Kart Wii, on your device."
-      style:UIFontTextStyleSubheadline secondary:YES];
-  UIStackView *brandText = [[UIStackView alloc] initWithArrangedSubviews:@[brand, platform]];
-  brandText.axis = UILayoutConstraintAxisVertical;
-  brandText.spacing = 4;
+  brand.font = [UIFontMetrics.defaultMetrics scaledFontForFont:[UIFont systemFontOfSize:30 weight:UIFontWeightBold]];
+  UIStackView *identity = [[UIStackView alloc] initWithArrangedSubviews:@[mark, brand]];
+  identity.axis = UILayoutConstraintAxisHorizontal;
+  identity.alignment = UIStackViewAlignmentCenter;
+  identity.spacing = 12;
+  UILabel *themeLabel = [self label:@"Dark mode" style:UIFontTextStyleSubheadline secondary:NO];
+  UIStackView *theme = [[UIStackView alloc] initWithArrangedSubviews:@[themeLabel, self.themeSwitch]];
+  theme.axis = UILayoutConstraintAxisHorizontal;
+  theme.alignment = UIStackViewAlignmentCenter;
+  theme.spacing = 10;
+  [theme setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
   __weak KartPadFirstLaunchViewController *weakSelf = self;
-  UIButton *help = [self link:@"Help" symbol:@"questionmark.circle" action:^{ [weakSelf showSetupHelp]; }];
+  UIButton *help = [self link:@"Help" symbol:nil action:^{ [weakSelf showSetupHelp]; }];
   help.accessibilityIdentifier = @"kartpad.setup.help";
   [help setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-  UIStackView *header = [[UIStackView alloc] initWithArrangedSubviews:@[mark, brandText, help]];
-  header.axis = UILayoutConstraintAxisHorizontal;
-  header.alignment = UIStackViewAlignmentCenter;
-  header.spacing = 16;
-  self.header = header;
-  [self.compactDetails addObject:platform];
-
-  UILabel *heading = [self label:self.resumingGame ? @"Back to the race" : @"Choose a game"
-      style:UIFontTextStyleLargeTitle secondary:NO];
-  heading.accessibilityTraits |= UIAccessibilityTraitHeader;
-  UILabel *intro = [self label:self.resumingGame
-      ? @"Your game is paused. Resume now, or choose a game for the next launch."
-      : (self.gameDataReady ? @"Your Mario Kart Wii game data is ready."
-                           : @"Start by importing Mario Kart Wii. Add Retro Rewind whenever you're ready.")
-      style:UIFontTextStyleBody secondary:YES];
-  [self.compactDetails addObjectsFromArray:@[heading, intro]];
+  [identity setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  [themeLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  self.header = [[UIStackView alloc] initWithArrangedSubviews:@[identity, [UIView new], theme, help]];
+  self.header.axis = UILayoutConstraintAxisHorizontal;
+  self.header.alignment = UIStackViewAlignmentCenter;
+  self.header.spacing = 20;
+  UILabel *launch = [self label:@"On launch:" style:UIFontTextStyleFootnote secondary:YES];
+  self.preferenceButton = [self link:@"Ask every time" symbol:@"chevron.down" action:^{ [weakSelf showLaunchPreference]; }];
+  UIButtonConfiguration *pref = self.preferenceButton.configuration;
+  pref.imagePlacement = NSDirectionalRectEdgeTrailing;
+  pref.baseForegroundColor = UIColor.labelColor;
+  self.preferenceButton.configuration = pref;
+  self.preferenceButton.accessibilityIdentifier = @"kartpad.launch.preference";
+  [self.preferenceButton.widthAnchor constraintGreaterThanOrEqualToConstant:150].active = YES;
+  [self.preferenceButton setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  [self updatePreferenceTitle];
+  UIStackView *launchChoice = [[UIStackView alloc] initWithArrangedSubviews:@[launch, self.preferenceButton]];
+  launchChoice.axis = UILayoutConstraintAxisHorizontal;
+  launchChoice.alignment = UIStackViewAlignmentCenter;
+  launchChoice.spacing = 10;
+  [launchChoice setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  [launchChoice setContentCompressionResistancePriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  UILabel *returnHint = [self label:@"Return here anytime from the in-game menu."
+      style:UIFontTextStyleFootnote secondary:YES];
+  returnHint.textAlignment = NSTextAlignmentRight;
+  [launch setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  [self.preferenceButton setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  self.footer = [[UIStackView alloc] initWithArrangedSubviews:@[launchChoice, [UIView new], returnHint]];
+  self.footer.axis = UILayoutConstraintAxisHorizontal;
+  self.footer.alignment = UIStackViewAlignmentCenter;
+  self.footer.spacing = 24;
   NSString *version = KartPadRetroRewindInstaller.installedVersion;
-  self.choices = [[UIStackView alloc] initWithArrangedSubviews:
-      @[[self gameCard:NO installedVersion:version], [self gameCard:YES installedVersion:version]]];
-  self.choices.axis = UILayoutConstraintAxisHorizontal;
-  self.choices.spacing = 20;
-  self.choices.distribution = UIStackViewDistributionFillEqually;
-
-  UILabel *supportTitle = [self label:@"A little help getting started"
-      style:UIFontTextStyleHeadline secondary:NO];
-  UILabel *supportText = [self label:@"File formats, importing your game, and adding Retro Rewind — explained step by step."
-      style:UIFontTextStyleSubheadline secondary:YES];
-  UIButton *setup = [self link:@"Setup guide" symbol:@"book.closed" action:^{
-    [weakSelf openGuide:@"blob/main/docs/INSTALL_IPA.md"];
-  }];
-  UIButton *troubleshooting = [self link:@"Troubleshooting" symbol:@"wrench.and.screwdriver" action:^{
-    [weakSelf openGuide:@"blob/main/docs/SUPPORT.md"];
-  }];
-  UIStackView *links = [[UIStackView alloc] initWithArrangedSubviews:@[setup, troubleshooting]];
-  links.axis = UILayoutConstraintAxisHorizontal;
-  links.alignment = UIStackViewAlignmentLeading;
-  links.distribution = UIStackViewDistributionFillEqually;
-  links.spacing = 12;
-  UILabel *footer = [self label:[NSString stringWithFormat:@"KartPad %@ · Build %@   /   Guides open on GitHub",
-      [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"",
-      [NSBundle.mainBundle objectForInfoDictionaryKey:@"CFBundleVersion"] ?: @""]
-      style:UIFontTextStyleCaption1 secondary:YES];
-  UIStackView *content = [[UIStackView alloc] initWithArrangedSubviews:
-      @[header, heading, intro, self.choices, supportTitle, supportText, links, footer]];
-  content.translatesAutoresizingMaskIntoConstraints = NO;
-  content.axis = UILayoutConstraintAxisVertical;
-  self.content = content;
-  [self.compactDetails addObjectsFromArray:@[supportTitle, supportText, links, footer]];
-  content.spacing = 10;
-  [content setCustomSpacing:30 afterView:header];
-  [content setCustomSpacing:22 afterView:intro];
-  [content setCustomSpacing:28 afterView:self.choices];
+  self.content = [[UIStackView alloc] initWithArrangedSubviews:@[self.header,
+      [self gameCard:NO installedVersion:version], [self divider],
+      [self gameCard:YES installedVersion:version], [self divider], self.footer]];
+  self.content.axis = UILayoutConstraintAxisVertical;
+  self.content.spacing = 10;
+  [self.content setCustomSpacing:24 afterView:self.header];
+  self.content.translatesAutoresizingMaskIntoConstraints = NO;
+  self.checker = [[UIImageView alloc] initWithImage:[[UIImage imageNamed:@"KartPadChecker"] imageWithRenderingMode:UIImageRenderingModeAlwaysTemplate]];
+  self.checker.contentMode = UIViewContentModeScaleAspectFill;
+  self.checker.clipsToBounds = YES;
+  self.checker.translatesAutoresizingMaskIntoConstraints = NO;
+  self.checker.isAccessibilityElement = NO;
+  [self.view addSubview:self.checker];
+  [NSLayoutConstraint activateConstraints:@[
+    [self.checker.trailingAnchor constraintEqualToAnchor:self.view.trailingAnchor],
+    [self.checker.topAnchor constraintEqualToAnchor:self.view.topAnchor],
+    [self.checker.bottomAnchor constraintEqualToAnchor:self.view.bottomAnchor],
+    [self.checker.widthAnchor constraintEqualToConstant:70],
+  ]];
   UIScrollView *scroll = [UIScrollView new];
   scroll.translatesAutoresizingMaskIntoConstraints = NO;
+  scroll.alwaysBounceVertical = NO;
   [self.view addSubview:scroll];
   UIView *canvas = [UIView new];
   canvas.translatesAutoresizingMaskIntoConstraints = NO;
   [scroll addSubview:canvas];
-  [canvas addSubview:content];
-  self.contentWidthConstraint = [content.widthAnchor constraintEqualToConstant:880];
+  [canvas addSubview:self.content];
+  self.contentWidthConstraint = [self.content.widthAnchor constraintEqualToConstant:700];
   NSLayoutConstraint *height = [canvas.heightAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.heightAnchor];
   height.priority = UILayoutPriorityDefaultLow;
   [NSLayoutConstraint activateConstraints:@[
@@ -962,34 +1083,37 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
     [canvas.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor],
     [canvas.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor],
     [canvas.heightAnchor constraintGreaterThanOrEqualToAnchor:scroll.frameLayoutGuide.heightAnchor],
-    [content.centerXAnchor constraintEqualToAnchor:canvas.centerXAnchor],
-    [content.centerYAnchor constraintEqualToAnchor:canvas.centerYAnchor],
-    [content.topAnchor constraintGreaterThanOrEqualToAnchor:canvas.topAnchor constant:16],
-    [content.bottomAnchor constraintLessThanOrEqualToAnchor:canvas.bottomAnchor constant:-16],
+    [self.content.centerXAnchor constraintEqualToAnchor:canvas.centerXAnchor],
+    [self.content.centerYAnchor constraintEqualToAnchor:canvas.centerYAnchor],
+    [self.content.topAnchor constraintGreaterThanOrEqualToAnchor:canvas.topAnchor constant:12],
+    [self.content.bottomAnchor constraintLessThanOrEqualToAnchor:canvas.bottomAnchor constant:-12],
     self.contentWidthConstraint, height,
   ]];
+  [self applyTheme];
 }
 
 - (void)viewDidLayoutSubviews {
   [super viewDidLayoutSubviews];
-  const UIEdgeInsets insets = self.view.safeAreaInsets;
-  const CGFloat available = CGRectGetWidth(self.view.bounds) - insets.left - insets.right - 48;
-  self.contentWidthConstraint.constant = MIN(920, MAX(0, available));
-  BOOL accessibilityText = UIContentSizeCategoryIsAccessibilityCategory(self.traitCollection.preferredContentSizeCategory);
-  BOOL compact = CGRectGetHeight(self.view.bounds) - insets.top - insets.bottom < 500 && !accessibilityText;
-  self.choices.axis = (!compact && available < 660) || accessibilityText
-      ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
-  [self.content setCustomSpacing:compact ? 12 : 30 afterView:self.header];
-  for (UILabel *title in self.cardTitles) {
-    title.font = [UIFont preferredFontForTextStyle:compact ? UIFontTextStyleTitle2 : UIFontTextStyleTitle1];
+  UIEdgeInsets insets = self.view.safeAreaInsets;
+  CGFloat available = CGRectGetWidth(self.view.bounds) - insets.left - insets.right - 32;
+  self.contentWidthConstraint.constant = MIN(1040, MAX(0, available));
+  BOOL largeText = UIContentSizeCategoryIsAccessibilityCategory(self.traitCollection.preferredContentSizeCategory);
+  BOOL stacked = available < 600 || largeText;
+  for (UIStackView *row in self.rows) {
+    row.axis = stacked ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
+    row.alignment = stacked ? UIStackViewAlignmentFill : UIStackViewAlignmentCenter;
   }
-  for (UIView *detail in self.compactDetails) detail.hidden = compact;
+  self.header.axis = largeText ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
+  self.footer.axis = stacked ? UILayoutConstraintAxisVertical : UILayoutConstraintAxisHorizontal;
+  for (UILabel *title in self.cardTitles) {
+    title.font = [UIFontMetrics.defaultMetrics scaledFontForFont:
+        [UIFont systemFontOfSize:available > 850 ? 28 : 22 weight:UIFontWeightSemibold]];
+  }
 }
 
 - (UIInterfaceOrientationMask)supportedInterfaceOrientations {
   return UIInterfaceOrientationMaskLandscape;
 }
-
 @end
 
 @interface KartPadFirstLaunchHost : NSObject <UIDocumentPickerDelegate,
@@ -1467,7 +1591,7 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
       [self presentGameDataPicker];
     });
   }]];
-  [options addAction:[UIAlertAction actionWithTitle:@"Import from This Installation's Folder..."
+  [options addAction:[UIAlertAction actionWithTitle:@"Import from Extracted Folder…"
                                                style:UIAlertActionStyleDefault
                                              handler:^(UIAlertAction *action) {
     (void)action;
@@ -1585,6 +1709,10 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   };
   NSString *requestedProfile = [NSUserDefaults.standardUserDefaults
       stringForKey:kKartPadRequestedRuntimeProfileKey];
+  if (gameDataReady && [NSProcessInfo.processInfo.environment[@"KARTPAD_UI_PREVIEW"] isEqualToString:@"report"]) requestedProfile=@"base";
+  if (requestedProfile.length == 0 && gameDataReady) {
+    requestedProfile = [NSUserDefaults.standardUserDefaults stringForKey:kKartPadPreferredGameKey];
+  }
   if ([requestedProfile isEqualToString:@"retro_rewind"] ||
       [requestedProfile isEqualToString:@"base"]) {
     [NSUserDefaults.standardUserDefaults
@@ -1618,6 +1746,35 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
 
 @end
 
+// A scrollable form stays usable in landscape and above the software keyboard.
+@interface KartPadReportFormController : UIViewController
+@property(nonatomic,copy) void (^submit)(NSDictionary *, BOOL);
+@property(nonatomic,strong) NSArray<UITextField *> *fields;
+@end
+@implementation KartPadReportFormController
+- (void)viewDidLoad {
+  [super viewDidLoad]; self.title=@"Report a Problem"; self.view.backgroundColor=UIColor.systemBackgroundColor;
+  self.navigationItem.leftBarButtonItem=[[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemCancel target:self action:@selector(cancel)];
+  UIScrollView *scroll=[UIScrollView new]; scroll.translatesAutoresizingMaskIntoConstraints=NO; scroll.keyboardDismissMode=UIScrollViewKeyboardDismissModeInteractive; [self.view addSubview:scroll];
+  UIStackView *stack=[UIStackView new]; stack.axis=UILayoutConstraintAxisVertical; stack.spacing=16; stack.translatesAutoresizingMaskIntoConstraints=NO; [scroll addSubview:stack];
+  UILabel *intro=[UILabel new]; intro.text=@"Describe what happened. Device details and recent logs are added for review. Nothing is uploaded automatically."; intro.numberOfLines=0; intro.font=[UIFont preferredFontForTextStyle:UIFontTextStyleBody]; intro.adjustsFontForContentSizeCategory=YES; [stack addArrangedSubview:intro];
+  NSMutableArray *fields=[NSMutableArray array];
+  NSArray *labels=@[@"What went wrong?",@"Course or menu, and what you were doing",@"How often does it happen?"];
+  for(NSString *title in labels){ UILabel *label=[UILabel new];label.text=title;label.numberOfLines=0;label.font=[UIFont preferredFontForTextStyle:UIFontTextStyleHeadline];[stack addArrangedSubview:label]; UITextField *field=[UITextField new];field.borderStyle=UITextBorderStyleRoundedRect;field.placeholder=title;field.accessibilityLabel=title;field.font=[UIFont preferredFontForTextStyle:UIFontTextStyleBody];field.adjustsFontForContentSizeCategory=YES;[field.heightAnchor constraintGreaterThanOrEqualToConstant:44].active=YES;[stack addArrangedSubview:field];[fields addObject:field]; }
+  self.fields=fields;
+  NSArray *buttons=@[@"Save or Share Report…",@"Review & Continue to GitHub…",@"Reporting Guide"];
+  SEL selectors[]={@selector(share),@selector(github),@selector(guide)};
+  for(NSUInteger i=0;i<buttons.count;++i){UIButton *button=[UIButton buttonWithType:UIButtonTypeSystem];UIButtonConfiguration *config=i==1?UIButtonConfiguration.filledButtonConfiguration:UIButtonConfiguration.tintedButtonConfiguration;config.title=buttons[i];button.configuration=config;button.titleLabel.numberOfLines=0;[button.heightAnchor constraintGreaterThanOrEqualToConstant:48].active=YES;[button addTarget:self action:selectors[i] forControlEvents:UIControlEventTouchUpInside];[stack addArrangedSubview:button];}
+  UILayoutGuide *safe=self.view.safeAreaLayoutGuide;
+  [NSLayoutConstraint activateConstraints:@[[scroll.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],[scroll.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],[scroll.topAnchor constraintEqualToAnchor:safe.topAnchor],[scroll.bottomAnchor constraintEqualToAnchor:self.view.keyboardLayoutGuide.topAnchor],[stack.leadingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.leadingAnchor constant:20],[stack.trailingAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.trailingAnchor constant:-20],[stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:16],[stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20],[stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-40]]];
+}
+- (void)cancel { [self dismissViewControllerAnimated:YES completion:nil]; }
+- (void)finish:(BOOL)github { NSDictionary *answers=@{@"problem":self.fields[0].text?:@"",@"context":self.fields[1].text?:@"",@"frequency":self.fields[2].text?:@""};void (^submit)(NSDictionary *,BOOL)=self.submit;[self.view endEditing:YES];[self dismissViewControllerAnimated:YES completion:^{if(submit)submit(answers,github);}]; }
+- (void)share {[self finish:NO];}
+- (void)github {[self finish:YES];}
+- (void)guide {[UIApplication.sharedApplication openURL:[NSURL URLWithString:@"https://github.com/chrissotraidis/kartpad/blob/main/docs/REPORTING.md"] options:@{} completionHandler:nil];}
+@end
+
 // The acknowledgment is deliberately local to one report and starts unchecked.
 @interface KartPadReportReviewController : UIViewController
 @property(nonatomic, strong) NSURL *reportURL;
@@ -1645,7 +1802,7 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   NSString *logText = self.reportURL ? [NSString stringWithContentsOfURL:self.reportURL encoding:NSUTF8StringEncoding error:&readError] : nil;
   const BOOL readable = logText != nil;
   log.text = logText;
-  if (!readable) log.text = @"The saved log could not be read. You can explain the problem using ‘I can’t attach the log’.";
+  if (!readable) log.text = @"The saved log could not be read. Choose Continue Without a Log to describe the problem on GitHub.";
   log.accessibilityLabel = @"Diagnostic log";
   self.reviewButton = [UIButton buttonWithType:UIButtonTypeSystem];
   self.reviewButton.contentHorizontalAlignment = UIControlContentHorizontalAlignmentLeading;
@@ -1660,12 +1817,12 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   share.enabled = self.reportURL != nil;
   [share addTarget:self action:@selector(shareLog:) forControlEvents:UIControlEventTouchUpInside];
   self.continueButton = [UIButton buttonWithType:UIButtonTypeSystem];
-  [self.continueButton setTitle:@"Open GitHub — I’ll Attach the Log" forState:UIControlStateNormal];
+  [self.continueButton setTitle:@"Choose Project — I’ll Attach the Log" forState:UIControlStateNormal];
   self.continueButton.titleLabel.numberOfLines = 0;
   self.continueButton.enabled = NO;
   [self.continueButton addTarget:self action:@selector(continueWithLog) forControlEvents:UIControlEventTouchUpInside];
   UIButton *unable = [UIButton buttonWithType:UIButtonTypeSystem];
-  [unable setTitle:@"I can’t attach the log…" forState:UIControlStateNormal];
+  [unable setTitle:@"Continue Without a Log" forState:UIControlStateNormal];
   [unable addTarget:self action:@selector(explainMissingLog) forControlEvents:UIControlEventTouchUpInside];
   UIStackView *stack = [[UIStackView alloc] initWithArrangedSubviews:@[instructions, log, self.reviewButton, share, self.continueButton, unable]];
   stack.axis = UILayoutConstraintAxisVertical;
@@ -1686,7 +1843,7 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
     [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:12],
     [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-12],
     [stack.widthAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.widthAnchor constant:-32],
-    [log.heightAnchor constraintGreaterThanOrEqualToConstant:180],
+    [log.heightAnchor constraintEqualToConstant:220],
   ]];
 }
 - (void)cancel { [self dismissViewControllerAnimated:YES completion:nil]; }
@@ -1703,32 +1860,16 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
 }
 - (void)finishWithEvidence:(NSString *)evidence {
   void (^continuation)(NSString *) = self.continueReport;
-  [self dismissViewControllerAnimated:YES completion:^{ if (continuation) continuation(evidence); }];
+  if (continuation) continuation(evidence);
 }
 - (void)continueWithLog {
   if (!self.reviewButton.selected) return;
   [self finishWithEvidence:[NSString stringWithFormat:@"I reviewed the diagnostic log for private information. I will attach %@ manually below; it has not been uploaded by KartPad. Add a screenshot for visual issues.", self.reportURL.lastPathComponent]];
 }
 - (void)explainMissingLog {
-  UIAlertController *prompt = [UIAlertController alertControllerWithTitle:@"Why can’t you attach the log?" message:@"Explain what prevents you from attaching it. This explanation is included in the GitHub draft; no log is uploaded." preferredStyle:UIAlertControllerStyleAlert];
-  [prompt addTextFieldWithConfigurationHandler:^(UITextField *field) { field.placeholder = @"Reason (required)"; }];
-  [prompt addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
-  __weak KartPadReportReviewController *weakSelf = self;
-  __weak UIAlertController *weakPrompt = prompt;
-  UIAlertAction *continueAction = [UIAlertAction actionWithTitle:@"Continue" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-    NSString *reason = [weakPrompt.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    if (reason.length == 0) return;
-    [weakSelf finishWithEvidence:[NSString stringWithFormat:@"Diagnostic log not attached. Reason: %@\nNo log was uploaded by KartPad.", reason]];
-  }];
-  continueAction.enabled = NO;
-  [prompt addAction:continueAction];
-  __weak UIAlertAction *weakContinue = continueAction;
-  [prompt.textFields.firstObject addAction:[UIAction actionWithHandler:^(__kindof UIAction *action) {
-    NSString *reason = [weakPrompt.textFields.firstObject.text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
-    weakContinue.enabled = reason.length > 0;
-  }] forControlEvents:UIControlEventEditingChanged];
-  [self presentViewController:prompt animated:YES completion:nil];
+  [self finishWithEvidence:@"Diagnostic log not included yet. No log was uploaded by KartPad. I can add reviewed diagnostics or screenshots in the browser."];
 }
+
 @end
 
 @implementation KartPadGameOverlay
@@ -2169,7 +2310,7 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
         continue;
       }
       if ([action.title isEqualToString:@"Controller Button Mapping…"]) {
-        controllerMapping = action;
+        controllerMapping = [UIAction actionWithTitle:action.title image:action.image identifier:action.identifier handler:^(__kindof UIAction *selection){if(weakSelf.buttonMappingRequested)weakSelf.buttonMappingRequested();}];
         continue;
       }
       if ([action.title isEqualToString:@"Touch Control Settings…"]) {
@@ -2208,7 +2349,7 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
             [dataElement.title isEqualToString:@"Import from SunPad Folder"]) {
           UIAction *sourceAction = (UIAction *)dataElement;
           UIAction *replacement =
-              [UIAction actionWithTitle:@"Import from This Installation's Folder..."
+              [UIAction actionWithTitle:@"Import from Extracted Folder…"
                                   image:sourceAction.image
                              identifier:sourceAction.identifier
                                 handler:^(__kindof UIAction *action) {
@@ -2220,6 +2361,11 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
           replacement.discoverabilityTitle = sourceAction.discoverabilityTitle;
           [dataItems addObject:replacement];
         } else {
+          if ([dataElement isKindOfClass:UIAction.class]) {
+            UIAction *renamed = (UIAction *)dataElement;
+            if ([renamed.title isEqualToString:@"Import or Reimport Game Data"]) renamed.title = @"Import or Reimport Wii Disc Image…";
+            if ([renamed.title isEqualToString:@"Remove Stored Game Data"]) renamed.title = @"Remove Stored Game Data…";
+          }
           [dataItems addObject:dataElement];
         }
       }
@@ -2234,6 +2380,11 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
         }
       }];
       [dataItems insertObject:miiManager atIndex:0];
+      [dataItems insertObject:[UIAction actionWithTitle:@"Time Trial Ghosts (.rkg)…" image:[UIImage systemImageNamed:@"flag.checkered"] identifier:nil handler:^(__kindof UIAction *action) {
+        if (weakSelf.ghostManagerRequested) weakSelf.ghostManagerRequested();
+      }] atIndex:1];
+      [dataItems insertObject:[UIAction actionWithTitle:@"Manage Saves…" image:[UIImage systemImageNamed:@"externaldrive"] identifier:nil handler:^(__kindof UIAction *action) { if (weakSelf.saveManagerRequested) weakSelf.saveManagerRequested(); }] atIndex:2];
+      [dataItems insertObject:[UIAction actionWithTitle:@"Manage Retro Rewind…" image:[UIImage systemImageNamed:@"arrow.clockwise"] identifier:nil handler:^(__kindof UIAction *action) { if (weakSelf.retroManagerRequested) weakSelf.retroManagerRequested(); }] atIndex:3];
       gameData = [UIMenu menuWithTitle:dataMenu.title
                                  image:[UIImage systemImageNamed:@"externaldrive"]
                             identifier:dataMenu.identifier
@@ -2246,6 +2397,7 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   NSMutableArray<UIMenuElement *> *controlItems = [NSMutableArray array];
   if (controllerMapping != nil) [controlItems addObject:controllerMapping];
   if (touchControlSettings != nil) [controlItems addObject:touchControlSettings];
+  [controlItems addObject:[UIAction actionWithTitle:@"Controller Player Setup…" image:[UIImage systemImageNamed:@"gamecontroller"] identifier:nil handler:^(__kindof UIAction *action) { [weakSelf.delegate gameOverlayRequestsControllerMapping:weakSelf]; }]];
   [controlItems addObject:motionSteering];
   [controlItems addObject:experimentalWiimote];
   UIMenu *controls =
@@ -2258,6 +2410,18 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   NSMutableArray<UIMenuElement *> *displayItems = [NSMutableArray array];
   if (aspectRatio != nil) [displayItems addObject:aspectRatio];
   if (renderResolution != nil) [displayItems addObject:renderResolution];
+  NSMutableArray *sizes=[NSMutableArray array];
+  NSArray *sizeNames=@[@"Small",@"Medium",@"Large"];
+  for (NSInteger index=0;index<3;++index) {
+    UIAction *size=[UIAction actionWithTitle:sizeNames[index] image:nil identifier:nil handler:^(__kindof UIAction *action) {
+      [NSUserDefaults.standardUserDefaults setInteger:index forKey:@"KartPadFPSCounterSize"];
+      gKartPadFpsScale.store(index==0?1.0f:index==1?1.5f:2.0f,std::memory_order_relaxed);
+      [weakSelf refreshMenuButton];
+    }];
+    size.state=[NSUserDefaults.standardUserDefaults integerForKey:@"KartPadFPSCounterSize"]==index ? UIMenuElementStateOn : UIMenuElementStateOff;
+    [sizes addObject:size];
+  }
+  [displayItems addObject:[UIMenu menuWithTitle:@"FPS Counter Size" children:sizes]];
   UIMenu *display =
       [UIMenu menuWithTitle:@"Display"
                       image:[UIImage systemImageNamed:@"display"]
@@ -2285,128 +2449,160 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
 }
 
 - (void)reportProblem {
-  UIViewController *presenter = KartPadVisibleViewController(self.window);
-  if (presenter == nil) return;
-  NSString *instructions =
-      @"Describe the problem. KartPad adds device details and recent logs.\n\n"
-       "Attach the log and relevant screenshots. GitHub reports are public; review before posting.";
-  UIAlertController *prompt =
-      [UIAlertController alertControllerWithTitle:@"Report a Problem"
-                                          message:instructions
-                                   preferredStyle:UIAlertControllerStyleAlert];
-  [prompt addTextFieldWithConfigurationHandler:^(UITextField *field) {
-    field.placeholder = @"What went wrong?";
-    field.clearButtonMode = UITextFieldViewModeWhileEditing;
-  }];
-  [prompt addTextFieldWithConfigurationHandler:^(UITextField *field) {
-    field.placeholder = @"Area and what you were doing (optional)";
-    field.clearButtonMode = UITextFieldViewModeWhileEditing;
-  }];
-  [prompt addTextFieldWithConfigurationHandler:^(UITextField *field) {
-    field.placeholder = @"Every time, sometimes, once, or not sure?";
-    field.clearButtonMode = UITextFieldViewModeWhileEditing;
-  }];
-  [prompt addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                              style:UIAlertActionStyleCancel
-                                            handler:nil]];
-  __weak KartPadGameOverlay *weakSelf = self;
-  [prompt addAction:[UIAlertAction actionWithTitle:@"Share Report…"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *action) {
-    (void)action;
-    [weakSelf createDiagnosticReportFromPrompt:prompt openGitHub:NO];
-  }]];
-  [prompt addAction:[UIAlertAction actionWithTitle:@"Report on GitHub"
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *action) {
-    (void)action;
-    [weakSelf createDiagnosticReportFromPrompt:prompt openGitHub:YES];
-  }]];
-  prompt.preferredAction = prompt.actions.lastObject;
-  [presenter presentViewController:prompt animated:YES completion:nil];
+  UIViewController *presenter=KartPadVisibleViewController(self.window);if(!presenter)return;
+  KartPadReportFormController *form=[KartPadReportFormController new];
+  __weak KartPadGameOverlay *weakSelf=self;
+  form.submit=^(NSDictionary *answers,BOOL github){[weakSelf createDiagnosticReportWithAnswers:answers openGitHub:github];};
+  UINavigationController *navigation=[[UINavigationController alloc] initWithRootViewController:form];navigation.modalPresentationStyle=UIModalPresentationFormSheet;
+  [presenter presentViewController:navigation animated:YES completion:nil];
 }
 
-- (void)createDiagnosticReportFromPrompt:(UIAlertController *)prompt
-                              openGitHub:(BOOL)openGitHub {
-  NSString *problem = prompt.textFields.count > 0 ? prompt.textFields[0].text : @"";
-  NSString *context = prompt.textFields.count > 1 ? prompt.textFields[1].text : @"";
-  NSString *frequency = prompt.textFields.count > 2 ? prompt.textFields[2].text : @"";
+- (void)createDiagnosticReportWithAnswers:(NSDictionary<NSString *,NSString *> *)answers openGitHub:(BOOL)openGitHub {
   NSString *reportID = [NSString stringWithFormat:@"KP-%@",
       [[[NSUUID UUID] UUIDString] substringToIndex:8]];
-  NSDictionary<NSString *, NSString *> *answers = @{
-    @"problem" : problem ?: @"",
-    @"context" : context ?: @"",
-    @"frequency" : frequency ?: @"",
-  };
   NSString *technicalContext = [self.delegate gameOverlayDiagnosticContext:self];
-  SunPadLog(@"diagnostic report requested id=%@ destination=%@",
-            reportID, openGitHub ? @"github" : @"share-sheet");
-  NSError *error = nil;
-  NSURL *reportURL = SunPadDiagnosticsReportURL(
-      reportID, answers, technicalContext, &error);
   UIViewController *presenter = KartPadVisibleViewController(self.window);
-  if (reportURL == nil && !openGitHub) {
-    UIAlertController *alert =
-        [UIAlertController alertControllerWithTitle:@"Diagnostic Report Unavailable"
-                                            message:error.localizedDescription
-                                     preferredStyle:UIAlertControllerStyleAlert];
-    [alert addAction:[UIAlertAction actionWithTitle:@"OK"
-                                              style:UIAlertActionStyleDefault
-                                            handler:nil]];
-    [presenter presentViewController:alert animated:YES completion:nil];
-    return;
-  }
+  if (presenter == nil) return;
+  UIAlertController *preparing = [UIAlertController alertControllerWithTitle:@"Preparing Report…"
+      message:@"Collecting recent diagnostics. Nothing is uploaded."
+      preferredStyle:UIAlertControllerStyleAlert];
+  [presenter presentViewController:preparing animated:YES completion:^{
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED, 0), ^{
+      SunPadLog(@"diagnostic report requested id=%@ destination=%@",
+                reportID, openGitHub ? @"github" : @"share-sheet");
+      NSError *error = nil;
+      NSURL *reportURL = SunPadDiagnosticsReportURL(
+          reportID, answers, technicalContext, &error);
+      NSString *report = reportURL ? [NSString stringWithContentsOfURL:reportURL
+                                                   encoding:NSUTF8StringEncoding
+                                                      error:&error] : nil;
+      NSURL *kartPadReportURL = nil;
+      if (report != nil) {
+        report = [report stringByReplacingOccurrencesOfString:
+            @"SunPad Diagnostic Report v2" withString:@"KartPad Diagnostic Report v2"];
+        report = [report stringByReplacingOccurrencesOfString:
+            @"issuesURL=https://github.com/chrissotraidis/sunpad/issues"
+                                                     withString:
+            @"issuesURL=https://github.com/chrissotraidis/kartpad/issues"];
+        report = [report stringByAppendingString:
+            @"\nreportOrigin=KartPad (modified WiiCompiled platform integration)\n"
+             "upstreamProject=https://github.com/patchzyy/Wiicompiled\n"];
+        NSString *candidateBaseline = [NSBundle.mainBundle objectForInfoDictionaryKey:@"KartPadCandidateNativeBaseline"];
+        NSString *candidateAdapter = [NSBundle.mainBundle objectForInfoDictionaryKey:@"KartPadCandidateReportingSHA256"];
+        if (candidateBaseline.length > 0 && candidateAdapter.length > 0) {
+          report = [report stringByAppendingFormat:
+              @"candidateScope=reporting adapter rebuild; native baseline retained\nnativeBaseline=%@\nreportingAdapterSHA256=%@\n",
+              candidateBaseline, candidateAdapter];
+        }
+        NSURL *destination = [reportURL.URLByDeletingLastPathComponent
+            URLByAppendingPathComponent:@"Latest-KartPad-Diagnostic.log"];
+        if ([report writeToURL:destination atomically:YES
+                     encoding:NSUTF8StringEncoding error:&error]) {
+          kartPadReportURL = destination;
+        }
+      }
+      reportURL = kartPadReportURL;
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [preparing dismissViewControllerAnimated:YES completion:^{
+          if (reportURL == nil && !openGitHub) {
+            UIAlertController *alert =
+                [UIAlertController alertControllerWithTitle:@"Diagnostic Report Unavailable"
+                                                    message:error.localizedDescription ?: @"The report could not be prepared. Try again or report on GitHub without a log."
+                                             preferredStyle:UIAlertControllerStyleAlert];
+            [alert addAction:[UIAlertAction actionWithTitle:@"OK"
+                                                      style:UIAlertActionStyleDefault
+                                                    handler:nil]];
+            [presenter presentViewController:alert animated:YES completion:nil];
+            return;
+          }
 
-  NSString *report = reportURL ? [NSString stringWithContentsOfURL:reportURL
-                                               encoding:NSUTF8StringEncoding
-                                                  error:nil] : nil;
-  if (report != nil) {
-    report = [report stringByReplacingOccurrencesOfString:
-        @"SunPad Diagnostic Report v2" withString:@"KartPad Diagnostic Report v2"];
-    report = [report stringByReplacingOccurrencesOfString:
-        @"issuesURL=https://github.com/chrissotraidis/sunpad/issues"
-                                                 withString:
-        @"issuesURL=https://github.com/chrissotraidis/kartpad/issues"];
-    [report writeToURL:reportURL atomically:YES
-               encoding:NSUTF8StringEncoding error:nil];
-  }
+          if (openGitHub) {
+            KartPadReportReviewController *review = [[KartPadReportReviewController alloc] init];
+            review.reportURL = reportURL;
+            __weak KartPadGameOverlay *weakSelf = self;
+            review.continueReport = ^(NSString *evidence) {
+              NSMutableDictionary *reviewedAnswers = [answers mutableCopy];
+              reviewedAnswers[@"diagnostics"] = evidence;
+              [weakSelf chooseReportDestinationWithID:reportID answers:reviewedAnswers];
+            };
+            UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:review];
+            navigation.modalPresentationStyle = UIModalPresentationFormSheet;
+            [presenter presentViewController:navigation animated:YES completion:nil];
+            return;
+          }
 
-  if (openGitHub) {
-    KartPadReportReviewController *review = [[KartPadReportReviewController alloc] init];
-    review.reportURL = reportURL;
-    __weak KartPadGameOverlay *weakSelf = self;
-    review.continueReport = ^(NSString *evidence) {
-      NSMutableDictionary *reviewedAnswers = [answers mutableCopy];
-      reviewedAnswers[@"diagnostics"] = evidence;
-      [weakSelf openGitHubReportWithID:reportID answers:reviewedAnswers];
-    };
-    UINavigationController *navigation = [[UINavigationController alloc] initWithRootViewController:review];
-    navigation.modalPresentationStyle = UIModalPresentationFormSheet;
-    [presenter presentViewController:navigation animated:YES completion:nil];
-    return;
-  }
+          UIActivityViewController *share =
+              [[UIActivityViewController alloc] initWithActivityItems:@[reportURL]
+                                               applicationActivities:nil];
+          UIPopoverPresentationController *popover = share.popoverPresentationController;
+          UIButton *menuButton = (UIButton *)KartPadSubviewWithAccessibilityLabel(
+              self, @"Menu", UIButton.class);
+          popover.sourceView = menuButton ?: self;
+          popover.sourceRect = menuButton != nil ? menuButton.bounds : self.bounds;
+          [presenter presentViewController:share animated:YES completion:nil];
+        }];
+      });
+    });
+  }];
+}
 
-  UIActivityViewController *share =
-      [[UIActivityViewController alloc] initWithActivityItems:@[reportURL]
-                                       applicationActivities:nil];
-  UIPopoverPresentationController *popover = share.popoverPresentationController;
-  UIButton *menuButton = (UIButton *)KartPadSubviewWithAccessibilityLabel(
-      self, @"Menu", UIButton.class);
-  popover.sourceView = menuButton ?: self;
-  popover.sourceRect = menuButton != nil ? menuButton.bounds : self.bounds;
-  [presenter presentViewController:share animated:YES completion:nil];
+- (void)chooseReportDestinationWithID:(NSString *)reportID
+                               answers:(NSDictionary<NSString *, NSString *> *)answers {
+  UIAlertController *choice = [UIAlertController alertControllerWithTitle:@"Where should this report go?"
+      message:@"KartPad: device, controls, setup, or unsure. WiiCompiled: a known shared runtime issue. Search both trackers to find an existing report. Your description and reviewed log stay available."
+      preferredStyle:UIAlertControllerStyleAlert];
+  [choice addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+  __weak KartPadGameOverlay *weakSelf = self;
+  [choice addAction:[UIAlertAction actionWithTitle:@"KartPad" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [choice dismissViewControllerAnimated:YES completion:^{
+      [weakSelf openGitHubReportWithID:reportID answers:answers upstream:NO];
+    }];
+  }]];
+  [choice addAction:[UIAlertAction actionWithTitle:@"WiiCompiled" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [choice dismissViewControllerAnimated:YES completion:^{
+      UIAlertController *kind = [UIAlertController alertControllerWithTitle:@"WiiCompiled Report"
+          message:@"Choose a report type. Only confirm upstream checks you have actually tested."
+          preferredStyle:UIAlertControllerStyleAlert];
+      NSArray<NSString *> *titles = @[@"Crash or Freeze", @"Other Bug", @"Performance"];
+      NSArray<NSString *> *templates = @[@"1-crash-report.yml", @"2-bug-report.yml", @"4-performance.yml"];
+      for (NSUInteger index = 0; index < titles.count; ++index) {
+        NSString *reportTemplate = templates[index];
+        [kind addAction:[UIAlertAction actionWithTitle:titles[index] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+          NSMutableDictionary *typedAnswers = [answers mutableCopy];
+          typedAnswers[@"upstreamTemplate"] = reportTemplate;
+          [kind dismissViewControllerAnimated:YES completion:^{
+            [weakSelf openGitHubReportWithID:reportID answers:typedAnswers upstream:YES];
+          }];
+        }]];
+      }
+      [kind addAction:[UIAlertAction actionWithTitle:@"Back" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+        [kind dismissViewControllerAnimated:YES completion:^{
+          [weakSelf chooseReportDestinationWithID:reportID answers:answers];
+        }];
+      }]];
+      [KartPadVisibleViewController(weakSelf.window) presentViewController:kind animated:YES completion:nil];
+    }];
+  }]];
+  [choice addAction:[UIAlertAction actionWithTitle:@"Search Both Trackers" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [choice dismissViewControllerAnimated:YES completion:^{
+      [weakSelf presentReportBrowserURL:[NSURL URLWithString:@"https://github.com/search?q=is%3Aissue+repo%3Achrissotraidis%2Fkartpad+repo%3Apatchzyy%2FWiicompiled&type=issues"]];
+    }];
+  }]];
+  [KartPadVisibleViewController(self.window) presentViewController:choice animated:YES completion:nil];
 }
 
 - (void)openGitHubReportWithID:(NSString *)reportID
-                       answers:(NSDictionary<NSString *, NSString *> *)answers {
+                       answers:(NSDictionary<NSString *, NSString *> *)answers
+                      upstream:(BOOL)upstream {
   NSBundle *bundle = NSBundle.mainBundle;
   NSString *version = [bundle objectForInfoDictionaryKey:
       @"CFBundleShortVersionString"] ?: @"unknown";
   NSString *build = [bundle objectForInfoDictionaryKey:
       @"CFBundleVersion"] ?: @"unknown";
-  NSString *platform =
-      self.traitCollection.userInterfaceIdiom == UIUserInterfaceIdiomPad
-          ? @"iPad" : @"iPhone";
+  UIDevice *device = UIDevice.currentDevice;
+  // Device family and OS only: never include the user-assigned name or identifiers.
+  NSString *platform = [NSString stringWithFormat:@"%@, %@ %@ (add exact model if known)",
+      device.model, device.systemName, device.systemVersion];
   NSString *problem = answers[@"problem"].length > 0
       ? answers[@"problem"] : @"KartPad problem";
   if (problem.length > 100) problem = [problem substringToIndex:100];
@@ -2424,16 +2620,59 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
     [NSURLQueryItem queryItemWithName:@"performance-profile"
                                 value:[self.delegate gameOverlayPerformanceProfile:self]],
     [NSURLQueryItem queryItemWithName:@"summary" value:answers[@"problem"]],
-    [NSURLQueryItem queryItemWithName:@"context" value:answers[@"context"]],
+    [NSURLQueryItem queryItemWithName:@"context" value:[NSString stringWithFormat:
+        @"Report origin: KartPad (modified WiiCompiled platform integration).\n%@",
+        answers[@"context"] ?: @""]],
     [NSURLQueryItem queryItemWithName:@"frequency" value:answers[@"frequency"]],
     [NSURLQueryItem queryItemWithName:@"diagnostics" value:answers[@"diagnostics"] ?: @"Diagnostic log not attached."],
   ];
+  if (upstream) {
+    NSString *reportTemplate = answers[@"upstreamTemplate"] ?: @"2-bug-report.yml";
+    NSString *prefix = [reportTemplate isEqualToString:@"1-crash-report.yml"] ? @"Crash"
+        : ([reportTemplate isEqualToString:@"4-performance.yml"] ? @"Perf" : @"Bug");
+    components = [NSURLComponents componentsWithString:@"https://github.com/patchzyy/Wiicompiled/issues/new"];
+    components.queryItems = @[
+      [NSURLQueryItem queryItemWithName:@"template" value:reportTemplate],
+      [NSURLQueryItem queryItemWithName:@"title" value:[NSString stringWithFormat:@"[%@] [KartPad] %@", prefix, problem]],
+      [NSURLQueryItem queryItemWithName:@"version" value:[NSString stringWithFormat:
+          @"KartPad %@ (build %@), modified WiiCompiled integration; not verified on latest stock WiiCompiled", version, build]],
+      [NSURLQueryItem queryItemWithName:@"what" value:answers[@"problem"] ?: @""],
+      [NSURLQueryItem queryItemWithName:@"doing" value:[NSString stringWithFormat:
+          @"KartPad report %@. %@\nFrequency: %@\n%@", reportID, answers[@"problem"] ?: @"", answers[@"frequency"] ?: @"", answers[@"context"] ?: @""]],
+      [NSURLQueryItem queryItemWithName:@"os" value:platform],
+      [NSURLQueryItem queryItemWithName:@"gpu" value:@"Apple device, Metal; exact GPU not collected"],
+      [NSURLQueryItem queryItemWithName:@"logs" value:answers[@"diagnostics"] ?: @"Diagnostic log not attached."],
+    ];
+  }
   NSURL *url = components.URL;
   if (url == nil) return;
-  [UIApplication.sharedApplication openURL:url options:@{}
-                         completionHandler:^(BOOL success) {
-    if (!success) SunPadLog(@"diagnostic github open failed id=%@", reportID);
-  }];
+  [self presentReportBrowserURL:url];
+}
+
+- (void)presentReportBrowserURL:(NSURL *)url {
+  self.reportDraftURL = url;
+  SFSafariViewController *browser = [[SFSafariViewController alloc] initWithURL:url];
+  browser.delegate = self;
+  [KartPadVisibleViewController(self.window) presentViewController:browser animated:YES completion:nil];
+}
+
+- (void)safariViewController:(SFSafariViewController *)controller didCompleteInitialLoad:(BOOL)didLoadSuccessfully {
+  if (didLoadSuccessfully) return;
+  NSURL *url = self.reportDraftURL;
+  UIAlertController *failure = [UIAlertController alertControllerWithTitle:@"GitHub Could Not Be Loaded"
+      message:@"Your report is still available. Retry, copy the draft link, or return to your report."
+      preferredStyle:UIAlertControllerStyleAlert];
+  __weak KartPadGameOverlay *weakSelf = self;
+  [failure addAction:[UIAlertAction actionWithTitle:@"Retry" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    [controller.presentingViewController dismissViewControllerAnimated:YES completion:^{ [weakSelf presentReportBrowserURL:url]; }];
+  }]];
+  [failure addAction:[UIAlertAction actionWithTitle:@"Copy Draft Link" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+    UIPasteboard.generalPasteboard.URL = url;
+  }]];
+  [failure addAction:[UIAlertAction actionWithTitle:@"Back to Report" style:UIAlertActionStyleCancel handler:^(UIAlertAction *action) {
+    [controller.presentingViewController dismissViewControllerAnimated:YES completion:nil];
+  }]];
+  [controller presentViewController:failure animated:YES completion:nil];
 }
 
 - (void)rPressureChanged:(uint8_t)pressure fullPress:(BOOL)fullPress {
@@ -2531,6 +2770,9 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   SunPadGameOverlay *_overlay;
   UIAlertController *_gameDataProgressAlert;
   BOOL _choosingMiiImport;
+  BOOL _choosingGhostImport;
+  NSString *_saveImportProfile;
+  NSUInteger _ghostLicense;
 }
 
 - (instancetype)initWithSDLWindow:(SDL_Window *)window {
@@ -2539,6 +2781,8 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
     return nil;
   }
 
+  NSInteger fpsSize=[NSUserDefaults.standardUserDefaults integerForKey:@"KartPadFPSCounterSize"];
+  gKartPadFpsScale.store(fpsSize==0?1.0f:fpsSize==1?1.5f:2.0f,std::memory_order_relaxed);
   _sdlWindow = window;
   SDL_PropertiesID properties = SDL_GetWindowProperties(window);
   UIWindow *uiWindow = (__bridge UIWindow *)SDL_GetPointerProperty(
@@ -2562,9 +2806,15 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   overlay.motionSteeringRequested = ^{
     [weakSelf showMotionSteering];
   };
+  overlay.ghostManagerRequested = ^{ [weakSelf showGhostManager]; };
+  overlay.saveManagerRequested = ^{ [weakSelf showSaveManager]; };
+  overlay.buttonMappingRequested = ^{ [weakSelf showControllerButtonMapping]; };
+  overlay.retroManagerRequested = ^{ [weakSelf showRetroManager]; };
   overlay.miiManagerRequested = ^{
     [weakSelf showMiiManager];
   };
+  NSString *preview=NSProcessInfo.processInfo.environment[@"KARTPAD_UI_PREVIEW"];
+  (void)preview;
   overlay.wiimoteRequested = ^{
     [weakSelf showExperimentalWiimoteInfo];
   };
@@ -2594,6 +2844,12 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   SunPadDiagnosticsStart();
   NSLog(@"[KartPad] exact SunPad runtime overlay installed");
   return self;
+}
+
+- (void)showReportPreview {
+  [self reattachOverlayIfNeeded];
+  SunPadLog(@"UI preview report requested window=%d main=%d",_overlay.window!=nil,NSThread.isMainThread);
+  [_overlay reportProblem];
 }
 
 - (void)reattachOverlayIfNeeded {
@@ -3028,14 +3284,61 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
 - (NSString *)licenseTitleForRecord:(NSDictionary<NSString *, id> *)record {
   NSString *pending = record[@"pendingOperation"];
   NSString *suffix = [pending isEqualToString:@"delete"] ? @" · deletion pending" :
-      [pending isEqualToString:@"rename"] ? @" · name pending" : @"";
+      [pending isEqualToString:@"rename"] ? @" · name pending" :
+      [pending isEqualToString:@"mii"] ? @" · Mii link pending" :
+      [record[@"missingLinkedMii"] boolValue] ? @" · Mii missing" : @"";
   return [NSString stringWithFormat:@"%@ · Slot %lu · %@%@",
       record[@"profileTitle"] ?: @"Mario Kart Wii",
       (unsigned long)([record[@"slot"] unsignedIntegerValue] + 1),
       record[@"name"] ?: @"Unnamed", suffix];
 }
 
+- (void)chooseMiiForLicense:(NSDictionary<NSString *, id> *)record {
+  NSError *error = nil;
+  NSArray<NSDictionary<NSString *, id> *> *miis = KartPadMiiRecords(&error);
+  if (error != nil || miis.count == 0) {
+    [self showIntegrationAlert:@"No Miis Available"
+        message:error.localizedDescription ?: @"Import a Mii appearance in Player Identity, then return here to link it to this license."];
+    return;
+  }
+  UIViewController *controller = KartPadVisibleViewController(_window);
+  if (controller == nil) return;
+  UIAlertController *picker = [UIAlertController alertControllerWithTitle:@"Choose Mii for This License"
+      message:@"Choose the name and appearance this license should use."
+      preferredStyle:UIAlertControllerStyleActionSheet];
+  __weak KartPadRuntimeOverlayHost *weakSelf = self;
+  for (NSDictionary<NSString *, id> *mii in miis) {
+    [picker addAction:[UIAlertAction actionWithTitle:mii[@"name"] ?: @"Unnamed"
+        style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+      dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.35 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        UIAlertController *confirm = [UIAlertController alertControllerWithTitle:
+            [NSString stringWithFormat:@"Use %@?", mii[@"name"] ?: @"this Mii"]
+            message:[NSString stringWithFormat:@"%@, slot %lu, will use this Mii's name and appearance. Progress and friend code stay intact. Fully close KartPad from the app switcher and reopen to apply.",
+                record[@"profileTitle"], (unsigned long)([record[@"slot"] unsignedIntegerValue] + 1)]
+            preferredStyle:UIAlertControllerStyleAlert];
+        [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+        [confirm addAction:[UIAlertAction actionWithTitle:@"Save for Next Launch" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+          NSError *linkError = nil;
+          if (!KartPadStageLicenseMii(record[@"profileIdentifier"], [record[@"slot"] unsignedIntegerValue], record[@"createId"],
+                  [mii[@"slot"] unsignedIntegerValue], mii[@"createIdBytes"], &linkError)) {
+            [weakSelf showIntegrationAlert:@"Mii Link Not Scheduled" message:linkError.localizedDescription];
+            return;
+          }
+          [weakSelf showIntegrationAlert:@"Mii Link Scheduled"
+              message:@"Fully close KartPad from the app switcher and reopen it. The game will then use the selected Mii. Your progress and friend code are kept, with an automatic backup."];
+        }]];
+        [controller presentViewController:confirm animated:YES completion:nil];
+      });
+    }]];
+  }
+  [picker addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+  picker.popoverPresentationController.sourceView = _overlay;
+  picker.popoverPresentationController.sourceRect = CGRectMake(CGRectGetMidX(_overlay.bounds), CGRectGetMidY(_overlay.bounds), 1, 1);
+  [controller presentViewController:picker animated:YES completion:nil];
+}
+
 - (void)showLicenseNameEditorForRecord:(NSDictionary<NSString *, id> *)record {
+  if ([record[@"missingLinkedMii"] boolValue]) { [self chooseMiiForLicense:record]; return; }
   UIViewController *controller = KartPadVisibleViewController(_window);
   if (controller == nil) return;
   UIAlertController *editor = [UIAlertController
@@ -3111,10 +3414,12 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   if (controller == nil) return;
   UIAlertController *actions = [UIAlertController
       alertControllerWithTitle:[self licenseTitleForRecord:record]
-                       message:@"Fully close KartPad from the app switcher and reopen it to apply changes. Returning to the KartPad menu and resuming does not apply pending edits. Rename keeps this license’s account and progress. Delete removes only this slot; other licenses stay in place."
+                       message:[record[@"missingLinkedMii"] boolValue]
+          ? @"This license's Mii is missing. The game can show Player even when the saved name is correct. Choose a Mii to repair the link; progress and friend code are kept."
+          : @"Rename the name shown in the game. Progress and friend code are kept. Changes apply after fully closing and reopening KartPad."
                 preferredStyle:UIAlertControllerStyleActionSheet];
   __weak KartPadRuntimeOverlayHost *weakSelf = self;
-  [actions addAction:[UIAlertAction actionWithTitle:@"Rename License…"
+  [actions addAction:[UIAlertAction actionWithTitle:[record[@"missingLinkedMii"] boolValue] ? @"Choose Mii…" : @"Rename License…"
                                               style:UIAlertActionStyleDefault
                                             handler:^(UIAlertAction *action) {
     (void)action;
@@ -3262,12 +3567,9 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   NSString *summary = names.count == 0 ? @"No Miis found."
       : [names componentsJoinedByString:@", "];
   NSString *pending = KartPadHasPendingMiiChanges()
-      ? @"\n\nChanges are pending. Fully close KartPad from the app switcher and reopen it to apply them before making another change. Returning to the KartPad menu and resuming does not apply pending edits." : @"";
+      ? @"\n\nChange scheduled. Fully close KartPad from the app switcher and reopen to apply it." : @"";
   NSString *message = [NSString stringWithFormat:
-      @"%lu Mii appearance%@ available: %@\n%lu existing license%@ found.\n\nA Mii supplies your name and appearance. A game license stores your progress and friend code. Create a license with New inside the game, then select your Mii.%@",
-      (unsigned long)records.count, records.count == 1 ? @"" : @"s",
-      summary, (unsigned long)licenses.count,
-      licenses.count == 1 ? @"" : @"s", pending];
+      @"Choose your game license to change its displayed name. Original and Retro Rewind have separate saves.%@", pending];
   UIViewController *controller = KartPadVisibleViewController(_window);
   if (controller == nil) return;
   UIAlertController *manager = [UIAlertController
@@ -3388,6 +3690,26 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
     didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls {
   (void)controller;
   NSURL *url = urls.firstObject;
+  if (_saveImportProfile) {
+    NSString *profile=_saveImportProfile;_saveImportProfile=nil;NSError *error=nil;
+    NSNumber *size=nil;[url getResourceValue:&size forKey:NSURLFileSizeKey error:&error];
+    NSData *data=size.unsignedLongLongValue==0x2bc000?[NSData dataWithContentsOfURL:url options:0 error:&error]:nil;
+    BOOL staged=data&&KartPadStageSaveRestore(profile,data,&error);
+    [self showIntegrationAlert:staged?@"Save Restore Scheduled":@"Save Restore Failed" message:staged?@"Quit and reopen KartPad to apply the restore. The current save will be backed up first.":(error.localizedDescription?:@"Choose a valid 2867200-byte rksys.dat file.")];
+    return;
+  }
+  if (_choosingGhostImport) {
+    _choosingGhostImport=NO;
+    if(url==nil)return;
+    NSNumber *size=nil;[url getResourceValue:&size forKey:NSURLFileSizeKey error:nil];
+    NSError *error=nil;NSData *data=nil;
+    if(size && size.unsignedLongLongValue<=0x2800)data=[NSData dataWithContentsOfURL:url options:0 error:&error];
+    BOOL ok=data && KartPadStageOriginalGhost(data,_ghostLicense,&error);
+    [NSFileManager.defaultManager removeItemAtURL:url error:nil];
+    [self showIntegrationAlert:ok ? @"Ghost Import Scheduled" : @"Ghost Import Failed"
+        message:ok ? @"Fully quit and reopen KartPad now to apply the comparison ghost. Your save will be backed up; personal-best records stay unchanged." : (error.localizedDescription ?: @"The selected file is unavailable, too large, or invalid.")];
+    return;
+  }
   if (_choosingMiiImport) {
     _choosingMiiImport = NO;
     if (url == nil) return;
@@ -3418,6 +3740,8 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
 - (void)documentPickerWasCancelled:(UIDocumentPickerViewController *)controller {
   (void)controller;
   _choosingMiiImport = NO;
+  _choosingGhostImport = NO;
+  _saveImportProfile = nil;
 }
 
 - (void)gameOverlayRequestsGameDataChange:(SunPadGameOverlay *)overlay {
@@ -3427,38 +3751,9 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
 
 - (void)gameOverlayRequestsGameDataFolderImport:(SunPadGameOverlay *)overlay {
   (void)overlay;
-  NSError *error = nil;
-  NSArray<NSURL *> *roots = KartPadGameDataRootsInDocuments(&error);
-  if (roots.count == 0) {
-    NSLog(@"[KartPad] %@", KartPadDocumentsFolderScanDetail(error));
-    [self presentGameDataFolderPicker];
-    return;
-  }
-  if (roots.count == 1) {
-    [self importExtractedGameDataFromURL:roots.firstObject deleteAfterwards:NO];
-    return;
-  }
-  UIViewController *controller = KartPadVisibleViewController(_window);
-  if (controller == nil) {
-    return;
-  }
-  NSString *message = @"Choose a Mario Kart Wii WBFS, ISO, or extracted DATA folder from this signed app's KartPad folder.";
-  UIAlertController *alert =
-      [UIAlertController alertControllerWithTitle:@"KartPad Folder"
-                                          message:message
-                                   preferredStyle:UIAlertControllerStyleAlert];
-  __weak KartPadRuntimeOverlayHost *weakSelf = self;
-  for (NSURL *root in roots) {
-    [alert addAction:[UIAlertAction actionWithTitle:root.lastPathComponent
-                                              style:UIAlertActionStyleDefault
-                                            handler:^(UIAlertAction *action) {
-      (void)action;
-      [weakSelf importExtractedGameDataFromURL:root deleteAfterwards:NO];
-    }]];
-  }
-  [alert addAction:[UIAlertAction actionWithTitle:@"Cancel"
-                                            style:UIAlertActionStyleCancel handler:nil]];
-  [controller presentViewController:alert animated:YES completion:nil];
+  UIViewController *presenter=KartPadVisibleViewController(_window);if(!presenter)return;
+  UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeFolder] asCopy:YES];picker.delegate=self;picker.allowsMultipleSelection=NO;
+  [presenter presentViewController:picker animated:YES completion:nil];
 }
 
 - (void)gameOverlayRequestsGameDataRemoval:(SunPadGameOverlay *)overlay {
@@ -3514,21 +3809,128 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   [controller presentViewController:alert animated:YES completion:nil];
 }
 
+- (void)presentGhostPicker:(UIDocumentPickerViewController *)picker importing:(BOOL)importing {
+  UIViewController *controller=KartPadVisibleViewController(_window);
+  if(!controller)return;
+  _choosingGhostImport=importing;
+  if(importing)picker.delegate=self;
+  [controller presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)showGhostManager {
+  NSError *error=nil;
+  NSArray *licenses=KartPadLicenseRecords(&error);
+  UIAlertController *sheet=[UIAlertController alertControllerWithTitle:@"Original Time Trial Ghosts"
+      message:@"Import comparison ghosts or export saved .rkg files. Retro Rewind custom-track ghosts use a different format association and are not supported here."
+      preferredStyle:UIAlertControllerStyleActionSheet];
+  __weak KartPadRuntimeOverlayHost *weakSelf=self;
+  NSUInteger count=0;
+  for(NSDictionary *license in licenses) if([license[@"profileIdentifier"] isEqual:@"original"]){
+    ++count;
+    [sheet addAction:[UIAlertAction actionWithTitle:[NSString stringWithFormat:@"License %lu: %@",[license[@"slot"] unsignedLongValue]+1,license[@"name"] ?: @"Player"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+      [weakSelf showGhostActionsForLicense:[license[@"slot"] unsignedIntegerValue]];
+    }]];
+  }
+  if(KartPadHasPendingGhost()) [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel Pending Ghost Import" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+    NSError *cancelError=nil;
+    if(!KartPadCancelPendingGhost(&cancelError))[weakSelf showIntegrationAlert:@"Cancel Failed" message:cancelError.localizedDescription];
+  }]];
+  if(count==0)sheet.message=error.localizedDescription ?: @"Create an Original Mario Kart Wii license first.";
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
+  [self presentOverlayAlert:sheet];
+}
+
+- (void)showRetroManager {
+  NSString *version=[NSString stringWithContentsOfFile:[KartPadRetroRewindInstaller.installedRootPath stringByAppendingPathComponent:@"version.txt"] encoding:NSUTF8StringEncoding error:nil];
+  UIAlertController *sheet=[UIAlertController alertControllerWithTitle:@"Manage Retro Rewind" message:[NSString stringWithFormat:@"Installed version: %@\nRequired version: %@\n\nReturn to the KartPad menu and choose Retro Rewind to check its pack and install or update when required.",version?:@"Not installed",KartPadRetroRewindInstaller.requiredVersion] preferredStyle:UIAlertControllerStyleAlert];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Return to KartPad Menu" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){gKartPadMainMenuRequested=YES;}]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];[self presentOverlayAlert:sheet];
+}
+- (void)showSaveManager {
+  UIAlertController *sheet=[UIAlertController alertControllerWithTitle:@"Choose Save Profile" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+  NSArray *names=@[@"Original Mario Kart Wii",@"Retro Rewind",@"Retro Rewind (Separate Save)"];
+  NSArray *profiles=@[@"original",@"retro_rewind",@"retro_rewind_separate"];
+  __weak KartPadRuntimeOverlayHost *weakSelf=self;
+  for(NSUInteger i=0;i<names.count;i++){NSString *profile=profiles[i];[sheet addAction:[UIAlertAction actionWithTitle:names[i] style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[weakSelf showSaveActions:profile title:action.title];}]];}
+  if(KartPadHasPendingSaveRestore())[sheet addAction:[UIAlertAction actionWithTitle:@"Cancel Pending Save Restore" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){NSError *error=nil;if(!KartPadCancelSaveRestore(&error))[weakSelf showIntegrationAlert:@"Cancel Failed" message:error.localizedDescription];}]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];[self presentOverlayAlert:sheet];
+}
+- (void)showSaveActions:(NSString *)profile title:(NSString *)title {
+  UIAlertController *sheet=[UIAlertController alertControllerWithTitle:[@"Manage Saves • " stringByAppendingString:title] message:@"Export or restore this profile's rksys.dat. Saves do not include Miis or console identity. Use Separate Save only if enabled in Retro Rewind." preferredStyle:UIAlertControllerStyleActionSheet];
+  __weak KartPadRuntimeOverlayHost *weakSelf=self;
+  if([profile isEqualToString:@"original"])[sheet addAction:[UIAlertAction actionWithTitle:@"Time Trial Ghosts (.rkg)…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[weakSelf showGhostManager];}]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Export Save Backup…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){NSError *error=nil;NSData *data=KartPadReadSave(profile,&error);if(!data){[weakSelf showIntegrationAlert:@"Save Unavailable" message:error.localizedDescription];return;}NSURL *dir=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString]];[NSFileManager.defaultManager createDirectoryAtURL:dir withIntermediateDirectories:YES attributes:nil error:&error];NSURL *file=[dir URLByAppendingPathComponent:@"rksys.dat"];if(![data writeToURL:file options:NSDataWritingAtomic error:&error]){[weakSelf showIntegrationAlert:@"Export Failed" message:error.localizedDescription];return;}[weakSelf presentGhostPicker:[[UIDocumentPickerViewController alloc] initForExportingURLs:@[file] asCopy:YES] importing:NO];}]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Restore Save Backup…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[weakSelf confirmSaveRestore:profile];}]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];[self presentOverlayAlert:sheet];
+}
+- (void)confirmSaveRestore:(NSString *)profile {
+  UIAlertController *confirm=[UIAlertController alertControllerWithTitle:@"Restore Save Backup?" message:@"On restart, the imported save replaces this profile's progress. The current save is backed up first. Miis and console identity are unchanged." preferredStyle:UIAlertControllerStyleAlert];
+  __weak KartPadRuntimeOverlayHost *weakSelf=self;
+  [confirm addAction:[UIAlertAction actionWithTitle:@"Choose rksys.dat…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){[weakSelf chooseSaveRestore:profile];}]];
+  [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];[self presentOverlayAlert:confirm];
+}
+- (void)chooseSaveRestore:(NSString *)profile {
+  _saveImportProfile=profile;
+  [self presentGhostPicker:[[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeData] asCopy:YES] importing:NO];
+}
+
+- (void)showGhostActionsForLicense:(NSUInteger)license {
+  _ghostLicense=license;
+  UIAlertController *sheet=[UIAlertController alertControllerWithTitle:@"Original Ghosts" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+  __weak KartPadRuntimeOverlayHost *weakSelf=self;
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Export a Ghost…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+    NSError *error=nil;NSArray *records=KartPadOriginalGhosts(license,&error);
+    if(records.count==0){[weakSelf showIntegrationAlert:@"No Saved Ghosts" message:error.localizedDescription ?: @"Complete and save an Original time trial first."];return;}
+    UIAlertController *choose=[UIAlertController alertControllerWithTitle:@"Choose Ghost" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
+    for(NSDictionary *record in records)[choose addAction:[UIAlertAction actionWithTitle:record[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *selected){
+      NSURL *directory=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString] isDirectory:YES];
+      NSError *writeError=nil;
+      [NSFileManager.defaultManager createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:nil error:&writeError];
+      NSURL *file=[directory URLByAppendingPathComponent:@"KartPad-ghost.rkg"];
+      if(![record[@"data"] writeToURL:file options:NSDataWritingAtomic error:&writeError]){[weakSelf showIntegrationAlert:@"Ghost Export Failed" message:writeError.localizedDescription];return;}
+      UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc] initForExportingURLs:@[file] asCopy:YES];
+      [weakSelf presentGhostPicker:picker importing:NO];
+    }]];
+    [choose addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [weakSelf presentOverlayAlert:choose];
+  }]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Import Comparison Ghost…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
+    UIAlertController *confirm=[UIAlertController alertControllerWithTitle:@"Import Original Ghost" message:@"The course is read from the file. Its downloaded comparison ghost will be replaced on restart, with a backup. Personal-best records stay unchanged." preferredStyle:UIAlertControllerStyleAlert];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Choose .rkg" style:UIAlertActionStyleDefault handler:^(UIAlertAction *selected){
+      UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeData] asCopy:YES];
+      [weakSelf presentGhostPicker:picker importing:YES];
+    }]];
+    [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+    [weakSelf presentOverlayAlert:confirm];
+  }]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
+  [self presentOverlayAlert:sheet];
+}
+
 - (void)showControllerButtonAssignment:(uint16_t)gameButton title:(NSString *)title {
   UIAlertController *sheet = [UIAlertController alertControllerWithTitle:title
-      message:@"Choose a physical button. If it is already assigned, the two assignments swap. Applies to all connected controllers; touch controls keep their layout."
+      message:@"Choose a physical button or trigger. Touch controls keep their layout."
       preferredStyle:UIAlertControllerStyleActionSheet];
-  NSArray<NSString *> *names = @[@"A / Cross / bottom", @"B / Circle / right",
-      @"X / Square / left", @"Y / Triangle / top", @"Left Shoulder / L1"];
-  const SunPadPhysicalControllerButton buttons[] = {SunPadPhysicalControllerButtonA,
-      SunPadPhysicalControllerButtonB, SunPadPhysicalControllerButtonX,
-      SunPadPhysicalControllerButtonY, SunPadPhysicalControllerButtonLeftShoulder};
-  for (NSUInteger index = 0; index < names.count; ++index) {
-    const SunPadPhysicalControllerButton physical = buttons[index];
-    [sheet addAction:[UIAlertAction actionWithTitle:names[index]
+  __weak KartPadRuntimeOverlayHost *weakSelf = self;
+  for (NSUInteger index = 0; index < 12; ++index) {
+    const auto physical = (SunPadPhysicalControllerButton)(1u << index);
+    [sheet addAction:[UIAlertAction actionWithTitle:SunPadPhysicalControllerButtonName(physical)
         style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
-      [SunPadControllerMappingStore setMapping:SunPadControllerButtonMappingByAssigning(
-          [SunPadControllerMappingStore mapping], physical, gameButton)];
+      UIAlertController *choice = [UIAlertController alertControllerWithTitle:title
+          message:@"Swap assignments, or let this physical button perform both actions."
+          preferredStyle:UIAlertControllerStyleAlert];
+      [choice addAction:[UIAlertAction actionWithTitle:@"Swap Assignments" style:UIAlertActionStyleDefault
+          handler:^(UIAlertAction *selected) {
+        [SunPadControllerMappingStore setMapping:SunPadControllerButtonMappingByAssigning(
+            [SunPadControllerMappingStore mapping], physical, gameButton)];
+      }]];
+      [choice addAction:[UIAlertAction actionWithTitle:@"Keep Both Actions" style:UIAlertActionStyleDefault
+          handler:^(UIAlertAction *selected) {
+        [SunPadControllerMappingStore setMapping:SunPadControllerButtonMappingBySharing(
+            [SunPadControllerMappingStore mapping], physical, gameButton)];
+      }]];
+      [choice addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+      [weakSelf presentOverlayAlert:choice];
     }]];
   }
   [sheet addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
@@ -3537,14 +3939,17 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
 
 - (void)showControllerButtonMapping {
   UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Controller Button Mapping"
-      message:@"Choose the game button to reassign. Sticks, D-pad, Menu, and triggers remain direct."
+      message:@"Choose an action to reassign. Sticks and Menu remain direct. Trigger presses can be assigned like buttons."
       preferredStyle:UIAlertControllerStyleActionSheet];
   const SunPadControllerButtonMapping mapping = [SunPadControllerMappingStore mapping];
   NSArray<NSString *> *names = @[@"A — Accelerate / Confirm", @"B — Drift / Back",
-      @"X — Rear View", @"Y", @"ZR — Rear View"];
-  const uint16_t buttons[] = {SunPadButtonA, SunPadButtonB, SunPadButtonX, SunPadButtonY, SunPadButtonZ};
+      @"X — Rear View", @"Y", @"ZR — Rear View", @"R — Drift", @"L — Use Item",
+      @"D-pad Up", @"D-pad Down", @"D-pad Left", @"D-pad Right"];
+  const uint16_t buttons[] = {SunPadButtonA, SunPadButtonB, SunPadButtonX, SunPadButtonY, SunPadButtonZ, SunPadButtonR, SunPadButtonL,
+      SunPadButtonDpadUp, SunPadButtonDpadDown, SunPadButtonDpadLeft, SunPadButtonDpadRight};
   const SunPadPhysicalControllerButton physical[] = {mapping.gameA, mapping.gameB,
-      mapping.gameX, mapping.gameY, mapping.gameZ};
+      mapping.gameX, mapping.gameY, mapping.gameZ, mapping.gameR, mapping.gameL,
+      mapping.gameUp, mapping.gameDown, mapping.gameLeft, mapping.gameRight};
   __weak KartPadRuntimeOverlayHost *weakSelf = self;
   for (NSUInteger index = 0; index < names.count; ++index) {
     NSString *name = names[index];
@@ -3556,11 +3961,16 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
       [weakSelf showControllerButtonAssignment:gameButton title:name];
     }]];
   }
-  [sheet addAction:[UIAlertAction actionWithTitle:@"Reset Face Button Mapping"
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Use L1 for Items" style:UIAlertActionStyleDefault
+      handler:^(UIAlertAction *action) {
+    [SunPadControllerMappingStore setMapping:SunPadControllerButtonMappingByAssigning(
+        [SunPadControllerMappingStore mapping], SunPadPhysicalControllerButtonLeftShoulder, SunPadButtonL)];
+  }]];
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Reset Controller Mapping"
       style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
     [SunPadControllerMappingStore reset];
     [weakSelf showMultiplayerMessage:@"Default Mapping Restored"
-        message:@"The default A/B/X/Y and left-shoulder mapping will apply to new controller input."];
+        message:@"The default controller mapping will apply to new controller input."];
   }]];
   [sheet addAction:[UIAlertAction actionWithTitle:@"Done" style:UIAlertActionStyleCancel handler:nil]];
   [self presentOverlayAlert:sheet];
@@ -3575,7 +3985,7 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
   UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Controller Setup"
       message:message preferredStyle:UIAlertControllerStyleAlert];
   __weak KartPadRuntimeOverlayHost *weakSelf = self;
-  [sheet addAction:[UIAlertAction actionWithTitle:@"Customize Face Buttons…"
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Customize Buttons & Triggers…"
       style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
     [weakSelf showControllerButtonMapping];
   }]];
@@ -3630,6 +4040,10 @@ extern "C" const char *KartPadMobileSelectedRuntimeProfile() {
 }
 
 extern "C" void KartPadMobileServiceMainMenu() {
+  static BOOL previewShown=![NSProcessInfo.processInfo.environment[@"KARTPAD_UI_PREVIEW"] isEqualToString:@"report"];
+  if(!previewShown && gRuntimeOverlayHost && NSThread.isMainThread && g_gxFrameCount>120) {
+    previewShown=YES;[gRuntimeOverlayHost showReportPreview];
+  }
   if (gKartPadMainMenuRequested && gRuntimeOverlayHost != nil && NSThread.isMainThread) {
     [gRuntimeOverlayHost runMainMenu];
   }

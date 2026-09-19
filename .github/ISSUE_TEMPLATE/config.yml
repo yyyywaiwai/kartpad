@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Search reports in KartPad and WiiCompiled
+    url: https://github.com/search?q=is%3Aissue+repo%3Achrissotraidis%2Fkartpad+repo%3Apatchzyy%2FWiicompiled&type=issues
+    about: Check both projects for the same problem and add reviewed logs to a matching report.
+  - name: WiiCompiled runtime problem — report directly upstream
+    url: https://github.com/patchzyy/Wiicompiled/issues/new/choose
+    about: Suspected game-runtime bug? Open WiiCompiled's tracker directly. Identify your modified KartPad build and attach reviewed runtime logs; no KartPad maintainer handoff is required.
+  - name: Which report and logs do I need?
+    url: https://github.com/chrissotraidis/kartpad/blob/main/docs/REPORTING.md
+    about: App/platform problems and uncertain cases can stay in KartPad. Read how to collect and attach the relevant session.

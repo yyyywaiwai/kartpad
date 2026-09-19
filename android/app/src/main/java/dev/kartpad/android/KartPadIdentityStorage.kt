@@ -37,14 +37,18 @@ internal object KartPadIdentityStorage {
     }
     private fun hash(bytes: ByteArray) = MessageDigest.getInstance("SHA-256").digest(bytes)
     fun hasPending(files: File) = journal(files).isFile || pointer(files).isFile
-    data class Record(val profile: String, val slot: Int, val name: String, val createId: String)
-    fun records(files: File, miis: Boolean): List<Record> = paths.keys
-        .filter { (it == "mii") == miis && target(files, it).isFile }
-        .flatMap { profile ->
-            nativeRecords(readTarget(files, profile), miis).toList().chunked(3).map {
-                Record(profile, it[0].toInt(), it[1], it[2])
+    data class Record(val profile: String, val slot: Int, val name: String, val createId: String, val missingLinkedMii: Boolean = false)
+    fun records(files: File, miis: Boolean): List<Record> {
+        val linkedIds = if (!miis && target(files, "mii").isFile)
+            nativeRecords(readTarget(files, "mii"), true).toList().chunked(3).map { it[2] }.toSet()
+        else emptySet()
+        return paths.keys.filter { (it == "mii") == miis && target(files, it).isFile }
+            .flatMap { profile ->
+                nativeRecords(readTarget(files, profile), miis).toList().chunked(3).map {
+                    Record(profile, it[0].toInt(), it[1], it[2], !miis && it[2] !in linkedIds)
+                }
             }
-        }
+    }
     fun stage(files: File, record: Record, delete: Boolean, name: String) {
         require(!hasPending(files)) { "Apply the pending identity change by fully closing and reopening KartPad before editing again." }
         require(!KartPadSaveStorage.hasPending(files) && !KartPadMiiStorage.hasPending(files)) {
@@ -57,6 +61,17 @@ internal object KartPadIdentityStorage {
         replacements(files, request)
         write(journal(files), request.toString().toByteArray())
     }
+    fun stageLicenseMii(files: File, record: Record, mii: Record) {
+        require(record.profile != "mii" && mii.profile == "mii") { "Choose a license and an existing Mii." }
+        require(!hasPending(files) && !KartPadSaveStorage.hasPending(files) && !KartPadMiiStorage.hasPending(files)) {
+            "Fully close and reopen KartPad to apply pending changes first."
+        }
+        val request = JSONObject().put("profile", record.profile).put("slot", record.slot)
+            .put("createId", record.createId).put("delete", false).put("name", "")
+            .put("miiSlot", mii.slot).put("miiCreateId", mii.createId)
+        replacements(files, request)
+        write(journal(files), request.toString().toByteArray())
+    }
     private fun replacements(files: File, request: JSONObject): Map<String, ByteArray> {
         val profile = request.getString("profile")
         require(paths.containsKey(profile)) { "Unknown identity profile." }
@@ -64,6 +79,15 @@ internal object KartPadIdentityStorage {
         val slot = request.getInt("slot")
         val name = request.getString("name").toByteArray(Charsets.UTF_16BE)
         val delete = request.getBoolean("delete")
+        if (request.has("miiSlot")) {
+            require(profile != "mii" && !delete) { "Invalid license Mii change." }
+            val selected = records(files, true).firstOrNull {
+                it.slot == request.getInt("miiSlot") && it.createId == request.getString("miiCreateId")
+            } ?: error("The selected Mii changed. Reopen Player Identity and choose it again.")
+            val selectedId = selected.createId.chunked(2).map { it.toInt(16).toByte() }.toByteArray()
+            return mapOf(profile to nativeEdit(readTarget(files, profile), 4, slot, id,
+                selectedId + selected.name.toByteArray(Charsets.UTF_16BE)))
+        }
         val result = linkedMapOf(profile to nativeEdit(readTarget(files, profile),
             if (profile == "mii") 2 else if (delete) 1 else 0, slot, id, name))
         if (profile == "mii") paths.keys.filter { it != "mii" && target(files, it).isFile }.forEach {

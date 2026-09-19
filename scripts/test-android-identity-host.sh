@@ -3,7 +3,7 @@ set -euo pipefail
 repo="$(git rev-parse --show-toplevel)"
 jdk="${KARTPAD_TEST_JDK:-$repo/.android-bootstrap/jdk-17.0.20.1+1/Contents/Home}"
 cache="$HOME/.gradle/caches/modules-2/files-2.1"
-jar() { rg --files --hidden --no-ignore "$cache/$1" | awk '/\.jar$/ {print; exit}'; }
+jar() { rg --files --hidden --no-ignore "$cache/$1" | awk '/\.jar$/ && !/-sources\.jar$/ && !/-javadoc\.jar$/ {print; exit}'; }
 compiler="$(jar org.jetbrains.kotlin/kotlin-compiler-embeddable/2.2.21)"
 stdlib="$(jar org.jetbrains.kotlin/kotlin-stdlib/2.2.21)"
 annotations="$(jar org.jetbrains/annotations/13.0)"

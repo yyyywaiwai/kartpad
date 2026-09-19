@@ -18,6 +18,8 @@ enum GamepadButton : uint32_t {
   kGamepadDpadDown = 1u << 9,
   kGamepadDpadLeft = 1u << 10,
   kGamepadDpadRight = 1u << 11,
+  kGamepadLeftTrigger = 1u << 12,
+  kGamepadRightTrigger = 1u << 13,
 };
 
 enum ClassicButton : uint32_t {
@@ -99,6 +101,8 @@ inline ClassicInputState MapGamepadToClassic(const RawGamepadState& input) {
   map(kGamepadDpadDown, kClassicDown);
   map(kGamepadDpadLeft, kClassicLeft);
   map(kGamepadDpadRight, kClassicRight);
+  map(kGamepadLeftTrigger, kClassicL);
+  map(kGamepadRightTrigger, kClassicR);
   if (input.left_trigger >= kTriggerThreshold) {
     output.buttons |= kClassicL;
   }

@@ -132,6 +132,13 @@ Java_dev_kartpad_android_KartPadIdentityStorage_nativeEdit(
     size_t updated = 0;
     result = kartpad::mii::RenameMatchingLicenses(data, id, name, updated);
   }
+  if (operation == 4 && name.size() > kartpad::mii::kCreateIdByteSize) {
+    // Payload: selected Mii create ID followed by its UTF-16BE name.
+    std::array<uint8_t, kartpad::mii::kCreateIdByteSize> selected{};
+    std::copy_n(name.begin(), selected.size(), selected.begin());
+    result = kartpad::mii::SetLicenseMii(data, slot, id, selected,
+        std::span<const uint8_t>(name).subspan(selected.size()));
+  }
   if (!result) { Throw(env, "java/lang/IllegalArgumentException", result.message); return nullptr; }
   return ToByteArray(env, data);
 }

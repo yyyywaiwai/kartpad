@@ -71,6 +71,8 @@ if [[ ! -d "$runtime_source" ]]; then
   "$repo_root/scripts/prepare-android-game-runtime.sh" \
     "$translation_root" "$runtime_source" "$runtime_build" "$runtime_product"
 fi
+python3 "$repo_root/scripts/stage-maintained-runtime.py" --verify android "$runtime_source"
+
 if [[ ! -f "$runtime_source/include/sc_serial_contract.h" ||
       ! -f "$runtime_source/src/hle/sc.cpp" ]] ||
    ! grep -Fq 'RuntimeScSerial::Write' "$runtime_source/src/hle/sc.cpp"; then

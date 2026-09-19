@@ -31,16 +31,17 @@ val prepareKartpadBuildProvenance by tasks.registering(Exec::class) {
 // Reuse the shipped Apple artwork byte-for-byte; do not maintain a second logo.
 val kartpadIconResources = layout.buildDirectory.dir("generated/res/kartpadIcon")
 val prepareKartpadIcon by tasks.registering(Copy::class) {
-    from(rootProject.file("../apple/ios/Assets.xcassets/AppIcon.appiconset/KartPadIcon-1024.png"))
+    from(rootProject.file("../apple/ios/Assets.xcassets/AppIcon.appiconset/KartPadIcon-1024.png")) { rename { "kartpad_app_icon.png" } }
+    from(rootProject.file("../apple/ios/Assets.xcassets/KartPadLogo.imageset/KartPadIcon-1024.png")) { rename { "kartpad_racing_mark.png" } }
+    from(rootProject.file("../apple/ios/Assets.xcassets/KartPadChecker.imageset/checker.png")) { rename { "kartpad_checker.png" } }
     into(kartpadIconResources.map { it.dir("drawable-nodpi") })
-    rename { "kartpad_app_icon.png" }
 }
 val kartpadVersionCode = providers.gradleProperty("kartpadVersionCode")
     .map { value ->
         value.toIntOrNull()?.takeIf { it > 0 }
             ?: error("kartpadVersionCode must be a positive integer")
     }
-    .getOrElse(83)
+    .getOrElse(117)
 val kartpadVersionName = providers.gradleProperty("kartpadVersionName")
     .map { value ->
         require(Regex("[0-9A-Za-z][0-9A-Za-z._-]{0,63}").matches(value)) {
@@ -48,7 +49,7 @@ val kartpadVersionName = providers.gradleProperty("kartpadVersionName")
         }
         value
     }
-    .getOrElse("0.4.18-android.1")
+    .getOrElse("0.4.24-android.1")
 
 android {
     namespace = "dev.kartpad.android"

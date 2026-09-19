@@ -86,11 +86,11 @@ internal object KartPadTouchSettings {
     }
 
     fun resolutionScale(context: Context): Float = preferences(context)
-        .getFloat(RESOLUTION_SCALE, 1f).coerceIn(1f, 4f)
+        .getFloat(RESOLUTION_SCALE, 1f).let { if (it.isFinite()) it.coerceIn(0.5f, 4f) else 1f }
 
     fun setResolutionScale(context: Context, value: Float) {
         preferences(context).edit().putFloat(
-            RESOLUTION_SCALE, value.coerceIn(1f, 4f),
+            RESOLUTION_SCALE, if (value.isFinite()) value.coerceIn(0.5f, 4f) else 1f,
         ).apply()
     }
 

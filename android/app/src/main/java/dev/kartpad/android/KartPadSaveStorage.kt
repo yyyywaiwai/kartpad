@@ -30,7 +30,7 @@ internal object KartPadSaveStorage {
         return File(filesDir, "KartPad/PendingSaves/$name")
     }
 
-    fun hasPending(filesDir: File): Boolean = KartPadRatingStorage.hasPending(filesDir) || profiles.any { hasPending(filesDir, it) }
+    fun hasPending(filesDir: File): Boolean = hasPendingGhost(filesDir) || KartPadRatingStorage.hasPending(filesDir) || profiles.any { hasPending(filesDir, it) }
 
     fun hasPending(filesDir: File, profile: String): Boolean = pending(filesDir, profile).isFile
 
@@ -41,6 +41,7 @@ internal object KartPadSaveStorage {
     }
 
     fun writePending(filesDir: File, data: ByteArray, profile: String = "original") {
+        require(!hasPendingGhost(filesDir)) { "Apply or cancel the pending ghost import first." }
         require(!KartPadIdentityStorage.hasPending(filesDir)) { "Apply pending identity edits before restoring a save." }
         require(!hasPending(filesDir, profile)) { "Restart to apply this profile's pending restore first." }
         require(!KartPadRatingStorage.hasPending(filesDir)) { "Restart to apply the pending rating restore first." }
@@ -54,6 +55,7 @@ internal object KartPadSaveStorage {
 
     /** Applies a validated restore before SDL starts and retains the prior save. */
     fun applyPending(filesDir: File): String? {
+        applyPendingGhost(filesDir)?.let { return it }
         for (profile in profiles) {
             applyPending(filesDir, profile)?.let { return it }
         }
@@ -82,6 +84,54 @@ internal object KartPadSaveStorage {
             check(pending.delete()) { "The pending save restore could not be finalized." }
             pending.parentFile?.delete()
         }.exceptionOrNull()?.let { "The pending ${title(profile)} save restore could not be applied safely. It remains staged; your existing save and any backups have been retained." }
+    }
+
+    private fun ghostPending(files: File) = File(files, "KartPad/PendingGhost.bin")
+    fun hasPendingGhost(files: File) = ghostPending(files).isFile
+    fun cancelPendingGhost(files: File) { check(!hasPendingGhost(files) || ghostPending(files).delete()) { "Pending ghost could not be cancelled." } }
+
+    fun writePendingGhost(files: File, before: ByteArray, after: ByteArray, license: Int, slot: Int) {
+        require(!hasPending(files) && !KartPadIdentityStorage.hasPending(files)) { "Restart to apply the pending data change first." }
+        validate(before); validate(after)
+        require(license in 0..3 && slot in 0..31) { "Invalid ghost destination." }
+        val position = 0x28000 + license * 0xa5000 + 0x50000 + slot * 0x2800
+        val identity = 8 + license * 0x8cc0 + 0x28
+        val request = java.nio.ByteBuffer.allocate(20 + 0x2800 + 4)
+            .putInt(0x4b504731).putInt(license).putInt(slot)
+            .put(before, identity, 8).put(after, position, 0x2800).array()
+        val crc = CRC32().apply { update(request, 0, request.size - 4) }.value
+        java.nio.ByteBuffer.wrap(request).putInt(request.size - 4, crc.toInt())
+        val file = ghostPending(files); file.parentFile?.mkdirs(); writeAtomic(file, request)
+    }
+
+    private fun applyPendingGhost(files: File): String? {
+        val file = ghostPending(files)
+        if (!file.isFile) return null
+        return runCatching {
+            require(!KartPadIdentityStorage.hasPending(files) && !KartPadRatingStorage.hasPending(files) && profiles.none { hasPending(files, it) }) { "Conflicting pending data changes." }
+            require(file.length() == (20 + 0x2800 + 4).toLong()) { "Invalid ghost request size." }
+            val bytes = file.readBytes(); val request = java.nio.ByteBuffer.wrap(bytes)
+            require(request.int == 0x4b504731) { "Invalid ghost request." }
+            val license = request.int; val slot = request.int
+            require(license in 0..3 && slot in 0..31) { "Invalid ghost destination." }
+            require(request.getInt(bytes.size - 4) == CRC32().apply { update(bytes, 0, bytes.size - 4) }.value.toInt()) { "Ghost request checksum mismatch." }
+            val current = readActive(files); val next = current.copyOf()
+            val identity = 8 + license * 0x8cc0 + 0x28
+            require(bytes.copyOfRange(12, 20).contentEquals(current.copyOfRange(identity, identity + 8))) { "The selected license changed." }
+            val position = 0x28000 + license * 0xa5000 + 0x50000 + slot * 0x2800
+            bytes.copyInto(next, position, 20, 20 + 0x2800)
+            val bits = 8 + license * 0x8cc0 + 8
+            val view = java.nio.ByteBuffer.wrap(next)
+            view.putInt(bits, view.getInt(bits) or (1 shl slot))
+            view.putInt(CORE_CRC_OFFSET, CRC32().apply { update(next, 0, CORE_CRC_OFFSET) }.value.toInt())
+            validate(next)
+            if (!current.contentEquals(next)) {
+                val backups = File(files, "KartPad/SaveBackups"); check(backups.isDirectory || backups.mkdirs())
+                writeAtomic(File(backups, "rksys-ghost-${System.currentTimeMillis()}-${UUID.randomUUID()}.dat"), current)
+                writeAtomic(active(files), next)
+            }
+            check(file.delete()) { "Pending ghost could not be finalized." }
+        }.exceptionOrNull()?.let { "The ghost import could not be applied safely. Existing progress is retained. Cancel the pending ghost in Original save settings and choose it again." }
     }
 
     fun validate(data: ByteArray) {

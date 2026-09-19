@@ -7,7 +7,21 @@ on:
       - 'scripts/translate-*.sh'
       - 'scripts/generate-g8-full-title.sh'
       - 'scripts/inject-retro-rel-report-guard.py'
-      - 'patches/wiicompiled-retro-rel-report-guard.patch'
+      - 'vendor/runtimes/**'
+      - 'vendor/wiicompiled/**'
+      - '.gitmodules'
+      - 'scripts/stage-maintained-runtime.py'
+      - 'scripts/stage-maintained-translator.py'
+      - 'scripts/prepare-patched-translator.sh'
+      - 'scripts/write-build-provenance.py'
+      - 'scripts/package-release-source.py'
+      - 'scripts/restore-source-git.py'
+      - 'dependencies.lock.json'
+      - 'tests/runtime_sources.py'
+      - 'tests/test_maintained_runtime_staging.py'
+      - 'tests/test_maintained_translator_staging.py'
+      - 'tests/test_build_provenance.py'
+      - 'tests/test_source_submodule_inputs.py'
       - 'builder/**'
       - 'tests/test_retro_rel_report_guard.py'
       - 'tests/fixtures/rel_report/**'
@@ -20,7 +34,21 @@ on:
       - 'scripts/translate-*.sh'
       - 'scripts/generate-g8-full-title.sh'
       - 'scripts/inject-retro-rel-report-guard.py'
-      - 'patches/wiicompiled-retro-rel-report-guard.patch'
+      - 'vendor/runtimes/**'
+      - 'vendor/wiicompiled/**'
+      - '.gitmodules'
+      - 'scripts/stage-maintained-runtime.py'
+      - 'scripts/stage-maintained-translator.py'
+      - 'scripts/prepare-patched-translator.sh'
+      - 'scripts/write-build-provenance.py'
+      - 'scripts/package-release-source.py'
+      - 'scripts/restore-source-git.py'
+      - 'dependencies.lock.json'
+      - 'tests/runtime_sources.py'
+      - 'tests/test_maintained_runtime_staging.py'
+      - 'tests/test_maintained_translator_staging.py'
+      - 'tests/test_build_provenance.py'
+      - 'tests/test_source_submodule_inputs.py'
       - 'builder/**'
       - 'tests/test_retro_rel_report_guard.py'
       - 'tests/fixtures/rel_report/**'
@@ -33,6 +61,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+        with:
+          submodules: recursive
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -42,3 +72,11 @@ jobs:
         run: python3 -B -m unittest discover -s tests -p 'test_retro_rel_report_guard.py' -v
       - name: Builder integration
         run: bash scripts/test-kartpad-builder.sh
+      - name: Pinned source, staging, and offline source restoration
+        env:
+          PYTHONPATH: builder
+        run: |
+          python3 -B -m unittest discover -s tests -p 'test_source_submodule_inputs.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_maintained_runtime_staging.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_maintained_translator_staging.py' -v
+          python3 -B -m unittest discover -s tests -p 'test_build_provenance.py' -v

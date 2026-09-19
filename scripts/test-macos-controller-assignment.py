@@ -2,7 +2,8 @@
 """Exercise the prepared runtime's actual assignment functions with SDL stubs."""
 from pathlib import Path
 import subprocess, tempfile, sys
-root=Path(sys.argv[1] if len(sys.argv)>1 else 'build/self-build-macos-source')
+repo = Path(__file__).resolve().parents[1]
+root = Path(sys.argv[1]) if len(sys.argv) > 1 else repo / 'vendor/runtimes/macos'
 src=(root/'aurora-main/lib/dolphin/pad/pad.cpp').read_text()
 def function(signature):
     start=src.index(signature); end=src.index('{',start)+1; depth=1

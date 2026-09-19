@@ -3,17 +3,18 @@
 #include <initializer_list>
 
 static NSString *const SunPadControllerMappingDefaultsKey =
-    @"SunPadControllerButtonMappingV1";
+    @"SunPadControllerButtonMappingV2";
 
 static uint8_t const SunPadRunAndSprayPressure = 128;
 
 static NSArray<NSString *> *SunPadMappingKeys(void) {
-    return @[@"A", @"B", @"X", @"Y", @"Z"];
+    return @[@"A", @"B", @"X", @"Y", @"Z", @"R", @"L", @"Up", @"Down", @"Left", @"Right"];
 }
 
 static NSArray<NSNumber *> *SunPadMappingValues(SunPadControllerButtonMapping mapping) {
     return @[@(mapping.gameA), @(mapping.gameB), @(mapping.gameX),
-             @(mapping.gameY), @(mapping.gameZ)];
+             @(mapping.gameY), @(mapping.gameZ), @(mapping.gameR), @(mapping.gameL),
+             @(mapping.gameUp), @(mapping.gameDown), @(mapping.gameLeft), @(mapping.gameRight)];
 }
 
 static SunPadPhysicalControllerButton *SunPadMappingSlot(
@@ -24,6 +25,12 @@ static SunPadPhysicalControllerButton *SunPadMappingSlot(
     case SunPadButtonX: return &mapping->gameX;
     case SunPadButtonY: return &mapping->gameY;
     case SunPadButtonZ: return &mapping->gameZ;
+    case SunPadButtonR: return &mapping->gameR;
+    case SunPadButtonL: return &mapping->gameL;
+    case SunPadButtonDpadUp: return &mapping->gameUp;
+    case SunPadButtonDpadDown: return &mapping->gameDown;
+    case SunPadButtonDpadLeft: return &mapping->gameLeft;
+    case SunPadButtonDpadRight: return &mapping->gameRight;
     default: return nullptr;
     }
 }
@@ -35,24 +42,21 @@ SunPadControllerButtonMapping SunPadDefaultControllerButtonMapping(void) {
         .gameX = SunPadPhysicalControllerButtonX,
         .gameY = SunPadPhysicalControllerButtonY,
         .gameZ = SunPadPhysicalControllerButtonLeftShoulder,
+        .gameR = (SunPadPhysicalControllerButton)(SunPadPhysicalControllerButtonRightShoulder | SunPadPhysicalControllerButtonRightTrigger),
+        .gameL = SunPadPhysicalControllerButtonLeftTrigger,
+        .gameUp = SunPadPhysicalControllerButtonDpadUp,
+        .gameDown = SunPadPhysicalControllerButtonDpadDown,
+        .gameLeft = SunPadPhysicalControllerButtonDpadLeft,
+        .gameRight = SunPadPhysicalControllerButtonDpadRight,
     };
 }
 
 BOOL SunPadControllerButtonMappingIsValid(SunPadControllerButtonMapping mapping) {
-    uint8_t seen = 0;
-    const uint8_t allowed = SunPadPhysicalControllerButtonA |
-        SunPadPhysicalControllerButtonB | SunPadPhysicalControllerButtonX |
-        SunPadPhysicalControllerButtonY |
-        SunPadPhysicalControllerButtonLeftShoulder;
     for (NSNumber *number in SunPadMappingValues(mapping)) {
-        uint8_t value = number.unsignedCharValue;
-        if (value == 0 || (value & (value - 1)) != 0 || (value & ~allowed) != 0 ||
-            (seen & value) != 0) {
-            return NO;
-        }
-        seen |= value;
+        const uint16_t value = number.unsignedShortValue;
+        if (value == 0 || (value & ~0x0fffu) != 0) return NO;
     }
-    return seen == allowed;
+    return YES;
 }
 
 uint16_t SunPadApplyControllerButtonMapping(
@@ -66,6 +70,12 @@ uint16_t SunPadApplyControllerButtonMapping(
     if (pressedButtons & mapping.gameX) gameButtons |= SunPadButtonX;
     if (pressedButtons & mapping.gameY) gameButtons |= SunPadButtonY;
     if (pressedButtons & mapping.gameZ) gameButtons |= SunPadButtonZ;
+    if (pressedButtons & mapping.gameR) gameButtons |= SunPadButtonR;
+    if (pressedButtons & mapping.gameL) gameButtons |= SunPadButtonL;
+    if (pressedButtons & mapping.gameUp) gameButtons |= SunPadButtonDpadUp;
+    if (pressedButtons & mapping.gameDown) gameButtons |= SunPadButtonDpadDown;
+    if (pressedButtons & mapping.gameLeft) gameButtons |= SunPadButtonDpadLeft;
+    if (pressedButtons & mapping.gameRight) gameButtons |= SunPadButtonDpadRight;
     return gameButtons;
 }
 
@@ -82,10 +92,11 @@ SunPadControllerButtonMapping SunPadControllerButtonMappingByAssigning(
     if (previous == physicalButton)
         return mapping;
     for (uint16_t candidate : {SunPadButtonA, SunPadButtonB, SunPadButtonX,
-                               SunPadButtonY, SunPadButtonZ}) {
+                               SunPadButtonY, SunPadButtonZ, SunPadButtonR, SunPadButtonL,
+                               SunPadButtonDpadUp, SunPadButtonDpadDown, SunPadButtonDpadLeft, SunPadButtonDpadRight}) {
         SunPadPhysicalControllerButton *slot = SunPadMappingSlot(&mapping, candidate);
-        if (slot != nullptr && *slot == physicalButton) {
-            *slot = previous;
+        if (slot != nullptr && slot != destination && (*slot & physicalButton) != 0) {
+            *slot = (SunPadPhysicalControllerButton)((*slot & ~physicalButton) | previous);
             break;
         }
     }
@@ -93,15 +104,21 @@ SunPadControllerButtonMapping SunPadControllerButtonMappingByAssigning(
     return mapping;
 }
 
+SunPadControllerButtonMapping SunPadControllerButtonMappingBySharing(
+    SunPadControllerButtonMapping mapping, SunPadPhysicalControllerButton physicalButton,
+    uint16_t gameButton) {
+    if (!SunPadControllerButtonMappingIsValid(mapping)) mapping = SunPadDefaultControllerButtonMapping();
+    auto *slot = SunPadMappingSlot(&mapping, gameButton);
+    if (slot != nullptr && physicalButton != 0 && !(physicalButton & ~0x0fff)) *slot = physicalButton;
+    return mapping;
+}
+
 NSString *SunPadPhysicalControllerButtonName(SunPadPhysicalControllerButton button) {
-    switch (button) {
-    case SunPadPhysicalControllerButtonA: return @"A";
-    case SunPadPhysicalControllerButtonB: return @"B";
-    case SunPadPhysicalControllerButtonX: return @"X";
-    case SunPadPhysicalControllerButtonY: return @"Y";
-    case SunPadPhysicalControllerButtonLeftShoulder: return @"Left Shoulder";
-    default: return @"Unknown";
-    }
+    NSArray<NSString *> *names = @[@"A", @"B", @"X", @"Y", @"Left Shoulder", @"Right Shoulder",
+        @"D-pad Up", @"D-pad Down", @"D-pad Left", @"D-pad Right", @"Left Trigger", @"Right Trigger"];
+    NSMutableArray<NSString *> *selected = [NSMutableArray array];
+    for (NSUInteger i = 0; i < names.count; ++i) if (button & (1u << i)) [selected addObject:names[i]];
+    return selected.count ? [selected componentsJoinedByString:@" / "] : @"Unknown";
 }
 
 uint8_t SunPadControllerRightTriggerPressure(
@@ -116,16 +133,19 @@ uint8_t SunPadControllerRightTriggerPressure(
 + (SunPadControllerButtonMapping)mapping {
     NSDictionary *saved = [[NSUserDefaults standardUserDefaults]
         dictionaryForKey:SunPadControllerMappingDefaultsKey];
-    if (saved == nil)
-        return SunPadDefaultControllerButtonMapping();
+    BOOL legacy = saved == nil;
+    if (legacy) saved = [[NSUserDefaults standardUserDefaults] dictionaryForKey:@"SunPadControllerButtonMappingV1"];
+    if (saved == nil) return SunPadDefaultControllerButtonMapping();
+    SunPadControllerButtonMapping mapping = SunPadDefaultControllerButtonMapping();
     NSArray<NSString *> *keys = SunPadMappingKeys();
-    SunPadControllerButtonMapping mapping = {
-        .gameA = (SunPadPhysicalControllerButton)[saved[keys[0]] unsignedCharValue],
-        .gameB = (SunPadPhysicalControllerButton)[saved[keys[1]] unsignedCharValue],
-        .gameX = (SunPadPhysicalControllerButton)[saved[keys[2]] unsignedCharValue],
-        .gameY = (SunPadPhysicalControllerButton)[saved[keys[3]] unsignedCharValue],
-        .gameZ = (SunPadPhysicalControllerButton)[saved[keys[4]] unsignedCharValue],
-    };
+    const uint16_t buttons[] = {SunPadButtonA, SunPadButtonB, SunPadButtonX, SunPadButtonY, SunPadButtonZ,
+        SunPadButtonR, SunPadButtonL, SunPadButtonDpadUp, SunPadButtonDpadDown, SunPadButtonDpadLeft, SunPadButtonDpadRight};
+    for (NSUInteger i = 0; i < (legacy ? 5u : keys.count); ++i) {
+        id value = saved[keys[i]];
+        if (![value isKindOfClass:NSNumber.class] || [value unsignedIntegerValue] > 0xfff)
+            return SunPadDefaultControllerButtonMapping();
+        *SunPadMappingSlot(&mapping, buttons[i]) = (SunPadPhysicalControllerButton)[value unsignedShortValue];
+    }
     return SunPadControllerButtonMappingIsValid(mapping)
         ? mapping : SunPadDefaultControllerButtonMapping();
 }
@@ -143,7 +163,7 @@ uint8_t SunPadControllerRightTriggerPressure(
 }
 
 + (void)reset {
-    [[NSUserDefaults standardUserDefaults] removeObjectForKey:SunPadControllerMappingDefaultsKey];
+    [self setMapping:SunPadDefaultControllerButtonMapping()];
 }
 
 @end

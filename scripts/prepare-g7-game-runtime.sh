@@ -8,7 +8,6 @@ absolute_from_repo() {
     *) printf '%s/%s\n' "${repo_root}" "$1" ;;
   esac
 }
-runtime_ref="${repo_root}/ref/upstream/Wiicompiled/runtime"
 translation_root="$(absolute_from_repo "${1:-private/g8-full-translation}")"
 runtime_source="$(absolute_from_repo "${2:-build/g7-game-runtime-source}")"
 runtime_build="$(absolute_from_repo "${3:-build/g7-game-runtime-build}")"
@@ -54,79 +53,10 @@ if [[ -e "${runtime_source}" || -e "${runtime_build}" ]]; then
 fi
 
 mkdir -p "$(dirname "${runtime_source}")"
-cp -R "${runtime_ref}" "${runtime_source}"
-# Build against a disposable Aurora copy so performance instrumentation never
-# mutates the immutable pinned reference checkout.
-cp -R "${repo_root}/ref/upstream/Wiicompiled/aurora-main" \
-  "${runtime_source}/aurora-main"
+python3 "${repo_root}/scripts/stage-maintained-runtime.py" macos "${runtime_source}"
 PYTHONPATH="${repo_root}/builder" python3 -m kartpad_builder.release_header \
   "${repo_root}/builder/profiles/mkwii-rmcp01-rev0.json" \
   "${runtime_source}/third_party/kartpad-profile/kartpad_retro_rewind_release.h"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-present-telemetry.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-macos-vsync-startup.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-metal-view-lifetime.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-gx-resolve-snapshot-copy-src.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-viewport-policy-window-guard.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-macos-controller-assignment.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-macos-trigger-bindings.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-macos-trigger-axis-isolation.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-viewport-interpolation.patch"
-patch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-apple-runtime.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-rfl-alarm-context.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-experimental-wiimote-preset.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-macos-cursor-visibility.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-apple-network-tls.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-local-wfc-test-route.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-private-wfc.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-offline-kd-services.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-blocking-stream-recv-wait.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-mii-seed.patch"
-patch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-macos-shell.patch"
-patch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-retro-apple-product.patch"
-for dual_patch in \
-    wiicompiled-dual-profile-registry.patch \
-    wiicompiled-dual-profile-mod-loader.patch \
-    wiicompiled-dual-product-selection.patch \
-    wiicompiled-dual-product-target.patch; do
-  patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/${dual_patch}"
-done
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-present-telemetry.patch"
-
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-macos-controller-settings.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-macos-unified-settings.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-macos-vsync-startup.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-macos-settings-shortcut.patch"
-# Guard the translated REL diagnostic path on every product sharing this runtime.
-patch --batch --fuzz=0 -p2 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-retro-rel-report-guard.patch"
-
-# Backport upstream e0e362b: SCGetProductSN returns a guest u32 for DWC csnum.
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-sc-serial.patch"
 
 mkdir -p "${runtime_source}/third_party/sse2neon"
 cached_sse2neon="${repo_root}/build/dependency-cache/sse2neon-${sse2neon_sha256}.h"

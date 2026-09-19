@@ -47,14 +47,37 @@ def manifest(repo, runtime=None, translation=None):
     def git(*args):
         return subprocess.check_output(["git", "-C", str(repo), *args], stderr=subprocess.DEVNULL)
     revision = git("rev-parse", "HEAD").decode().strip()
-    names = git("ls-files", "-z", "--cached", "--others", "--exclude-standard").decode().split("\0")
-    # Deleted tracked inputs are represented by dirty=true and their absence.
-    names = {name for name in names if name and (repo / name).exists()}
+    dependencies = []
+    def tracked_names(root, prefix=""):
+        records = subprocess.check_output(["git", "-C", str(root), "ls-files", "--stage", "-z"]).split(b"\0")
+        names = set()
+        for record in filter(None, records):
+            descriptor, raw_name = record.split(b"\t", 1)
+            mode, _, index_stage = descriptor.decode().split()
+            name = raw_name.decode()
+            if index_stage != "0":
+                raise ValueError("source fingerprint requires resolved index entries")
+            path = root / name
+            if mode == "160000":
+                if path.is_symlink() or not (path / ".git").exists():
+                    raise ValueError("source fingerprint requires initialized source submodules")
+                commit = subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD"]).decode().strip()
+                dirty = bool(subprocess.check_output(["git", "-C", str(path), "status", "--porcelain", "--untracked-files=no"]))
+                dependencies.append({"commit": commit, "dirty": dirty})
+                names.update(tracked_names(path, prefix + name + "/"))
+            elif path.exists() or path.is_symlink():
+                names.add(prefix + name)
+        return names
+    names = tracked_names(repo)
+    # Preserve the existing parent-working-tree diagnostic coverage. Maintained
+    # submodules contribute tracked files only, matching runtime staging.
+    names.update(name for name in git("ls-files", "-z", "--others", "--exclude-standard").decode().split("\0") if name)
     return {
         "schema": 1,
         "source_revision": revision,
         "source_dirty": bool(git("status", "--porcelain", "--untracked-files=normal")),
         "kartpad_source": fingerprint(repo, names),
+        "source_dependencies": dependencies,
         "prepared_runtime": tree(runtime.resolve()) if runtime else None,
         "translation": tree(translation.resolve()) if translation else None,
         "scope": "source_inputs_only_not_dependency_or_binary_identity",

@@ -1,5 +1,12 @@
 # KartPad support
 
+Start with [KartPad and WiiCompiled reports](REPORTING.md) to choose a
+destination and understand which logs to attach. WiiCompiled is the original
+runtime project; a KartPad report must identify the modified app it came from.
+You can report suspected shared runtime problems directly to WiiCompiled;
+use KartPad for app/platform problems or an uncertain cause. No maintainer
+handoff is required.
+
 Maintainers and automated support agents: start at the [support-agent hub](SUPPORT-AGENTS.md)
 for priorities, replies, diagnostics and build-test handoffs.
 
@@ -163,35 +170,54 @@ adds optional **Renderer Validation** on the chooser, off by default. When
 requested for a graphics report, compare the same scene/settings with it off
 and on, then turn it off for normal play. It enables actual game-renderer
 validation and bounds protection and may slow gameplay; it is not a fix.
-The private export also includes bounded `process-exits.json` OS metadata on
+Older diagnostic builds include bounded `process-exits.json` OS metadata on
 Android 11+. A missing record does not establish no crash, and a manual stop
-can produce a user-requested exit. Review before sharing; do not upload the
-whole archive. See the [beta test steps](releases/v0.4.12-android.2.md).
+can produce a user-requested exit. See the [beta test steps](releases/v0.4.12-android.2.md).
+
+**Android private reporting candidate:** describe the problem in **Report a
+Problem…**, choose the visible destination, then tap **Open GitHub Draft**.
+No local file or missing-log explanation is required to open the browser.
+Attach reviewed logs or screenshots on GitHub. Returning to the app keeps your
+draft. If no browser can open it, the screen shows an error and keeps the draft.
+These labels describe the private candidate, not a newly published release;
+older builds use **Report on GitHub…** and may ask for a log choice first.
 
 **Android:** **••• → Report a Problem… → Share Report…** produces a short
-version/device/profile summary and your answers. It does **not** include the
-runtime/renderer log history. For that history, reproduce once, fully close
-KartPad from Recents, reopen to the Original/Retro Rewind chooser, and choose
-**Export Private Diagnostics… → Save Locally…**. Open the ZIP locally; review
-its `README.txt` and relevant `Logs/` text. Share only the startup renderer
-lines, warnings/errors and a short interval around the failure. For performance,
-include matching `KartPadPerf`/CPU/GPU and `android-health.log` intervals where
-available; these use elapsed time since boot. Unavailable metrics are not zero.
+version/device/profile summary and your answers. It does **not** automatically
+include runtime logs. Choose **Export Private Logs…** in that report screen,
+or **Export Private Diagnostics…** on the Original/Retro Rewind chooser, to
+save logs locally. Exporting neither uploads a file nor selects an attachment.
 
-For **renderer validation** reports, start with `console.log` inside the
-`Logs/` subfolder for the session you tested. Look for validation warnings or
-errors (`validation`, `error`, `warning`, `Dawn`, `WebGPU`) and share only the
-relevant message with nearby context. If there are no errors, report that and
-whether the image changed with validation off/on; an error is not required to
-report visible corruption. `android-health.log` is for settings/performance
-samples. `process-exits.json` intentionally sits at the ZIP root, outside
-`Logs/`; only include a matching entry if the app unexpectedly exited. A manual
-close can create an exit record and does not establish a crash.
+**The session chooser is a source change awaiting a tested release.** In builds
+with **Choose the game session**, select the run that failed before saving the
+ZIP. The displayed timestamp is the console's last modification time, not a
+verified session start time. After a crash and relaunch, the newest run may not
+be the failed one. The selection remains fixed while the save picker is open.
 
-The private ZIP can contain local paths and personal details. Do not upload it
-raw. Remove usernames, private paths, IP/MAC addresses, console/account IDs,
-friend codes, tokens, and other personal data from excerpts. Do not clear logs
-or app storage before collecting them. No USB debugging or root is needed.
+That export includes only the selected session's `console.log` and available
+`crash_*.txt`, plus a README and export-time context. It excludes other sessions,
+root-level `android-health.log`, OS exit history, and memory dumps. Long logs
+retain their header and recent tail with an explicit omission marker. Read the
+session's own startup information for its version; the installed/export-time
+app version may differ. Missing session metadata is unknown.
+
+Older builds have no session chooser and can include several runs, health
+history and OS exit records. Open the ZIP locally and select the relevant
+`Logs/<session>/` text yourself. If a runtime must be stopped before exporting,
+close it after the failure; do not clear logs or app storage. A manual close
+can create an OS exit record and does not establish a crash.
+
+For **renderer validation**, review the chosen `console.log` for warnings or
+errors (`validation`, `error`, `warning`, `Dawn`, `WebGPU`). Share startup/version
+information and nearby failure context. No logged error is required to report
+visible corruption. For performance, include matching `KartPadPerf`/CPU/GPU
+lines where available; their timestamps use elapsed time since boot and missing
+metrics are not zero. Older exports may additionally contain health samples.
+
+Open the ZIP locally and review it before choosing a relevant text attachment.
+Do not upload the whole private archive. Remove usernames, private paths,
+IP/MAC addresses, console/account IDs, friend codes, tokens and other personal
+data from excerpts. No USB debugging or root is needed.
 
 **iPhone/iPad:** After reproducing the problem, open **••• → Report a
 Problem…** and describe what happened. If the app crashed, reopen it first.
@@ -202,14 +228,24 @@ KartPad screen and Original still fails. The earlier iPhone 14 test does not
 resolve this device-specific result. The next evidence is the promised new crash
 analytics labelled by mode; preserve the installation and data.
 
-1. Choose **Share Report…** to save or share the diagnostic `.log` file. It
-   includes device/settings details and current/previous session logs.
-2. Review the file before attaching it to an existing issue or a new GitHub
-   report. Add a screenshot for a visual issue.
-3. **Report on GitHub** creates the file and prefills a new issue, but does
-   **not** upload the log. Attach it from **Files → On My iPhone/iPad →
-   KartPad → Diagnostics → Latest-SunPad-Diagnostic.log**. The report ID
-   alone is not a log upload.
+In the **private reporting candidate**, choose **Continue to GitHub…**.
+**Preparing Report…** remains visible while diagnostics are collected. On the
+review screen, either review the text and choose **Choose Project — I’ll Attach
+the Log**, or use **Continue Without a Log**. Select KartPad or WiiCompiled to
+open its draft in the embedded Safari view. No explanation is required to
+continue without a log. Cancelling destination selection or closing the browser
+returns to the review. A loading failure offers retry, copy link, or return.
+
+**Save or Share Log…** saves or shares the reviewed file; attach it manually on
+GitHub. **Share Report…** remains available from the initial prompt. The report
+includes device/settings details and current/previous session logs; it has no
+Android-style session picker yet.
+
+Older builds use **Report on GitHub** and an external browser. Reports are in
+**Files → On My iPhone/iPad → KartPad → Diagnostics**. Newer builds name the
+file **Latest-KartPad-Diagnostic.log**; older builds use
+**Latest-SunPad-Diagnostic.log**. Opening a draft does not upload either file.
+These candidate changes have not been announced as a public release.
 
 **Mac:** **Help → Save Diagnostics Report…** creates a bounded report with
 settings and current/previous session tails. Review it before attaching.

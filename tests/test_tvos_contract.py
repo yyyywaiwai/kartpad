@@ -1,6 +1,7 @@
 import json
 import plistlib
 import struct
+from runtime_sources import runtime_source
 import unittest
 from pathlib import Path
 
@@ -17,38 +18,29 @@ class TvOSContractTests(unittest.TestCase):
         return struct.unpack(">IIBBBBB", data[16:29])
 
     def test_runtime_target_is_native_dual_mode(self):
-        patch = (ROOT / "patches/wiicompiled-tvos-runtime.patch").read_text()
+        patch = runtime_source("tvos", "runtime/cmake/PublicProducts.cmake", "runtime/src/hle/input/kpad.cpp", "runtime/include/runtime_config.h")
         self.assertIn('CMAKE_SYSTEM_NAME STREQUAL "tvOS"', patch)
         self.assertIn("mkw_configure_kartpad_tvos(KartPadDual KartPad)", patch)
         self.assertIn("TARGET_OS_IOS || TARGET_OS_TV", patch)
-        self.assertIn("--- a/src/hle/input/kpad.cpp", patch)
-        self.assertGreaterEqual(
-            patch.count("TARGET_OS_IOS || TARGET_OS_TV"), 16
-        )
+        self.assertIn("TARGET_OS_IOS || TARGET_OS_TV", runtime_source("tvos", "runtime/src/hle/input/kpad.cpp"))
+
         self.assertIn("MINIZIP::minizip", patch)
         self.assertIn("runtime/src/retro_rewind/archive_path.cpp", patch)
         self.assertIn("runtime/src/retro_rewind/archive_scan.cpp", patch)
         self.assertIn("KARTPAD_TVOS_BUNDLE_IDENTIFIER", patch)
 
     def test_tvos_runtime_uses_an_a12_safe_cpu_baseline(self):
-        patch = (ROOT / "patches/wiicompiled-apple-runtime.patch").read_text()
-        compiler_options = patch.split(
-            '+        if(CMAKE_SYSTEM_NAME STREQUAL "tvOS")', 1
-        )[1]
-        tvos_options = compiler_options.split("+        else()", 1)[0]
-        non_tvos_options = compiler_options.split("+        else()", 1)[1].split(
-            "+        endif()", 1
-        )[0]
+        source = runtime_source("tvos", "runtime/cmake/PublicProducts.cmake")
+        compiler_options = source.split('        if(CMAKE_SYSTEM_NAME STREQUAL "tvOS" OR', 1)[1]
+        tvos_options = compiler_options.split("        else()", 1)[0]
+        non_tvos_options = compiler_options.split("        else()", 1)[1].split("        endif()", 1)[0]
         self.assertIn("-mcpu=generic", tvos_options)
         self.assertIn("-Xclang -target-feature -Xclang -rcpc", tvos_options)
         self.assertNotIn("-mcpu=apple-m2", tvos_options)
         self.assertIn("-mcpu=apple-m2", non_tvos_options)
 
     def test_mobile_aspect_setting_reaches_the_guest_system_config(self):
-        patch = (ROOT / "patches/wiicompiled-ios-settings-bridge.patch").read_text()
-        sc_bridge = patch.split("diff --git a/src/hle/sc.cpp", 1)[1].split(
-            "diff --git a/src/dynamic_aspect.cpp", 1
-        )[0]
+        sc_bridge = runtime_source("tvos", "runtime/src/hle/sc.cpp")
         self.assertIn("TARGET_OS_IOS || TARGET_OS_TV", sc_bridge)
         self.assertIn("KartPadMobileReadRuntimeSettings(&settings)", sc_bridge)
         self.assertIn("widescreen = settings.aspectRatioMode != 0", sc_bridge)
@@ -63,7 +55,7 @@ class TvOSContractTests(unittest.TestCase):
         self.assertIn("KartPadRetroRewindInstaller.installedRootPath", host)
         self.assertIn("KartPadTVWriteRuntimePaths", host)
         self.assertIn("atomically:NO", host)
-        runtime_patch = (ROOT / "patches/wiicompiled-tvos-runtime.patch").read_text()
+        runtime_patch = runtime_source("tvos", "runtime/cmake/PublicProducts.cmake", "runtime/src/hle/input/kpad.cpp", "runtime/include/runtime_config.h")
         self.assertIn("#if TARGET_OS_TV", runtime_patch)
         self.assertIn('"Caches";', runtime_patch)
         diagnostics = (ROOT / "apple/tvos/KartPadTVSunPadDiagnostics.mm").read_text()
@@ -113,7 +105,7 @@ class TvOSContractTests(unittest.TestCase):
         profile = json.loads(
             (ROOT / "builder/profiles/mkwii-rmcp01-rev0.json").read_text()
         )
-        self.assertEqual(profile["retroRewind"]["version"], "6.12.7")
+        self.assertEqual(profile["retroRewind"]["version"], "6.12.8")
         host = (ROOT / "apple/tvos/KartPadTVRuntimeHost.mm").read_text()
         self.assertIn("installArchiveAtURL", host)
         self.assertIn("officialArchiveURL", host)
@@ -175,14 +167,15 @@ class TvOSContractTests(unittest.TestCase):
             ROOT / "scripts/package-public-unsigned-tvos-ipa.py"
         ).read_text()
         tvos_audit = (ROOT / "scripts/audit-public-unsigned-tvos-ipa.py").read_text()
+        ios_release = (ROOT / "scripts/ios_release.py").read_text()
         for script in (ios_package, ios_audit):
-            self.assertIn('RELEASE_TAG = "v0.4.14-ios.1"', script)
-            self.assertIn('APP_VERSION = "0.4.14"', script)
+            self.assertIn("from ios_release import", script)
+        self.assertIn('RELEASE_TAG = "v0.4.17-ios.1"', ios_release)
+        self.assertIn('APP_VERSION = "0.4.17"', ios_release)
+        self.assertIn('APP_BUILD = "39"', ios_release)
         for script in (tvos_package, tvos_audit):
             self.assertIn('RELEASE_TAG = "v0.4.11-tvos.1"', script)
             self.assertIn('APP_VERSION = "0.4.11"', script)
-        self.assertIn('APP_BUILD = "33"', ios_package)
-        self.assertIn('APP_BUILD = "33"', ios_audit)
         self.assertIn('APP_BUILD = "9"', tvos_package)
         self.assertIn('APP_BUILD = "9"', tvos_audit)
         self.assertIn('"physicalAppleTVAcceptance": False', tvos_package)

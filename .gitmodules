@@ -1,0 +1,16 @@
+[submodule "vendor/runtimes/macos"]
+	path = vendor/runtimes/macos
+	url = https://github.com/chrissotraidis/wiicompiled.git
+	branch = kartpad-macos
+[submodule "vendor/runtimes/ios"]
+	path = vendor/runtimes/ios
+	url = https://github.com/chrissotraidis/wiicompiled.git
+	branch = kartpad-ios
+[submodule "vendor/runtimes/android"]
+	path = vendor/runtimes/android
+	url = https://github.com/chrissotraidis/wiicompiled.git
+	branch = kartpad-android
+[submodule "vendor/runtimes/tvos"]
+	path = vendor/runtimes/tvos
+	url = https://github.com/chrissotraidis/wiicompiled.git
+	branch = kartpad-tvos

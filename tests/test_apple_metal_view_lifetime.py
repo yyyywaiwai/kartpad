@@ -1,28 +1,26 @@
-"""Exercise the actual patched helper with injected SDL failures under sanitizers."""
+"""Exercise the maintained helper with injected SDL failures under sanitizers."""
 from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+from runtime_sources import runtime_source
 import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
-PATCH = ROOT / 'patches/aurora-metal-view-lifetime.patch'
+
 
 
 @unittest.skipUnless(shutil.which('clang++'), 'requires clang++ and sanitizers')
 class MetalViewLifetimeTests(unittest.TestCase):
     def test_actual_helper_ownership_and_failures(self):
-        # The patch replaces this complete small upstream file; reconstruct its
-        # preimage so this regression also runs without private runtime inputs.
-        before = ''.join(line[1:] + '\n' for line in PATCH.read_text().splitlines()
-                         if line.startswith((' ', '-')) and not line.startswith('---'))
+        before = runtime_source("ios", "aurora-main/lib/dawn/MetalBinding.mm")
+        for platform in ("macos", "tvos"):
+            self.assertEqual(before, runtime_source(platform, "aurora-main/lib/dawn/MetalBinding.mm"))
         with tempfile.TemporaryDirectory() as d:
             tmp = Path(d)
             source = tmp / 'lib/dawn/MetalBinding.mm'
             source.parent.mkdir(parents=True)
             source.write_text(before)
-            subprocess.run(['patch', '--batch', '-p1', '-d', d, '-i', str(PATCH)],
-                           capture_output=True, text=True, check=True)
             (tmp / 'Foundation').mkdir()
             (tmp / 'Foundation/Foundation.h').write_text('')
             (tmp / 'SDL3').mkdir()

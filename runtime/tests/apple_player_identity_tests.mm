@@ -1,5 +1,6 @@
 #import "KartPadMiiManager.h"
 #include "kartpad/mii/player_identity.h"
+#include "kartpad/ghost/rkg.h"
 #include <cassert>
 #include <cstdlib>
 #include <filesystem>
@@ -72,6 +73,81 @@ int main() {
     assert([retroBefore isEqual:[NSData dataWithContentsOfFile:retro]]);
     assert([[NSFileManager.defaultManager contentsOfDirectoryAtPath:
         [root stringByAppendingPathComponent:@"SaveBackups"] error:nil] count] >= 4);
+    // Imported save with no matching database Mii: relink explicitly, preserving all progress.
+    auto orphan = save;
+    orphan[offset + kartpad::mii::kRksysCreateIdOffset] ^= 1;
+    kartpad::mii::UpdateRksysCrc(orphan);
+    Write(original, orphan);
+    records = KartPadLicenseRecords(&error);
+    assert([records[0][@"missingLinkedMii"] boolValue]);
+    NSData *orphanId = records[0][@"createId"];
+    NSData *databaseBefore = [NSData dataWithContentsOfFile:
+        [root stringByAppendingPathComponent:@"NAND/shared2/menu/FaceLib/RFL_DB.dat"]];
+    NSData *otherSave = [NSData dataWithContentsOfFile:retro];
+    assert(!KartPadStageLicenseMii(@"original", 0, orphanId, 0, orphanId, &error));
+    assert(!KartPadHasPendingMiiChanges());
+    error = nil;
+    assert(KartPadStageLicenseMii(@"original", 0, orphanId, 0, createId, &error));
+    auto replacementDatabase = kartpad::mii::CreateSeedDatabase({0x02, 0x17, 0xab, 0x10, 0x20, 0x31});
+    Write([root stringByAppendingPathComponent:@"NAND/shared2/menu/FaceLib/RFL_DB.dat"], replacementDatabase);
+    assert(!KartPadApplyPendingMiiDatabase(&error));
+    assert(KartPadHasPendingMiiChanges());
+    assert([databaseBefore writeToFile:[root stringByAppendingPathComponent:
+        @"NAND/shared2/menu/FaceLib/RFL_DB.dat"] atomically:YES]);
+    error = nil;
+    // New progress while the change is pending must survive cold-launch application.
+    orphan[offset + 0x90] ^= 1;
+    kartpad::mii::UpdateRksysCrc(orphan);
+    Write(original, orphan);
+    assert(KartPadApplyPendingMiiDatabase(&error));
+    records = KartPadLicenseRecords(&error);
+    assert(![records[0][@"missingLinkedMii"] boolValue]);
+    assert([records[0][@"name"] isEqual:@"Both"]);
+    after = [NSData dataWithContentsOfFile:original];
+    bytes = static_cast<const uint8_t*>(after.bytes);
+    for (size_t index = 0; index < orphan.size(); ++index) {
+      const bool identityByte = index >= offset + 0x14 && index < offset + 0x30;
+      const bool crcByte = index >= 0x27ffc && index < 0x28000;
+      if (!identityByte && !crcByte) assert(bytes[index] == orphan[index]);
+    }
+    assert([databaseBefore isEqual:[NSData dataWithContentsOfFile:
+        [root stringByAppendingPathComponent:@"NAND/shared2/menu/FaceLib/RFL_DB.dat"]]]);
+    assert([otherSave isEqual:[NSData dataWithContentsOfFile:retro]]);
+    // Ghost intent applies to latest progress, with a backup and no identity edits.
+    std::vector<uint8_t> ghost(kartpad::ghost::GhostBytes);
+    kartpad::ghost::Write32(ghost,0,0x524b4744);
+    kartpad::ghost::Write32(ghost,4,8u<<2);
+    ghost[15]=8;
+    kartpad::ghost::Write32(ghost,ghost.size()-4,kartpad::ghost::Crc(std::span<const uint8_t>(ghost).first(ghost.size()-4)));
+    NSData *ghostData=[NSData dataWithBytes:ghost.data() length:ghost.size()];
+    error=nil;
+    assert(KartPadStageOriginalGhost(ghostData,0,&error));
+    assert(KartPadHasPendingGhost());
+    assert(!KartPadStageLicenseRename(@"original",0,createId,@"Blocked",&error));
+    auto latest=std::vector<uint8_t>((const uint8_t*)after.bytes,(const uint8_t*)after.bytes+after.length);
+    latest[0x500]^=1; kartpad::mii::UpdateRksysCrc(latest); Write(original,latest);
+    error=nil;
+    assert(KartPadApplyPendingMiiDatabase(&error));
+    assert(!KartPadHasPendingGhost());
+    NSData *ghostSave=[NSData dataWithContentsOfFile:original];
+    assert(((const uint8_t*)ghostSave.bytes)[0x500]==latest[0x500]);
+    assert(KartPadOriginalGhosts(0,&error).count==1);
+    assert(KartPadStageOriginalGhost(ghostData,0,&error));
+    assert(KartPadCancelPendingGhost(&error));
+    assert([ghostSave isEqual:[NSData dataWithContentsOfFile:original]]);
+    // Raw restores target only the selected profile, reject conflicts and retain backups.
+    NSData *restore=KartPadReadSave(@"retro_rewind",&error);
+    assert(restore && KartPadStageSaveRestore(@"original",restore,&error));
+    assert(!KartPadStageOriginalGhost(ghostData,0,&error));
+    assert([ghostSave isEqual:[NSData dataWithContentsOfFile:original]]);
+    assert(KartPadApplyPendingMiiDatabase(&error));
+    assert([restore isEqual:KartPadReadSave(@"original",&error)]);
+    assert([otherSave isEqual:[NSData dataWithContentsOfFile:retro]]);
+    assert(KartPadStageSaveRestore(@"original",ghostSave,&error));
+    assert(KartPadCancelSaveRestore(&error));
+    assert([restore isEqual:KartPadReadSave(@"original",&error)]);
+    assert(!KartPadStageSaveRestore(@"../original",restore,&error));
+    assert(!KartPadStageSaveRestore(@"original",ghostData,&error));
     // Only this test-created, exact temporary tree is removed.
     std::filesystem::remove_all(directory);
     puts("Apple identity staging, pending preview, backup and preservation tests passed.");

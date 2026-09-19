@@ -7,11 +7,27 @@ import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.util.List;
+import java.util.concurrent.TimeUnit;
 
 public final class RetroRewindInstallPipelineTestMain {
     private RetroRewindInstallPipelineTestMain() {}
 
     public static void main(String[] args) throws Exception {
+        if (args.length > 0) {
+            Path files = Path.of(args[1]);
+            if (args[0].equals("recover")) {
+                RetroRewindInstallStorage.recover(files.toFile());
+            } else {
+                try (var lock = RetroRewindInstallStorage.tryInstallLock(files.toFile())) {
+                    expect(lock != null, "child did not acquire lock");
+                    RetroRewindInstallStorage.createStagingDirectory(files.toFile(), "killed");
+                    System.out.println("locked");
+                    System.out.flush();
+                    System.in.read();
+                }
+            }
+            return;
+        }
         Path temporary = Files.createTempDirectory("kartpad-install-pipeline-");
         try {
             Path files = Files.createDirectory(temporary.resolve("files"));
@@ -27,6 +43,11 @@ public final class RetroRewindInstallPipelineTestMain {
                     files.toFile(), archive, "success", () -> false, (done, total) -> {},
                     path -> RetroRewindArchiveDownload.Error.NONE,
                     (path, staging, cancellation, progress) -> {
+                        // Run recovery from both a chooser thread and a distinct
+                        // JVM while the real pipeline owns its live staging tree.
+                        RetroRewindInstallStorage.recover(files.toFile());
+                        runRecoveryProcess(files);
+                        expect(Files.isDirectory(staging), "recovery removed live staging");
                         writeTree(staging, artifact);
                         progress.onProgress(artifact.length, artifact.length);
                         return extraction(RetroRewindArchiveExtractor.Error.NONE,
@@ -83,10 +104,84 @@ public final class RetroRewindInstallPipelineTestMain {
             expect(invalidArchive.error == RetroRewindInstallPipeline.Error.ARCHIVE_INVALID,
                     "invalid archive was accepted");
             expect(!extracted[0], "invalid archive reached extraction");
+            testProcessDeathReleasesLock(temporary.resolve("process-death"));
+            testActivationBoundary(temporary.resolve("activation-race"));
+            System.out.println("Retro recovery concurrency: cross-process staging, activation, and process-death cases passed");
         } finally {
             deleteTree(temporary);
         }
         System.out.println("Android Retro Rewind install pipeline passed.");
+    }
+
+    private static Process child(String action, Path files) throws IOException {
+        return new ProcessBuilder(
+                Path.of(System.getProperty("java.home"), "bin", "java").toString(),
+                "-cp", System.getProperty("java.class.path"),
+                RetroRewindInstallPipelineTestMain.class.getName(), action, files.toString())
+                .redirectError(ProcessBuilder.Redirect.INHERIT).start();
+    }
+
+    private static void runRecoveryProcess(Path files) throws IOException {
+        Process process = child("recover", files);
+        try {
+            expect(process.waitFor(5, TimeUnit.SECONDS), "recovery blocked behind active install");
+            expect(process.exitValue() == 0, "recovery child failed");
+        } catch (InterruptedException error) {
+            Thread.currentThread().interrupt();
+            throw new IOException(error);
+        } finally {
+            process.destroyForcibly();
+        }
+    }
+
+    private static void testProcessDeathReleasesLock(Path files) throws Exception {
+        Files.createDirectories(files);
+        Process process = child("hold", files);
+        try {
+            var ready = java.util.concurrent.CompletableFuture.supplyAsync(() -> {
+                try {
+                    return new String(process.getInputStream().readNBytes(7), StandardCharsets.UTF_8);
+                } catch (IOException error) {
+                    throw new java.io.UncheckedIOException(error);
+                }
+            });
+            expect(ready.get(5, TimeUnit.SECONDS).equals("locked\n"), "child lock barrier failed");
+            Path staging = files.resolve("KartPad/RetroRewind.import-killed");
+            RetroRewindInstallStorage.recover(files.toFile());
+            expect(Files.isDirectory(staging), "live child staging was removed");
+            process.destroyForcibly();
+            expect(process.waitFor(5, TimeUnit.SECONDS), "child did not terminate");
+            RetroRewindInstallStorage.recover(files.toFile());
+            expect(!Files.exists(staging), "process-death lock was not released for recovery");
+        } finally {
+            process.destroyForcibly();
+        }
+    }
+
+    private static void testActivationBoundary(Path files) throws Exception {
+        Files.createDirectories(files);
+        Path installed = files.resolve("KartPad/RetroRewind");
+        Path save = Path.of("riivolution/save/RetroWFC/RMCP/rksys.dat");
+        Files.createDirectories(installed.resolve(save).getParent());
+        Files.writeString(installed.resolve(save), "existing progress");
+        try (var lock = RetroRewindInstallStorage.tryInstallLock(files.toFile())) {
+            expect(lock != null, "activation lock unavailable");
+            Path staging = RetroRewindInstallStorage.createStagingDirectory(files.toFile(), "race");
+            Files.writeString(staging.resolve("new-pack"), "validated pack");
+            RetroRewindInstallStorage.activateValidatedStaging(files.toFile(), staging, "race",
+                    (source, destination) -> {
+                        Files.move(source, destination, java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+                        if (source.equals(installed)) {
+                            runRecoveryProcess(files);
+                            expect(Files.isDirectory(staging), "recovery removed staging between activation moves");
+                            expect(!Files.exists(installed), "recovery restored rollback during activation");
+                        }
+                    });
+        }
+        expect(Files.readString(installed.resolve(save)).equals("existing progress"),
+                "activation race lost save data");
+        expect(Files.readString(installed.resolve("new-pack")).equals("validated pack"),
+                "activation race lost new pack");
     }
 
     private static void writeTree(Path staging, byte[] artifact) throws IOException {

@@ -32,6 +32,8 @@ case "${sdk}" in
   *) echo "usage: $0 [runtime-source] [xcode-build] [translation-root] [appletvos|appletvsimulator]" >&2; exit 64 ;;
 esac
 
+python3 "${repo_root}/scripts/stage-maintained-runtime.py" --verify tvos "${runtime_source}"
+
 if [[ ! -f "${runtime_source}/CMakeLists.txt" ]] ||
    ! rg -q 'mkw_configure_kartpad_tvos' "${runtime_source}/cmake/PublicProducts.cmake"; then
   echo "ERROR: prepare the integrated source with scripts/prepare-tvos-game-runtime.sh" >&2

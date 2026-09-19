@@ -45,6 +45,35 @@ class BuildProvenanceTests(unittest.TestCase):
             (root / "source.cpp").unlink()
             self.assertTrue(provenance.manifest(root)["source_dirty"])
 
+    def test_initialized_submodule_inputs_are_fingerprinted_without_private_files(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory) / "parent"
+            root.mkdir()
+            child = root / "engine"
+            def git(where, *args):
+                return subprocess.check_output(["git", "-C", str(where), *args], stderr=subprocess.DEVNULL)
+            git(root, "init")
+            child.mkdir()
+            git(child, "init")
+            (child / "source.cpp").write_text("first")
+            git(child, "add", "source.cpp")
+            git(child, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "fixture")
+            pin = git(child, "rev-parse", "HEAD").decode().strip()
+            git(root, "update-index", "--add", "--cacheinfo", "160000", pin, "engine")
+            git(root, "-c", "user.name=Test", "-c", "user.email=test@example.invalid", "commit", "-m", "pin")
+            first = provenance.manifest(root)
+            self.assertEqual(first["source_dependencies"], [{"commit": pin, "dirty": False}])
+            (child / "private.txt").write_text("must not enter source fingerprint")
+            self.assertEqual(first["kartpad_source"], provenance.manifest(root)["kartpad_source"])
+            (child / "source.cpp").write_text("second")
+            second = provenance.manifest(root)
+            (child / "source.cpp").write_text("third")
+            third = provenance.manifest(root)
+            self.assertNotEqual(first["kartpad_source"], second["kartpad_source"])
+            self.assertNotEqual(second["kartpad_source"], third["kartpad_source"])
+            self.assertTrue(third["source_dependencies"][0]["dirty"])
+            self.assertNotIn(directory, json.dumps(third))
+
     def test_tree_is_location_independent_and_detects_input_changes(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)

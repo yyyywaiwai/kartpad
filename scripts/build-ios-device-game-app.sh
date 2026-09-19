@@ -28,6 +28,8 @@ case "${product}" in
   *) echo "ERROR: product must be base, retro-rewind, or dual" >&2; exit 64 ;;
 esac
 
+python3 "${repo_root}/scripts/stage-maintained-runtime.py" --verify ios "${runtime_source}"
+
 if [[ ! -f "${runtime_source}/CMakeLists.txt" ]] ||
    ! rg -q 'MKW_KARTPAD_REPO_ROOT' "${runtime_source}/cmake/PublicProducts.cmake"; then
   echo "ERROR: prepare the integrated source first with scripts/prepare-ios-game-runtime.sh" >&2

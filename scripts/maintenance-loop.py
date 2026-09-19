@@ -21,6 +21,9 @@ from typing import Any
 
 
 REPO = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(REPO / "builder"))
+from kartpad_builder.pipeline import source_fingerprint
+
 OWNER = "chrissotraidis"
 DEFAULT_STATE = REPO / "build" / "maintenance" / "coordinator" / "loop-state.json"
 DEFAULT_PRIORITIES = REPO / "docs" / "maintenance-priorities.json"
@@ -519,7 +522,7 @@ FINGERPRINT_SCOPE_PATHS: dict[str, tuple[str, ...]] = {
     "android-network-receive-window": (
         "runtime/include/kartpad/network/blocking_stream_wait.h",
         "runtime/tests/blocking_stream_wait_tests.cpp",
-        "patches/wiicompiled-blocking-stream-recv-wait.patch",
+        "vendor/runtimes/android/runtime/src/hle/net/network_socket.cpp",
         "runtime/include/kartpad/android/network_session_trace.h",
         "patches/wiicompiled-android-network-session-trace.patch",
         "android/app/src/main/cpp/CMakeLists.txt",
@@ -530,14 +533,15 @@ FINGERPRINT_SCOPE_PATHS: dict[str, tuple[str, ...]] = {
         "scripts/build-android-game-app.sh",
         "scripts/android-runtime-provenance.py",
         "android/app/src/main/java/dev/kartpad/android/KartPadRuntimeHealth.kt",
-        "patches/wiicompiled-android-network-stall.patch",
+        "vendor/runtimes/android/runtime/src/hle/net/network_socket.cpp",
+        "vendor/runtimes/android/runtime/src/hle/net/network_ssl.cpp",
         "scripts/prepare-android-game-runtime.sh",
         "tests/test_android_network_stall.py",
         "tests/test_active_network_calls.py",
     ),
     "android-renderer-pnmtx": (
         "runtime/include/kartpad/diagnostics/draw_inputs.h",
-        "patches/aurora-draw-input-diagnostics.patch",
+        "vendor/runtimes/android/aurora-main/lib/gx/command_processor.cpp",
         "patches/aurora-android-const-pnmtx-diagnostic.patch",
         "scripts/prepare-android-game-runtime.sh",
         "tests/test_draw_input_diagnostics.py",
@@ -593,8 +597,9 @@ def test_fingerprint(issue_number: int | None = None) -> str:
             digest.update(relative.encode() + b"\0")
             digest.update(path.read_bytes() if path.is_file() else b"<missing>")
     else:
-        diff = command("git", "diff", "--no-ext-diff", "--", "android", "apple", "patches", "runtime", "scripts", "tests")
-        digest = hashlib.sha256(f"{scope}\0{revision}\0{diff}".encode())
+        # Include maintained submodule source bytes, not only Git's dirty flag.
+        source = source_fingerprint(REPO)
+        digest = hashlib.sha256(f"{scope}\0{revision}\0{source}".encode())
     return digest.hexdigest()
 
 

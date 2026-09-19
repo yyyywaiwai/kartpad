@@ -8,6 +8,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from runtime_sources import runtime_source, assert_runtime_staging, PLATFORMS
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -26,9 +27,8 @@ from kartpad_builder.profiles import Profile
 
 
 def helper_source() -> str:
-    patch_text = (REPO / 'patches/wiicompiled-retro-rel-report-guard.patch').read_text()
-    added = '\n'.join(line[1:] for line in patch_text.splitlines() if line.startswith('+') and not line.startswith('+++'))
-    return re.search(r'bool TryGetRelReportSectionTable\([^;\n]+\) noexcept \{.*?\n\}', added, re.S).group()
+    source = runtime_source("ios", "runtime/src/recomp_mod_loader.cpp")
+    return re.search(r'bool TryGetRelReportSectionTable\([^;\n]+\) noexcept \{.*?\n\}', source, re.S).group()
 
 
 def write_graph(root: Path, sources: list[Path]) -> None:
@@ -147,11 +147,11 @@ class RelReportGuardTests(unittest.TestCase):
         write_graph(shards, [compiled])
         graph = shards / 'shards.cmake'
         template = graph.read_text()
-        for count in (4188, 4094, 4095, 4096):
+        for count in (4188, 4095, 4100, 4101, 4102):
             with self.subTest(mod_functions=count):
                 graph.write_text(template.replace('MKW_RETRO_REWIND_FUNCTION_COUNT 1)',
                                                   f'MKW_RETRO_REWIND_FUNCTION_COUNT {count})'))
-                if count == 4095:
+                if count == 4101:
                     translate(profile, REPO, self.root, self.root, 1, None)
                 else:
                     with self.assertRaisesRegex(BuildError, 'cached translation failed profile validation'):
@@ -203,26 +203,16 @@ class RelReportGuardTests(unittest.TestCase):
                 self.assertLess(source.index('emit-build-shards'), source.index('--inject-shards'))
                 self.assertIn('--verify-shards', source)
         for name in ('prepare-ios-game-runtime.sh', 'prepare-g7-game-runtime.sh'):
-            self.assertIn('wiicompiled-retro-rel-report-guard.patch', (REPO / 'scripts' / name).read_text())
+            assert_runtime_staging(self, "macos" if "g7" in name else "ios")
         for name in ('prepare-android-game-runtime.sh', 'prepare-tvos-game-runtime.sh'):
             self.assertIn('prepare-ios-game-runtime.sh', (REPO / 'scripts' / name).read_text())
 
-    def test_helper_patch_applies_to_pinned_runtime(self):
-        upstream = Path(os.environ.get('KARTPAD_TEST_UPSTREAM_RUNTIME', REPO / 'ref/upstream/Wiicompiled/runtime'))
-        if not (upstream / 'src/recomp_mod_loader.cpp').is_file():
-            self.skipTest('pinned upstream runtime unavailable')
-        stage = self.root / 'runtime'
-        for name in ('include/recomp_mod_loader.h', 'src/recomp_mod_loader.cpp'):
-            dest = stage / name
-            dest.parent.mkdir(parents=True, exist_ok=True)
-            shutil.copyfile(upstream / name, dest)
-        subprocess.run(['patch', '--batch', '--fuzz=0', '-p1', '-d', str(stage), '-i',
-                        str(REPO / 'patches/wiicompiled-dual-profile-mod-loader.patch')],
-                       check=True, capture_output=True)
-        result = subprocess.run(['patch', '--batch', '--fuzz=0', '-p2', '-d', str(stage), '-i',
-                                 str(REPO / 'patches/wiicompiled-retro-rel-report-guard.patch')], capture_output=True, text=True)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn(helper_source(), (stage / 'src/recomp_mod_loader.cpp').read_text())
+    def test_helper_is_present_in_every_maintained_runtime(self):
+        for platform in PLATFORMS:
+            with self.subTest(platform=platform):
+                self.assertIn(helper_source(), runtime_source(platform, "runtime/src/recomp_mod_loader.cpp"))
+                self.assertIn("TryGetRelReportSectionTable", runtime_source(platform, "runtime/include/recomp_mod_loader.h"))
+
 
 
 class CompiledRelReportTests(unittest.TestCase):

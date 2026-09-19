@@ -1,4 +1,4 @@
-# Android 0.4.18 source delivery
+# Android 0.4.19 source delivery
 
 The accompanying source archive identifies the exact compiled Android source
 and public APK in `SOURCE-MANIFEST.json`. Every delivered member has its byte

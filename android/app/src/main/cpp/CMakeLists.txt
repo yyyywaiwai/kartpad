@@ -71,7 +71,10 @@ if(KARTPAD_GAME_RUNTIME_SOURCE)
   endif()
   add_compile_options(
     "-ffile-prefix-map=${KARTPAD_REPO_ROOT}=."
-    "-fmacro-prefix-map=${KARTPAD_REPO_ROOT}=.")
+    "-fmacro-prefix-map=${KARTPAD_REPO_ROOT}=."
+    # Prepared runtimes may live outside this checkout, e.g. a release worktree.
+    "-ffile-prefix-map=${KARTPAD_GAME_RUNTIME_SOURCE}=wiicompiled-runtime"
+    "-fmacro-prefix-map=${KARTPAD_GAME_RUNTIME_SOURCE}=wiicompiled-runtime")
   list(PREPEND CMAKE_PREFIX_PATH "${DAWN_ANDROID_ROOT}")
   set(Dawn_DIR "${DAWN_ANDROID_ROOT}/lib/cmake/Dawn" CACHE PATH "" FORCE)
   set(MKW_AURORA_DIR "${KARTPAD_GAME_RUNTIME_SOURCE}/aurora-main" CACHE PATH "" FORCE)

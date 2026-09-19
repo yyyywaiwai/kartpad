@@ -6,6 +6,11 @@ owns ordering, readiness, exact next actions and acceptance; this board records
 support decisions and evidence. Refresh GitHub and local ownership before acting.
 The [device matrix](COMPATIBILITY-MATRIX.md) preserves target-specific observations.
 
+Reporting update, 14 September: [Android90 and Apple42 test builds](REPORTING.md#reporting-test-builds)
+are published separately from stable downloads. Both trackers are accessible;
+Android-specific and uncertain port issues remain KartPad intake. Physical
+report-flow acceptance is pending; no gameplay issue is closed by this change.
+
 ## Current priorities and handoffs
 
 Counts below are distinct non-maintainer issue authors at this snapshot, excluding
@@ -140,3 +145,17 @@ The [high-impact review](artifacts/2026-09-13/high-impact-priority-review.md) re
 No open pull requests remained at this review. Merged Mac VSync still needs warmed pacing/audio and tearing acceptance before a new Mac release. A new Android performance or graphics release requires a measured correction and matching gameplay checks, not another version bump.
 
 Ownership audit: [46/46 open tickets assigned and replied to](artifacts/2026-09-13/open-ticket-ownership-audit.md). Current [code84 profiling evidence](artifacts/2026-09-13/android-profiler-preflight.md#current-diagnostic-built-after-the-review) is preparation, not a performance fix.
+
+## Concrete source corrections after deeper review
+
+[Local failure review](artifacts/2026-09-13/android-source-failure-review.md): Original startup now skips unrelated Retro recovery, and recovery defers to an active cross-process Retro install transaction. Real filesystem/process tests reproduce and cover both boundaries. A shared packed-vertex helper also reads only its required three bytes. These changes need a new candidate to reach users; public83 is unchanged, and no broad launch/geometry issue is closed on this evidence.
+
+## Published Android 0.4.19 / code85
+
+[Code85 is public](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.19-android.1), delivering the PR271 Original-startup isolation, active-install recovery protection and packed-vertex read correction. APK, corresponding source, notices and checksums were uploaded and independently downloaded/verified. See the [release receipt](artifacts/2026-09-13/android-code85-public-release.md). Earlier entries saying these changes need a new APK are superseded. No fresh physical gameplay or broad issue closure is inferred; the release posts request focused affected-path comparisons.
+
+## 14 September intake and changed evidence
+
+#277 was consolidated into #206 after matching the reporter, device and connection failure; its code80 evidence remains in the canonical thread. New #273/#275/#278 requests and graphics retests #102/#104/#166/#193 were answered. #250 now supplies60Hz with interpolation off. All open tickets were assigned to the owner at refresh.
+
+Code85 failed the four new graphics comparisons. Code90 uses identical native libraries, so it is offered only where its session-log export answers a missing-evidence problem. The next renderer action is reconstruction of #193's two exact shipped pipeline recipes. #196 now has symbolized native evidence and a targeted missing-address request; the separate iOS file-backed guest-memory behavior warrants local investigation. See the [intake receipt](artifacts/2026-09-14/intake-and-next-failures.md).

@@ -8,6 +8,7 @@ import org.json.JSONObject
 object BuildConfig { const val VERSION_CODE = 23 }
 
 fun main() {
+    testPrivateExitTraces()
     val manager = ActivityManager()
     val context = Context(manager)
     Build.VERSION.SDK_INT = 28
@@ -52,6 +53,40 @@ fun main() {
     try {
         val chooser = Context(manager, root)
         val game = Context(manager, root)
+        check(KartPadCharacterGraphicsTest.mode(game) == KartPadCharacterGraphicsTest.Mode.NORMAL)
+        // Reset only the process latch to model separate game-process starts.
+        fun newCharacterProcess() {
+            val latch = KartPadCharacterGraphicsTest::class.java.getDeclaredField("configured")
+            latch.isAccessible = true
+            latch.setBoolean(null, false)
+        }
+        for (mode in KartPadCharacterGraphicsTest.Mode.entries) {
+            newCharacterProcess()
+            check(KartPadCharacterGraphicsTest.setMode(chooser, mode))
+            check(KartPadCharacterGraphicsTest.mode(game) == mode)
+            KartPadCharacterGraphicsTest.configure(game)
+            check(android.system.Os.getenv("KARTPAD_RENDERER_CONST_PNMTX") == mode.environment)
+        }
+        check(KartPadCharacterGraphicsTest.setMode(chooser, KartPadCharacterGraphicsTest.Mode.ORIGINAL))
+        KartPadCharacterGraphicsTest.configure(game) // Activity recreation must keep the running mode.
+        check(KartPadCharacterGraphicsTest.active == KartPadCharacterGraphicsTest.Mode.COMPATIBILITY)
+        check(android.system.Os.getenv("KARTPAD_RENDERER_CONST_PNMTX") == "1")
+        check(KartPadCharacterGraphicsTest.setMode(chooser, KartPadCharacterGraphicsTest.Mode.COMPATIBILITY))
+        android.util.AtomicFile.failSuffix = "CharacterGraphicsTest"
+        check(!KartPadCharacterGraphicsTest.setMode(chooser, KartPadCharacterGraphicsTest.Mode.NORMAL))
+        check(KartPadCharacterGraphicsTest.mode(game) == KartPadCharacterGraphicsTest.Mode.COMPATIBILITY)
+        android.util.AtomicFile.failSuffix = null
+        android.util.AtomicFile.silentFailSuffix = "CharacterGraphicsTest"
+        check(!KartPadCharacterGraphicsTest.setMode(chooser, KartPadCharacterGraphicsTest.Mode.NORMAL))
+        check(KartPadCharacterGraphicsTest.mode(game) == KartPadCharacterGraphicsTest.Mode.COMPATIBILITY)
+        android.util.AtomicFile.silentFailSuffix = null
+        for (invalid in listOf("compatibility\n", "1", "unknown", "x".repeat(100))) {
+            newCharacterProcess()
+            java.io.File(root, "KartPad/CharacterGraphicsTest").writeText(invalid)
+            KartPadCharacterGraphicsTest.configure(game)
+            check(KartPadCharacterGraphicsTest.active == KartPadCharacterGraphicsTest.Mode.NORMAL)
+            check(android.system.Os.getenv("KARTPAD_RENDERER_CONST_PNMTX") == null)
+        }
         check(!KartPadRendererDiagnostics.enabled(game))
         check(KartPadRendererDiagnostics.setEnabled(chooser, true))
         KartPadRendererDiagnostics.configure(game)

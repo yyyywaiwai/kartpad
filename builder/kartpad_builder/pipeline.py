@@ -19,10 +19,32 @@ PIPELINE_VERSION = 1
 
 
 def source_fingerprint(repo: Path) -> str:
-    command = ["git", "-C", str(repo), "ls-files", "-s"]
-    tracked = subprocess.check_output(command)
-    diff = subprocess.check_output(["git", "-C", str(repo), "diff", "--binary", "HEAD", "--"])
-    return hashlib.sha256(tracked + b"\0" + diff).hexdigest()
+    # Git's parent diff only records a submodule's "dirty" flag. Hash each
+    # initialized source repository so two different local edits cannot reuse
+    # the same build cache.
+    def fingerprint(root: Path) -> bytes:
+        tracked = subprocess.check_output(["git", "-C", str(root), "ls-files", "-s", "-z"])
+        diff = subprocess.check_output([
+            "git", "-C", str(root), "diff", "--binary", "--no-ext-diff",
+            "--no-textconv", "--ignore-submodules=none", "HEAD", "--",
+        ])
+        digest = hashlib.sha256(tracked + b"\0" + diff)
+        for record in tracked.split(b"\0"):
+            if not record:
+                continue
+            descriptor, name = record.split(b"\t", 1)
+            mode, _, stage = descriptor.split()
+            if stage != b"0":
+                raise BuildError(f"Unresolved source conflict in {root}: {os.fsdecode(name)}")
+            if mode != b"160000":
+                continue
+            child = root / os.fsdecode(name)
+            if not (child / ".git").exists():
+                raise BuildError(f"Missing initialized source submodule: {child}; run git submodule update --init --recursive")
+            digest.update(name + b"\0" + fingerprint(child))
+        return digest.digest()
+
+    return fingerprint(repo).hex()
 
 
 def cache_key(profile: Profile, image_sha256: str, source_sha256: str) -> str:

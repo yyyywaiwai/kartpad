@@ -3,17 +3,24 @@
 [Coordinator runbook and implementation plan](MAINTENANCE-AUTOMATION.md) ·
 [Canonical active queue](MAINTENANCE-BOARD.md).
 
-Updated: 13 September 2026. This page summarizes acceptance, not a full test log.
+Updated: 15 September 2026. This page summarizes acceptance, not a full test log.
 Use the [maintenance board](MAINTENANCE-BOARD.md) for candidate ownership and
 next actions, and [known issues](KNOWN-ISSUES.md) for current reports.
+
+## Historical reporting prereleases — 14 September 2026
+
+[Android code90](releases/v0.4.20-android-reporting.1.md) and
+[iPhone/iPad build42](releases/v0.4.20-ios-reporting.1.md) are optional reporting
+test builds. Build/package checks passed; physical reporting-flow acceptance is
+pending. These older test builds are retained for historical comparison. Current stable downloads are below.
 
 ## Published packages
 
 | Platform | Package | Acceptance boundary |
 | --- | --- | --- |
-| Android | [0.4.17 Android 1, code 80](releases/v0.4.17-android.1.md) | Owner accepted preceding candidate Retro single-player/touch; new FPS sizing and D-pad editor passed physical Pixel UI checks. Exact release-payload checks are recorded in release provenance; online and affected-controller acceptance remain open |
-| iPhone / iPad | [0.4.17, build 39](releases/v0.4.17-ios.1.md) | Corrected compiled REL guard, owner-accepted bounded iPhone 14 trial and preserved saves/configuration; iPhone 17 Pro Max/iOS 27 and online acceptance remain open |
-| Apple Silicon Mac | [0.4.17, build 39](releases/v0.4.17-macos.1.md) | Fresh build, viewport/REL checks and isolated Original/Retro rendering, audio and keyboard smoke; exact reporter two-player scene, full races and controller overhaul remain unaccepted |
+| Android | [0.4.22 Android 1, code 93](releases/v0.4.22-android.1.md) | Source migration, audited public signer and path-safe release packaging; owner accepted loading/running/game starts on the tested Pixel candidate; broader GPU and full online sequence remain unverified |
+| iPhone / iPad | [0.4.22, build 43](releases/v0.4.22-ios.1.md) | Same tested iPad executable; owner accepted loading/running/game starts and new-license Retro WFC login; old-license serial mismatch reproduces before and after migration |
+| Apple Silicon Mac | [0.4.22, build 43](releases/v0.4.22-macos.1.md) | Tested native payload retained; host smoke reached a race and pause/resume; sustained gameplay and broader controller/device acceptance remain unverified |
 | Apple TV experimental | [0.4.11, build 9](releases/v0.4.11-tvos.1.md) | Published identity-fix and compiler-hardened package; exact-build hardware acceptance remains open |
 
 [Download and install](../README.md#downloads). All listed packages include the
@@ -25,6 +32,15 @@ and [verified download ledger](artifacts/2026-09-10/platform-release-verificatio
 Historical local candidates are retained in their dated records.
 
 ## Current device acceptance
+
+The owner accepted the source-migration candidates for loading, running and
+starting games on iPad and Android, and explicitly chose not to require a
+completed race as another release gate. iPad new-license Retro WFC login worked;
+the old license's 22005 serial mismatch reproduced on both builds. This does not
+claim a complete online race/reconnect sequence. See the
+[migration validation ledger](source-maintenance/VALIDATION.md).
+
+### Earlier device evidence
 
 The owner accepted the bounded iPhone 14 trial of **0.4.17/build 39** on
 13 September. Saves, identity and configuration were preserved during the

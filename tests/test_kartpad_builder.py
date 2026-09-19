@@ -120,8 +120,8 @@ class ProfileTests(unittest.TestCase):
 
     def test_retro_rewind_archive_path_policy_is_shared(self) -> None:
         installer = (REPO / "apple/ios/KartPadRetroRewindInstaller.mm").read_text()
-        ios_patch = (REPO / "patches/wiicompiled-ios-discio-import.patch").read_text()
-        tvos_patch = (REPO / "patches/wiicompiled-tvos-runtime.patch").read_text()
+        ios_source = (REPO / "vendor/runtimes/ios/runtime/cmake/PublicProducts.cmake").read_text()
+        tvos_source = (REPO / "vendor/runtimes/tvos/runtime/cmake/PublicProducts.cmake").read_text()
         shared_sources = (
             "runtime/src/retro_rewind/archive_path.cpp",
             "runtime/src/retro_rewind/archive_scan.cpp",
@@ -131,8 +131,8 @@ class ProfileTests(unittest.TestCase):
         self.assertIn("ValidateArchiveMemberPath", installer)
         self.assertIn("ArchiveScan", installer)
         for shared_source in shared_sources:
-            self.assertIn(shared_source, ios_patch)
-            self.assertIn(shared_source, tvos_patch)
+            self.assertIn(shared_source, ios_source)
+            self.assertIn(shared_source, tvos_source)
 
     def test_version_watch_opens_one_actionable_issue(self) -> None:
         workflow = (REPO / ".github/workflows/retro-rewind-version-watch.yml").read_text()
@@ -172,13 +172,11 @@ class ProfileTests(unittest.TestCase):
 
 class RetroRewindTests(unittest.TestCase):
     def test_translator_accepts_current_kamek_v2_and_legacy_v3(self) -> None:
-        patch = (REPO / "patches/wiicompiled-kamek-v2.patch").read_text()
-        prepare = (REPO / "scripts/prepare-patched-translator.sh").read_text()
-        self.assertIn("MagicV2 = 0x6B000002", patch)
-        self.assertIn("MagicV3 = 0x6B000003", patch)
-        self.assertIn("MagicV2 or MagicV3", patch)
-        self.assertIn("magic1 == MagicV2 && encodedChunkSize == 0", patch)
-        self.assertIn("wiicompiled-kamek-v2.patch", prepare)
+        source = (REPO / "vendor/wiicompiled/translator/src/Translator.Core/Parsing/Kamek/KamekChunk.cs").read_text()
+        self.assertIn("MagicV2 = 0x6B000002", source)
+        self.assertIn("MagicV3 = 0x6B000003", source)
+        self.assertIn("MagicV2 or MagicV3", source)
+        self.assertIn("magic1 == MagicV2 && encodedChunkSize == 0", source)
 
     def make_archive(self, root: Path, unsafe: bool = False) -> tuple[Path, dict]:
         archive = root / "retro.zip"

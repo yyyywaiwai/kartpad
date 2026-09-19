@@ -21,7 +21,7 @@ def git(root: Path, *args: str) -> bytes:
     return subprocess.check_output(["git", "-C", str(root), *args])
 
 
-def snapshot(root: Path, revision: str, label: str, archive: tarfile.TarFile) -> dict:
+def snapshot(root: Path, revision: str, label: str, archive: tarfile.TarFile, *, nested: bool = False) -> dict:
     commit = git(root, "rev-parse", revision + "^{commit}").decode().strip()
     records = git(root, "ls-tree", "-rz", "--full-tree", commit).split(b"\0")
     entries = []
@@ -42,6 +42,11 @@ def snapshot(root: Path, revision: str, label: str, archive: tarfile.TarFile) ->
             entry = {"path": name, "mode": mode, "gitObject": oid}
             if kind == "commit":
                 entry["submodule"] = True
+                child = root / name
+                if not (child / ".git").exists():
+                    raise ValueError(f"Missing initialized source submodule: {child}; run git submodule update --init --recursive")
+                # Read the gitlink commit, never the child's working tree or HEAD.
+                entry["source"] = snapshot(child, oid, f"{label}/{name}", archive, nested=True)
                 entries.append(entry)
                 continue
             if kind != "blob":
@@ -77,10 +82,13 @@ def snapshot(root: Path, revision: str, label: str, archive: tarfile.TarFile) ->
             entries.append(entry)
     finally:
         blobs.stdin.close()
+        blobs.stdout.close()
         if blobs.wait() != 0:
             raise RuntimeError("cat-file failed")
     metadata = {"schemaVersion": 1, "label": label, "commit": commit,
                 "commitObject": git(root, "cat-file", "commit", commit).decode(), "entries": entries}
+    if nested:
+        return metadata
     data = (json.dumps(metadata, indent=2, sort_keys=True) + "\n").encode()
     info = tarfile.TarInfo(f"metadata/{label}.json"); info.size = len(data); info.mode = 0o644
     archive.addfile(info, io.BytesIO(data))

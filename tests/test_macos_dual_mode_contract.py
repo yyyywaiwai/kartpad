@@ -1,3 +1,4 @@
+from runtime_sources import runtime_source
 import unittest
 from pathlib import Path
 
@@ -21,7 +22,7 @@ class MacOSDualModeContractTests(unittest.TestCase):
 
     def test_runtime_generates_exact_retro_release_contract(self):
         script = (ROOT / "scripts/prepare-g7-game-runtime.sh").read_text()
-        target = (ROOT / "patches/wiicompiled-dual-product-target.patch").read_text()
+        target = runtime_source('macos', 'runtime/CMakeLists.txt', 'runtime/cmake/PublicProducts.cmake')
         self.assertIn("kartpad_builder.release_header", script)
         self.assertIn("third_party/kartpad-profile", target)
         self.assertIn("KARTPAD_RUNTIME_PRODUCT_DUAL=1", target)

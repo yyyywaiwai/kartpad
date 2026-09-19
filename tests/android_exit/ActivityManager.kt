@@ -3,10 +3,10 @@ package android.app
 class ApplicationExitInfo(
     val reason: Int, val processStateSummary: ByteArray? = null,
     val pss: Long = 0, val rss: Long = 0,
-    val timestamp: Long = 1234567890, val status: Int = 0, val importance: Int = 100
+    val timestamp: Long = 1234567890, val status: Int = 0, val importance: Int = 100, val trace: (() -> java.io.InputStream?)? = null
 ) {
     val description: String get() = error("Private description must not be read")
-    val traceInputStream: Any get() = error("Private trace must not be read")
+    val traceInputStream: java.io.InputStream? get() = trace?.invoke() ?: if (trace == null) error("Private trace must not be read") else null
     companion object {
         const val REASON_EXIT_SELF=1; const val REASON_SIGNALED=2
         const val REASON_LOW_MEMORY=3; const val REASON_CRASH=4

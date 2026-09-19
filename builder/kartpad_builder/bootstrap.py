@@ -39,6 +39,34 @@ def _verify_checkout(repo: Path, dependency: dict[str, Any]) -> None:
         raise BuildError(f"{dependency['name']} source must be clean")
 
 
+def _prepare_runtime_sources(repo: Path, dependency: dict[str, Any], install: bool) -> None:
+    for relative in dependency["platformPaths"].values():
+        path = repo / relative
+        tracked = subprocess.check_output([
+            "git", "-C", str(repo), "ls-files", "--stage", "-z", "--", relative,
+        ]).split(b"\0")
+        records = [record for record in tracked if record]
+        if len(records) != 1:
+            raise BuildError(f"Missing or unresolved runtime gitlink: {relative}")
+        descriptor, name = records[0].split(b"\t", 1)
+        mode, expected, stage = descriptor.split()
+        if mode != b"160000" or stage != b"0" or os.fsdecode(name) != relative:
+            raise BuildError(f"Missing or unresolved runtime gitlink: {relative}")
+        if not (path / ".git").exists():
+            if not install:
+                raise BuildError(f"missing runtime source {relative}; run ./scripts/build-user-ipa.sh bootstrap")
+            if path.exists() and any(path.iterdir()):
+                raise BuildError(f"Refusing to replace existing runtime files: {path}")
+            run(["git", "-C", str(repo), "submodule", "update", "--init", "--recursive", "--", relative])
+        actual = subprocess.check_output([
+            "git", "-C", str(path), "rev-parse", "HEAD^{commit}",
+        ]).strip()
+        if actual != expected:
+            raise BuildError(f"Runtime source {relative} does not match its staged gitlink; existing checkout was preserved")
+        # Local tracked edits are intentional build inputs, hashed by the pipeline.
+        # Never reset an initialized checkout or require the maintained source clean.
+
+
 def _download(url: str, expected_sha256: str, output: Path) -> None:
     output.parent.mkdir(parents=True, exist_ok=True)
     partial = output.with_name(output.name + ".partial")
@@ -62,6 +90,9 @@ def prepare_dependencies(repo: Path, profile: Profile, install: bool) -> list[st
         raise BuildError(f"missing required commands: {', '.join(missing_commands)}")
     lock = load_lock(repo)
     dependencies = _dependency_map(lock)
+    runtime = dependencies.get("KartPad WiiCompiled runtime fork")
+    if runtime is not None:
+        _prepare_runtime_sources(repo, runtime, install)
     required = profile.data["sourceDependencies"]
     for name in required:
         if name not in dependencies:

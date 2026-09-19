@@ -5,10 +5,12 @@
   Native static recompilation through Vulkan on Android and Metal on Apple platforms, with touch controls, motion steering, controllers, and optional Retro Rewind content. tvOS is currently an experimental preview.
 </p>
 
-KartPad is an Apple and Android fork and productization of
-[WiiCompiled](https://github.com/patchzyy/Wiicompiled), the original static
-recompilation project for Mario Kart Wii. It adds native controls, a dual-game
-chooser, game-data management, packaging, and release workflows.
+KartPad builds on [WiiCompiled](https://github.com/patchzyy/Wiicompiled), the
+original Mario Kart Wii static recompilation project created by
+[patchzyy](https://github.com/patchzyy). WiiCompiled provides the foundational
+translator and runtime; KartPad maintains the Apple and Android integration,
+native controls, game chooser, game-data management, packaging, and releases.
+The projects are independently maintained.
 
 <p align="center">
   <img alt="Apple Silicon" src="https://img.shields.io/badge/Apple%20Silicon-arm64-0A84FF?logo=apple">
@@ -16,9 +18,10 @@ chooser, game-data management, packaging, and release workflows.
   <img alt="Android ARM64 with Vulkan" src="https://img.shields.io/badge/Android-ARM64%20%2F%20Vulkan-3DDC84?logo=android">
   <img alt="Ahead-of-time static recompilation" src="https://img.shields.io/badge/PowerPC-static%20recompilation-FF9F0A">
   <img alt="macOS development target" src="https://img.shields.io/badge/macOS%20target-14%2B-0A84FF">
-  <img alt="iPhone and iPad 0.4.14" src="https://img.shields.io/badge/iPhone%20%2F%20iPad-0.4.14-0A84FF">
+  <img alt="iPhone and iPad" src="https://img.shields.io/badge/platform-iPhone%20%2F%20iPad-0A84FF">
   <img alt="Retro Rewind supported" src="https://img.shields.io/badge/Retro%20Rewind-6.12.8-FF375F">
   <img alt="Game data not included" src="https://img.shields.io/badge/game%20data-not%20included-FF453A">
+  <a href="https://discord.gg/xwHfUD2bxW"><img alt="Join the KartPad Discord" src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&amp;logoColor=white"></a>
 </p>
 
 ![KartPad running a race on DK Summit on iPad](docs/images/kartpad-dk-summit-ipad.png)
@@ -44,28 +47,21 @@ chooser, game-data management, packaging, and release workflows.
 
 | Platform | Download | Setup |
 | --- | --- | --- |
-| Android ARM64 | [0.4.18 Android 1 · code 83](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.18-android.1) | [Android 9+ with Vulkan](docs/INSTALL_ANDROID.md) |
-| iPhone / iPad | [0.4.17 · build 39](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.17-ios.1) | [iOS/iPadOS 16+; re-sign the IPA](docs/INSTALL_IPA.md) |
-| Apple Silicon Mac | [0.4.17 · build 39](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.17-macos.1) | [macOS 14+](docs/INSTALL_MACOS.md) |
+| Android ARM64 | [0.4.24 Android 1 · code 117](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.24-android.1) | [Android 9+ with Vulkan](docs/INSTALL_ANDROID.md) |
+| iPhone / iPad | [0.4.24 · build 49](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.24-ios.1) | [iOS/iPadOS 16+; re-sign the IPA](docs/INSTALL_IPA.md) |
+| Apple Silicon Mac | [0.4.22 · build 43](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.22-macos.1) | [macOS 14+](docs/INSTALL_MACOS.md) |
 | Apple TV experimental preview | [0.4.11 · build 9](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-tvos.1) | [tvOS 17+; re-sign the IPA](docs/INSTALL_TVOS.md) |
 
-**Android 0.4.18 Android 1** adds **Preferred Game…** for validated Original or
-Retro startup and corrects generated Kamek continuation handling. It retains
-the FPS sizing, narrow-screen touch editor and controller remapping shipped in
-code 80. The owner accepted gameplay on private code 82; both preferred-game
-startup/menu-return paths passed physical Pixel checks with saves and identities
-preserved. Item Rain-specific, online and device-specific graphics reports
-remain open. See the [release notes](docs/releases/v0.4.18-android.1.md).
+**0.4.24 aligns the mobile settings menus**, adds Original Time Trial ghost import/export, expands controller mappings and FPS counter sizing, and improves problem reports. It retains yesterday's racing launcher, HD icon, dark/light mode, preferred-game selector and license/Mii repairs. See the [mobile settings guide](docs/SETTINGS.md). Android performance remains an active area of work; this release does not establish a general FPS improvement.
 
-**iPhone/iPad 0.4.17** supports Retro Rewind 6.12.8 and includes the corrected
-compiled REL-report guard. The owner accepted the bounded iPhone 14 trial;
-saves and configuration survived the in-place update. The affected iPhone 17
-Pro Max/iOS 27 test remains pending. See the
-[iPhone/iPad notes](docs/releases/v0.4.17-ios.1.md).
-**macOS 0.4.17** includes the viewport interpolation correction and compiled
-REL-report guard for Retro Rewind 6.12.8. Local Original/Retro rendering, audio
-and keyboard smoke checks passed; the reported two-player scene remains a
-separate test. See the [Mac notes](docs/releases/v0.4.17-macos.1.md).
+**0.4.22 moved KartPad to maintained WiiCompiled source** with pinned platform
+branches, preserving the existing game behavior and repository history. Source
+parity, rollback and build checks passed; the owner accepted loading, running
+and starting games on iPad and Android. macOS reached a race in the host smoke
+check. New-license Retro WFC login worked on iPad; an existing profile's serial
+mismatch reproduced on both builds and remains unresolved. Completed online
+races/reconnect and broader hardware coverage are not new claims.
+See the [migration validation](docs/source-maintenance/VALIDATION.md).
 
 Download the checksums and accompanying notices with each package. The releases
 also include the [source bundle and rebuild instructions](docs/artifacts/2026-09-13/android-source-delivery.md). **Update in
@@ -73,6 +69,12 @@ place using the same signing identity; do not uninstall or clear app data.**
 Private Android previews use a different signer and need a backed-up migration.
 
 ## Playing
+
+**Need help or found a bug?** [Where to report and follow up](docs/REPORTING.md).
+[Reporting test builds for Android and iPhone/iPad](docs/REPORTING.md#reporting-test-builds)
+are available separately from the stable downloads.
+Suspected runtime bugs can go [directly to WiiCompiled](https://github.com/patchzyy/Wiicompiled/issues/new/choose); identify your KartPad build.
+Use KartPad for app/platform problems or when the cause is unclear.
 
 [Frequently asked questions](#frequently-asked-questions) · [Controls](docs/MULTIPLAYER.md) · [Save transfer and troubleshooting](docs/SUPPORT.md)
 
@@ -106,7 +108,7 @@ known issues. Android's suggested starting point is **1x Native**. Sustained
 <details>
 <summary>Can I download an IPA or playable app?</summary>
 
-Yes—use the [platform downloads above](#downloads). The current public iPhone/iPad build is **0.4.17 build 39**; Mac and Apple TV have separate packages. Apple IPAs need re-signing. Every package requires your own supported game data. A [Personal IPA Builder](docs/BUILDER.md) is also available.
+Yes—use the [platform downloads above](#downloads). The current public iPhone/iPad build is **0.4.24 build 49**; Mac and Apple TV have separate packages. Apple IPAs need re-signing. Every package requires your own supported game data. A [Personal IPA Builder](docs/BUILDER.md) is also available.
 
 </details>
 
@@ -120,12 +122,13 @@ Android has a playable ARM64/Vulkan APK for Android 9+, plus an explicitly unsta
 <details>
 <summary>Does online multiplayer work?</summary>
 
-The owner confirmed Retro WFC login and worldwide lobby entry on the current
-Android build. Separate isolated-server tests covered race results and lobby
-return, but complete production online behavior, reconnect and every device are
-not established. Native room hosting and Original Wiimmfi compatibility remain
-unfinished; entering a server address does not implement them. See [online
-status](docs/ONLINE.md) and [friend-room guidance](docs/MULTIPLAYER.md#private-friend-rooms).
+The tested iPad migration build reached Retro WFC with a new license. An existing
+license's serial mismatch reproduced on both old and new builds. Earlier Android
+tests reached Retro WFC and the worldwide lobby, but this release does not claim
+a newly verified complete online race/reconnect sequence or compatibility on
+every device. Native room hosting and Original Wiimmfi compatibility remain
+unfinished. See [online status](docs/ONLINE.md) and
+[friend-room guidance](docs/MULTIPLAYER.md#private-friend-rooms).
 
 </details>
 
@@ -230,7 +233,7 @@ Supported in-place updates preserve saves; **do not uninstall or clear app data*
 <details>
 <summary>Is everything finished? How do I report a problem?</summary>
 
-No. Check [current platform acceptance](docs/STATUS.md), [known issues](docs/KNOWN-ISSUES.md) and [technical debt](docs/TECH-DEBT.md). Report your exact build, device/OS, selected game, settings and reproducible steps using the [bug form](https://github.com/chrissotraidis/kartpad/issues/new?template=bug_report.yml). Export a problem report using the [support guide](docs/SUPPORT.md), review it before sharing, and keep saves, identities and game data private.
+No. Check [current platform acceptance](docs/STATUS.md), [known issues](docs/KNOWN-ISSUES.md) and [technical debt](docs/TECH-DEBT.md). Report your exact build, device/OS, selected game, settings and reproducible steps using the [reporting guide to choose KartPad or WiiCompiled](docs/REPORTING.md). Export a problem report using the [support guide](docs/SUPPORT.md), review it before sharing, and keep saves, identities and game data private.
 
 </details>
 
@@ -244,14 +247,15 @@ ARM64 and renders through Vulkan on Android or Metal on Apple platforms.
 
 - [Apple builds](docs/BUILDING.md): prerequisites, Mac self-build and iOS workflows.
 - [Android builds](android/README.md): source-only shell and complete runtime.
+- [Source maintenance](docs/source-maintenance/README.md): editable WiiCompiled source, upstream comparison, and migration status.
 - [Documentation](docs/README.md): user guides, architecture and release evidence.
 - [Current status](docs/STATUS.md) and [maintenance board](docs/MAINTENANCE-BOARD.md):
   accepted results, active work and outstanding tests.
 
 For a bug report, include the exact app/build, device, OS, game, settings and
 reproduction steps. Review diagnostics before sharing; never attach game data,
-saves, account identifiers or signing material. Use the
-[report form](https://github.com/chrissotraidis/kartpad/issues/new?template=bug_report.yml).
+saves, account identifiers or signing material. Choose the relevant tracker in the
+[reporting guide](docs/REPORTING.md).
 
 ## Japanese RMCJ01 development builds
 

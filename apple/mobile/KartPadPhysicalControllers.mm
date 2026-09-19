@@ -65,12 +65,16 @@ SunPadInputState KartPadAdaptPhysicalControllerSample(
     const SunPadControllerButtonMapping mapping) noexcept {
   SunPadInputState state{};
   state.connected = 1;
-  state.buttons |= SunPadApplyControllerButtonMapping(mapping, sample.faceButtons);
+  uint16_t physical = sample.faceButtons;
+  if (sample.dpadUp) physical |= SunPadPhysicalControllerButtonDpadUp;
+  if (sample.dpadDown) physical |= SunPadPhysicalControllerButtonDpadDown;
+  if (sample.dpadLeft) physical |= SunPadPhysicalControllerButtonDpadLeft;
+  if (sample.dpadRight) physical |= SunPadPhysicalControllerButtonDpadRight;
+  if (sample.rightShoulder) physical |= SunPadPhysicalControllerButtonRightShoulder;
+  if (std::lround(std::clamp(sample.leftTrigger, 0.0f, 1.0f) * 255.0f) > 30) physical |= SunPadPhysicalControllerButtonLeftTrigger;
+  if (std::lround(std::clamp(sample.rightTrigger, 0.0f, 1.0f) * 255.0f) > 30) physical |= SunPadPhysicalControllerButtonRightTrigger;
+  state.buttons |= SunPadApplyControllerButtonMapping(mapping, (SunPadPhysicalControllerButton)physical);
   if (sample.menu) state.buttons |= SunPadButtonStart;
-  if (sample.dpadUp) state.buttons |= SunPadButtonDpadUp;
-  if (sample.dpadDown) state.buttons |= SunPadButtonDpadDown;
-  if (sample.dpadLeft) state.buttons |= SunPadButtonDpadLeft;
-  if (sample.dpadRight) state.buttons |= SunPadButtonDpadRight;
   state.stickX = static_cast<int8_t>(std::lround(
       std::clamp(sample.leftX, -1.0f, 1.0f) * 127.0f));
   state.stickY = static_cast<int8_t>(std::lround(
@@ -85,8 +89,7 @@ SunPadInputState KartPadAdaptPhysicalControllerSample(
       std::clamp(sample.rightTrigger, 0.0f, 1.0f) * 255.0f));
   state.triggerR = SunPadControllerRightTriggerPressure(
       physicalTriggerR, sample.rightShoulder);
-  if (state.triggerL > 30) state.buttons |= SunPadButtonL;
-  if (physicalTriggerR > 30) state.buttons |= SunPadButtonR;
+
   return state;
 }
 

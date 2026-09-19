@@ -10,7 +10,16 @@
       "path": "ref/upstream/Wiicompiled",
       "license": "GPL-3.0-only; upstream README specifies version 3",
       "role": "Primary static translator and runtime baseline",
-      "pushDisabled": true
+      "pushDisabled": true,
+      "maintainedSource": {
+        "path": "vendor/wiicompiled",
+        "method": "git-subtree-squash",
+        "upstreamBase": "1912292c804ff9b1b79938de89369ec4496f9fff",
+        "activeConsumers": [
+          "translator"
+        ],
+        "runtimeMigration": "platform runtime source is pinned by gitlinks under vendor/runtimes"
+      }
     },
     {
       "name": "SunPad",
@@ -190,6 +199,21 @@
       "path": "ref/upstream/Wiicompiled/projects/mkwii/MAP.txt",
       "vendoredInCommit": "1912292c804ff9b1b79938de89369ec4496f9fff",
       "role": "Bundled crash symbolization/translation map; publishable reuse remains subject to WiiCompiled provenance and package audit"
+    },
+    {
+      "name": "KartPad WiiCompiled runtime fork",
+      "repository": "https://github.com/chrissotraidis/wiicompiled.git",
+      "upstreamRepository": "https://github.com/patchzyy/Wiicompiled.git",
+      "upstreamBase": "1912292c804ff9b1b79938de89369ec4496f9fff",
+      "license": "GPL-3.0-only; upstream README specifies version 3",
+      "role": "Maintained platform runtime and vendored Aurora source; no runtime patch replay",
+      "pins": "Git submodule gitlinks are authoritative",
+      "platformPaths": {
+        "macos": "vendor/runtimes/macos",
+        "ios": "vendor/runtimes/ios",
+        "android": "vendor/runtimes/android",
+        "tvos": "vendor/runtimes/tvos"
+      }
     }
   ]
 }

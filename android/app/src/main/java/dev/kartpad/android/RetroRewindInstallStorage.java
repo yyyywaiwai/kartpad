@@ -2,19 +2,26 @@ package dev.kartpad.android;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.channels.FileChannel;
+import java.nio.channels.FileLock;
+import java.nio.channels.OverlappingFileLockException;
 import java.nio.file.FileVisitResult;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.nio.file.SimpleFileVisitor;
 import java.nio.file.StandardCopyOption;
+import java.nio.file.StandardOpenOption;
 import java.nio.file.attribute.BasicFileAttributes;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /** Owns same-volume Retro Rewind staging, activation, rollback, and recovery. */
 final class RetroRewindInstallStorage {
+    private static final Set<Path> ACTIVE_LOCKS = ConcurrentHashMap.newKeySet();
     private static final String SUPPORT_DIRECTORY = "KartPad";
     private static final String INSTALLED_DIRECTORY = "RetroRewind";
     private static final String STAGING_PREFIX = "RetroRewind.import-";
@@ -27,7 +34,82 @@ final class RetroRewindInstallStorage {
 
     private RetroRewindInstallStorage() {}
 
+    /** A process-safe, nonblocking lease covering the entire install transaction. */
+    static final class InstallLock implements AutoCloseable {
+        private final FileChannel channel;
+        private final FileLock lock;
+        private final Path path;
+
+        private InstallLock(FileChannel channel, FileLock lock, Path path) {
+            this.channel = channel;
+            this.lock = lock;
+            this.path = path;
+        }
+
+        @Override
+        public void close() throws IOException {
+            try {
+                lock.release();
+            } finally {
+                try {
+                    channel.close();
+                } finally {
+                    ACTIVE_LOCKS.remove(path);
+                }
+            }
+        }
+    }
+
+    static InstallLock tryInstallLock(File filesDirectory) throws IOException {
+        Path support = supportRoot(filesDirectory);
+        Files.createDirectories(support);
+        requireDirectory(support, "Retro Rewind support root is invalid");
+        Path lockPath = support.toRealPath().resolve("RetroRewind.transaction.lock");
+        // Closing any descriptor for a POSIX-locked file can release this
+        // process's lock. Reject same-process contention before opening it.
+        if (!ACTIVE_LOCKS.add(lockPath)) return null;
+        FileChannel channel = null;
+        boolean acquired = false;
+        try {
+            channel = FileChannel.open(lockPath, StandardOpenOption.CREATE,
+                    StandardOpenOption.WRITE, LinkOption.NOFOLLOW_LINKS);
+            FileLock lock = channel.tryLock();
+            if (lock != null) {
+                acquired = true;
+                return new InstallLock(channel, lock, lockPath);
+            }
+        } catch (OverlappingFileLockException busy) {
+            // Defensive: all KartPad ownership passes through ACTIVE_LOCKS.
+        } finally {
+            if (!acquired) {
+                try {
+                    if (channel != null) channel.close();
+                } finally {
+                    ACTIVE_LOCKS.remove(lockPath);
+                }
+            }
+        }
+        return null;
+    }
+
+    /** Original startup must not depend on the state of an optional Retro install. */
+    static void recoverForLaunch(File filesDirectory, String runtimeProfile) throws IOException {
+        if ("retro_rewind".equals(runtimeProfile)) {
+            recover(filesDirectory);
+        }
+    }
+
     static void recover(File filesDirectory) throws IOException {
+        if (!exists(supportRoot(filesDirectory))) return;
+        try (InstallLock lock = tryInstallLock(filesDirectory)) {
+            // Chooser refresh/startup must neither remove live staging nor wait
+            // for an extraction running in the worker process.
+            if (lock == null) return;
+            recoverLocked(filesDirectory);
+        }
+    }
+
+    private static void recoverLocked(File filesDirectory) throws IOException {
         Path support = supportRoot(filesDirectory);
         if (!exists(support)) {
             return;

@@ -121,6 +121,31 @@ fun main(args: Array<String>) {
     check(runCatching { KartPadIdentityStorage.stage(root, record("mii"), false, "01234567890") }.isFailure)
     check(!KartPadIdentityStorage.hasPending(root))
     check(File(root, "KartPad/IdentityBackups").listFiles()!!.size == 3)
+    // Missing linked Mii must be selected explicitly; only target identity + CRC may change.
+    val orphan = original.copyOf().apply { this[8 + 0x28] = (this[8 + 0x28].toInt() xor 1).toByte(); crc(this) }
+    path("original").writeBytes(orphan)
+    val missing = record("original")
+    check(missing.missingLinkedMii)
+    val selectedMii = record("mii")
+    check(runCatching { KartPadIdentityStorage.stageLicenseMii(root, missing,
+        selectedMii.copy(createId = missing.createId)) }.isFailure)
+    check(!KartPadIdentityStorage.hasPending(root))
+    val otherSave = path("retro_rewind").readBytes()
+    val databaseBefore = path("mii").readBytes()
+    KartPadIdentityStorage.stageLicenseMii(root, missing, selectedMii)
+    check(path("mii").delete())
+    check(KartPadIdentityStorage.applyPending(root) != null)
+    check(KartPadIdentityStorage.hasPending(root))
+    check(path("original").readBytes().contentEquals(orphan))
+    path("mii").writeBytes(databaseBefore)
+    orphan[8 + 0x90] = 0x37; crc(orphan)
+    path("original").writeBytes(orphan)
+    check(KartPadIdentityStorage.applyPending(root) == null)
+    val repaired = path("original").readBytes()
+    check(!record("original").missingLinkedMii && record("original").name == selectedMii.name)
+    for (i in orphan.indices) if (i !in 28 until 56 && i !in 0x27ffc..0x27fff) check(orphan[i] == repaired[i])
+    check(path("mii").readBytes().contentEquals(databaseBefore))
+    check(path("retro_rewind").readBytes().contentEquals(otherSave))
     println("Android identity passed: JNI semantics, latest-progress preservation, license/Mii rename parity, profile and delete isolation, linked profiles, interrupted transaction recovery, backups, invalid names")
     root.deleteRecursively() // Only this test's newly-created synthetic directory.
 }

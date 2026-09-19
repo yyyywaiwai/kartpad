@@ -2,28 +2,16 @@
 set -euo pipefail
 
 repo=${0:A:h:h}
-upstream="$repo/ref/upstream/Wiicompiled"
+source="$repo/vendor/wiicompiled"
 stage="$repo/build/wiicompiled-fpscr"
-patch_file="$repo/patches/wiicompiled-fpscr-state.patch"
-dual_profile_patch="$repo/patches/wiicompiled-dual-profile-translator.patch"
-kamek_v2_patch="$repo/patches/wiicompiled-kamek-v2.patch"
-dual_symbols_patch="$repo/patches/wiicompiled-dual-profile-symbols.patch"
-dual_closure_patch="$repo/patches/wiicompiled-dual-profile-closure.patch"
-dynamic_overrides_patch="$repo/patches/wiicompiled-dynamic-overrides.patch"
-kamek_skip_return_patch="$repo/patches/wiicompiled-kamek-skip-return.patch"
-shared_lr_dispatch_patch="$repo/patches/wiicompiled-shared-lr-dispatch.patch"
 
-mkdir -p "$stage"
-rsync -a --delete --exclude .git --exclude bin --exclude obj \
-  "$upstream/" "$stage/"
-git apply --recount --unidiff-zero --unsafe-paths --directory="$stage" "$patch_file"
-git apply --recount --unsafe-paths --directory="$stage" "$dual_profile_patch"
-git apply --recount --unsafe-paths --directory="$stage" "$kamek_v2_patch"
-patch --batch -p1 -d "$stage" < "$dual_symbols_patch"
-patch --batch -p1 -d "$stage" < "$dual_closure_patch"
-patch --batch -p1 -d "$stage" < "$dynamic_overrides_patch"
-git apply --recount --unsafe-paths --directory="$stage" "$kamek_skip_return_patch"
-git apply --recount --unsafe-paths --directory="$stage" "$shared_lr_dispatch_patch"
+# Keep the established output path for translator and native-registration callers.
+# Maintained source lives in Git; this command never replays translator patches.
+[[ -f "$source/translator/src/Translator.Cli/Translator.Cli.csproj" ]] || {
+  print -u2 'ERROR: missing tracked WiiCompiled translator source'
+  exit 1
+}
+python3 "$repo/scripts/stage-maintained-translator.py" "$stage"
 
 dotnet_bin="${KARTPAD_DOTNET:-$(command -v dotnet || true)}"
 if [[ -z "$dotnet_bin" ]]; then

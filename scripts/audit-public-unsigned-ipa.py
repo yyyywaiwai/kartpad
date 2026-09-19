@@ -27,6 +27,7 @@ REQUIRED_ENTRIES = {
     "RELEASE_NOTES.md",
     "SOURCE_AND_REBUILD.md",
     "Payload/KartPad.app/kartpad-build.json",
+    "Payload/KartPad.app/kartpad-ui-composition.json",
     "LICENSES/GPL-3.0.txt",
     "RIGHTS_AND_LICENSES.md",
     "THIRD_PARTY_NOTICES.md",

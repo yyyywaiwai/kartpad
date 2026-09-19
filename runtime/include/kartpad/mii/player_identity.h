@@ -122,6 +122,20 @@ inline DatabaseResult RenameLicense(
     return {true, {}};
 }
 
+// Change only the selected license's display identity; DWC account/progress stay intact.
+inline DatabaseResult SetLicenseMii(
+        std::span<uint8_t> rksys, std::size_t slot,
+        const std::array<uint8_t, kCreateIdByteSize>& expectedCreateId,
+        const std::array<uint8_t, kCreateIdByteSize>& selectedCreateId,
+        std::span<const uint8_t> utf16BigEndianName) {
+    const auto renamed = RenameLicense(rksys, slot, expectedCreateId, utf16BigEndianName);
+    if (!renamed) return renamed;
+    const auto offset = kRksysLicenseOffset + slot * kRksysLicenseSize + kRksysCreateIdOffset;
+    std::copy(selectedCreateId.begin(), selectedCreateId.end(), rksys.begin() + offset);
+    UpdateRksysCrc(rksys);
+    return {true, {}};
+}
+
 inline DatabaseResult DeleteLicense(
         std::span<uint8_t> rksys, std::size_t slot,
         const std::array<uint8_t, kCreateIdByteSize>& expectedCreateId) {

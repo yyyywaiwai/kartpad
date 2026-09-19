@@ -87,6 +87,21 @@ final class RetroRewindInstallPipeline {
             return failed(Error.ARCHIVE_INVALID, null, null);
         }
 
+        try (RetroRewindInstallStorage.InstallLock lock =
+                RetroRewindInstallStorage.tryInstallLock(filesDirectory)) {
+            if (lock == null) return failed(Error.STAGING_FAILURE, null, null);
+            return installLocked(filesDirectory, archive, token, cancellation,
+                    progress, extractor, contract);
+        } catch (IOException exception) {
+            return failed(Error.STAGING_FAILURE, null, null);
+        }
+    }
+
+    private static Result installLocked(
+            File filesDirectory, Path archive, String token,
+            RetroRewindArchiveExtractor.Cancellation cancellation,
+            RetroRewindArchiveExtractor.Progress progress, Extractor extractor,
+            RetroRewindInstallValidator.Contract contract) {
         Path staging = null;
         boolean activated = false;
         try {

@@ -37,8 +37,8 @@ case "${KARTPAD_MACOS_AUDIT_REGION:-P}" in
   *) echo "unsupported macOS audit region" >&2; exit 64 ;;
 esac
 test "${bundle_identifier}" = "${expected_bundle_identifier}"
-test "$(plutil -extract CFBundleShortVersionString raw "${plist}")" = "0.4.17"
-test "$(plutil -extract CFBundleVersion raw "${plist}")" = "39"
+test "$(plutil -extract CFBundleShortVersionString raw "${plist}")" = "${KARTPAD_EXPECTED_VERSION:-0.4.22}"
+test "$(plutil -extract CFBundleVersion raw "${plist}")" = "${KARTPAD_EXPECTED_BUILD:-43}"
 test -n "$(plutil -extract NSLocalNetworkUsageDescription raw "${plist}")"
 test "$(plutil -extract NSBluetoothAlwaysUsageDescription raw "${plist}")" = \
   "KartPad uses Bluetooth to pair and connect an experimental Wii Remote and Nunchuk."
@@ -148,7 +148,7 @@ for shell_contract in \
   "showControllerSettings:" \
   "guestMemoryStrategy=flat-mach-vm" \
   "schema=3" \
-  "sessionTailLimitBytes=4096" \
+  "sessionTailLimitBytes=65536" \
   "currentSessionTailBegin" \
   "previousSessionTailBegin" \
   "reviewWarning=Review this report before sharing. Arbitrary runtime text may still require review." \

@@ -1,5 +1,0 @@
---- a/lib/dolphin/pad/pad.cpp
-+++ b/lib/dolphin/pad/pad.cpp
-@@ -873,0 +873,2 @@
-+      if (leftTriggerSet) tl = 0;
-+      if (rightTriggerSet) tr = 0;

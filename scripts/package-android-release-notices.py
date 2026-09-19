@@ -12,19 +12,19 @@ import subprocess
 import tarfile
 import zipfile
 
-TAG = "v0.4.18-android.1"
-VERSION = "0.4.18-android.1"
-CODE = 83
+TAG = "v0.4.24-android.1"
+VERSION = "0.4.24-android.1"
+CODE = 117
 # Exact candidate; changing notes must not relabel its compiled source as HEAD.
-APPROVED_SOURCE = "c9d8a7fba9e5798e311570a605c61f336eab1169"
-APPROVED_APK = "6eefdbe1d39627014595b9a6d50a79d0aab920eaf732a39ed8f6c5be362e9c9e"
-APPROVED_AAB = "d351edf5a55ff9b61d262333a55bc1671951fa0da5f172bf37be0ba612a221ee"
-APPROVED_SOURCE_ARCHIVE = "8d76c6fb45651cb6c5999176e6684ae4fa63c172a7a512627180aa2c274b2002"
+APPROVED_SOURCE = "e56531f8d98a765ff076274a204a7796221cd0df"
+APPROVED_APK = "c6a67c6478eb1b6bc7483e4b91e77def202b40a0973b17084974d0fac39baf2e"
+APPROVED_AAB = "9325cf48e6901ae5cee55f9af48d38ce1f5b8eeddac66606f7545e40cf96b7f8"
+APPROVED_SOURCE_ARCHIVE = "0d1d601eea44bb75db24a1ee0cdc765e4554b51e168ad46155ef1b8cd0a2056e"
 APPROVED_NATIVE = {
     "lib/arm64-v8a/libSDL3.so": "d7a17c375adcb71818210581b885f59832d5f95b663aa7a7d493484a00a94753",
     "lib/arm64-v8a/libc++_shared.so": "c4c2fe5cbcb1fba0003a31fc7ab29a9bb12df6cc187ec45a806462540e83d93b",
-    "lib/arm64-v8a/libkartpad_discio.so": "1d6c9fde69a3e4117987422bb6f0ebf41a40ec2de4945ebb7539b8a4b8e89207",
-    "lib/arm64-v8a/libmain.so": "d4f0281b7d9b1b9761492fd3a5f735769c70c7fbb1829969e46fa5a729ba10be"
+    "lib/arm64-v8a/libkartpad_discio.so": "0e5bd27501b1aee71db63364f0673682e0cca3c0234d560d4c54ac87e01c0d0b",
+    "lib/arm64-v8a/libmain.so": "06feefa63ed3c507b751a8028884662a6fac1edcaa8a88d78fa9dadf9410b565"
 }
 REPO = Path(__file__).resolve().parents[1]
 
@@ -85,7 +85,7 @@ def main() -> None:
         "INSTALL_ANDROID.md": REPO / "docs/INSTALL_ANDROID.md",
         "BUILD_ANDROID.md": REPO / "android/README.md",
         "RELEASE_NOTES.md": REPO / f"docs/releases/{TAG}.md",
-        "SOURCE_DELIVERY.md": REPO / "docs/artifacts/2026-09-13/android-source-delivery.md",
+        "SOURCE_DELIVERY.md": REPO / "docs/releases/v0.4.24-source.md",
         "SOURCE_RECONSTRUCTION.md": REPO / "docs/artifacts/2026-09-13/android-source-reconstruction.md",
         "RIGHTS_AND_LICENSES.md": REPO / "RIGHTS_AND_LICENSES.md",
         "THIRD_PARTY_NOTICES.md": REPO / "THIRD_PARTY_NOTICES.md",
@@ -138,8 +138,10 @@ def main() -> None:
     # A later release tag may include notes and this packager, not changed app code.
     changed = subprocess.check_output(["git", "diff", "--name-only", APPROVED_SOURCE, commit],
                                       cwd=REPO, text=True).splitlines()
-    packaging_files = ("README.md", "android/README.md", "scripts/package-android-release-notices.py",
-                       "scripts/package-release-source.py", "scripts/restore-source-git.py",
+    packaging_files = ("README.md", "design-qa.md", "scripts/ios_release.py",
+                       "scripts/refresh-ios-release.py", "scripts/package-public-unsigned-ipa.py",
+                       "scripts/audit-public-unsigned-ipa.py", "tests/test_ios_release_provenance.py", "android/README.md", "scripts/package-android-release-notices.py",
+                       "scripts/audit-ios-game-app.sh", "scripts/package-migration-source-delivery.py", "scripts/package-release-source.py", "scripts/restore-source-git.py",
                        "tools/android63-base-common-shards.json",
                        "tests/test_android_public_release_contract.py",
                        "scripts/audit-android-bundle.sh", "tests/test_android_bundle_audit_contract.py",
@@ -157,11 +159,11 @@ def main() -> None:
         "containsTranslatedGameCode": True, "containsGameData": False,
         "containsPrivateSigningMaterial": False, "maintainerAuthorizedFreeCommunityRelease": True,
         "upstreamRightsConfirmed": False, "profileableByShell": False, "debuggable": False,
-        "physicalAcceptance": "Private code82 passed Preferred Game startup, persistence and return-to-menu checks on the owner phone; all 6319 protected files matched immediately after the in-place update. The owner then reported general gameplay works. Code83 retains identical native libraries and Android wrapper sources with release/version metadata changes. No Item Rain-specific, exact 0x807EF16C crash, completed-race count, online or affected-controller acceptance is inferred.",
+        "physicalAcceptance": "The owner accepted the interface and game operation on Pixel 9 Pro XL using private code116. Public code117 rebuilds the accepted application/runtime source with profiling disabled and the established release signer. No measured general FPS improvement, broad GPU acceptance or crash resolution is claimed.",
         "sourceArchive": {"filename": args.source_archive.name, "bytes": args.source_archive.stat().st_size,
                           "sha256": sha(args.source_archive.read_bytes()),
                           "reconstruction": "Exact current Git snapshots, prepared Android runtime and pinned dependency source archives are supplied. Private translated game functions are regenerated from user-supplied inputs using delivered emitters and recipes. No new independent second-host or bit-identical rebuild claim."},
-        "releaseTwin": "A private debug-signed twin of code83 has all 155 ZIP entries byte-identical to the public APK; only the signing block differs. This package comparison is not gameplay acceptance. No new code83 emulator result is claimed here.",
+        "releaseTwin": "Private hardware code116 retains its development signer. Public code117 uses the established public signer; no incompatible in-place update was attempted.",
         "noticesSHA256": {n: sha(b) for n, b in sorted(data.items())},
     }
     data["PROVENANCE.json"] = (json.dumps(provenance, indent=2, sort_keys=True) + "\n").encode()

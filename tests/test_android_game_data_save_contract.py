@@ -32,7 +32,7 @@ class AndroidGameDataSaveContractTests(unittest.TestCase):
         self.assertIn('"BASE GAME REQUIRED"', launcher)
         self.assertIn('"Import Game"', launcher)
         self.assertIn('"Set Up Game"', launcher)
-        self.assertIn("setImageResource(R.drawable.kartpad_app_icon)", launcher)
+        self.assertIn("setImageResource(R.drawable.kartpad_racing_mark)", launcher)
         for icon in (
             "ic_kartpad_checkered_flag",
             "ic_kartpad_gobackward",

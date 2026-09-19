@@ -48,20 +48,20 @@ int main() {
                         mapped_buttons.buttons == kAllExpected,
                     "standard SDL buttons must map to Classic buttons");
 
-  const ControllerButtonMapping swapped{1, 0, 2, 3, 4, 5, 6};
+  const ControllerButtonMapping swapped{1, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
   passed &= Require(IsValidControllerButtonMapping(swapped),
                     "A/B swap must be a valid permutation");
   passed &= Require(
       ApplyControllerButtonMapping(kGamepadSouth, swapped) == kGamepadEast &&
           ApplyControllerButtonMapping(kGamepadEast, swapped) == kGamepadSouth,
       "assigning a used physical button must swap game assignments");
-  const ControllerButtonMapping invalid{0, 0, 2, 3, 4, 5, 6};
+  const ControllerButtonMapping invalid{12, 0, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11};
   passed &= Require(!IsValidControllerButtonMapping(invalid) &&
                         ApplyControllerButtonMapping(kGamepadSouth, invalid) ==
                             kGamepadSouth,
                     "invalid mappings must fail closed to default");
 
-  const ControllerButtonMapping wheelieOnRightShoulder{0, 1, 2, 3, 4, 6, 5};
+  const ControllerButtonMapping wheelieOnRightShoulder{0, 1, 2, 3, 4, 6, 5, 7, 8, 9, 10, 11};
   passed &= Require(IsValidControllerButtonMapping(wheelieOnRightShoulder),
                     "right shoulder and D-pad Up reassignment must be a valid swap");
   passed &= Require(
@@ -84,6 +84,21 @@ int main() {
                                    wheelieOnRightShoulder) ==
           (directButtons | kGamepadDpadUp),
       "other D-pad directions and Start remain direct during remapped input");
+
+  const ControllerButtonMapping shared{0, 1, 2, 3, 4, 5, 5, 7, 8, 9, 10, 11};
+  const auto sharedBits = ApplyControllerButtonMapping(kGamepadRightShoulder, shared);
+  passed &= Require(IsValidControllerButtonMapping(shared) &&
+      sharedBits == (kGamepadRightShoulder | kGamepadDpadUp) &&
+      ApplyControllerButtonMapping(0, shared) == 0,
+      "shared shoulder must emit and release both drift and trick actions");
+
+
+  auto triggerShared = kDefaultControllerButtonMapping;
+  triggerShared[8] = 10; // D-pad Left and item from the left trigger.
+  const auto triggerBits = ApplyControllerButtonMapping(kGamepadLeftTrigger, triggerShared);
+  RawGamepadState triggerState; triggerState.connected=true; triggerState.buttons=triggerBits;
+  passed &= Require(MapGamepadToClassic(triggerState).buttons == (kClassicL | kClassicLeft),
+      "trigger must support shared item and D-pad actions");
 
   RawGamepadState direct;
   direct.connected = true;

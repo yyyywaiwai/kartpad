@@ -94,6 +94,21 @@ void SunPadDiagnosticsStart(void) {
         SunPadDroppedRuntimeEventKinds = 0;
     }
 
+    static dispatch_once_t lifecycleOnce;
+    dispatch_once(&lifecycleOnce, ^{
+        // Keep observations low-frequency and independent of private user data.
+        for (NSString *name in @[@"UIApplicationDidEnterBackgroundNotification",
+              @"UIApplicationWillEnterForegroundNotification", @"UIApplicationDidBecomeActiveNotification",
+              @"UIApplicationWillResignActiveNotification", @"UIApplicationDidReceiveMemoryWarningNotification",
+              @"UIScreenDidConnectNotification", @"UIScreenDidDisconnectNotification",
+              @"UIScreenModeDidChangeNotification", NSProcessInfoThermalStateDidChangeNotification]) {
+            [NSNotificationCenter.defaultCenter addObserverForName:name object:nil queue:nil
+                usingBlock:^(NSNotification *note) {
+                SunPadLog(@"lifecycle event=%@ thermal=%ld uptime_s=%.3f", note.name,
+                    (long)NSProcessInfo.processInfo.thermalState, NSProcessInfo.processInfo.systemUptime);
+            }];
+        }
+    });
     NSBundle *bundle = NSBundle.mainBundle;
     SunPadLog(@"session start version=%@ build=%@ os=%@",
               [bundle objectForInfoDictionaryKey:@"CFBundleShortVersionString"] ?: @"unknown",

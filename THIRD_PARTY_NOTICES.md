@@ -30,9 +30,10 @@ WorkManager (Apache-2.0), rather than Apple's Metal/GameController host paths.
 | Abseil, Dear ImGui, fmt, FreeType, libpng, Tracy, xxHash, zstd | exact package-build inputs | Their included upstream license files apply |
 
 The published repository and tag provide KartPad's integration source,
-reversible patches, dependency pins, and build instructions. Pinned upstream
-source is fetched by the public Builder from the repositories recorded in
-`dependencies.lock.json`.
+editable maintained source, dependency pins, and build instructions. Runtime
+Git submodules pin the maintained fork commits; `dependencies.lock.json` records
+the upstream baseline and other fetched dependencies. Separate dependency patches
+remain where needed.
 
 The IPAs intentionally contain ahead-of-time translated game logic. These
 software licenses do not grant rights in Nintendo-owned game content. This
@@ -40,6 +41,17 @@ does not waive GPL obligations for the combined application or for GPL-covered
 code included in generated output. See [`RIGHTS_AND_LICENSES.md`](RIGHTS_AND_LICENSES.md)
 for the game-content boundary and complete Corresponding Source obligations.
 
-The CSNum runtime correction in `patches/wiicompiled-sc-serial.patch` is
+The CSNum correction in each maintained runtime branch
+(originally `patches/wiicompiled-sc-serial.patch`) is
 backported from [patchzyy/Wiicompiled commit e0e362b](https://github.com/patchzyy/Wiicompiled/commit/e0e362bd992e07784f8ce7fa795cdb496af7b075),
 by patchzyy, under the upstream GPLv3 license.
+
+## Maintained WiiCompiled source
+
+KartPad's platform runtime source is maintained in the actual
+[WiiCompiled fork](https://github.com/chrissotraidis/wiicompiled), derived from
+[patchzyy/WiiCompiled](https://github.com/patchzyy/wiicompiled). The pinned
+`vendor/runtimes/` submodules preserve the upstream runtime and vendored Aurora
+licenses and notices. KartPad's translator changes are maintained in the
+`vendor/wiicompiled/` subtree. See [source maintenance](docs/source-maintenance/README.md)
+for exact source ownership, upstream identity and contribution workflow.

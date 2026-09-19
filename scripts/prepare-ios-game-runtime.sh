@@ -13,7 +13,6 @@ translation_root="$(absolute_from_repo "${1:-private/g8-full-translation}")"
 runtime_source="$(absolute_from_repo "${2:-build/g14-ios-game-runtime-source}")"
 runtime_build="$(absolute_from_repo "${3:-build/g14-ios-game-runtime-build}")"
 product="${4:-base}"
-runtime_ref="${repo_root}/ref/upstream/Wiicompiled/runtime"
 dawn_archive="${repo_root}/build/dependency-cache/dawn-ios-simulator-arm64-v20260603.191052.tar.gz"
 dawn_sha256="feb5c4e07da90c47d2f279bf83c43bc67db01dac1138cb9af8ea9b5b50c67fbf"
 discio_source="${KARTPAD_DISCIO_SOURCE_DIR:-${repo_root}/build/dolphin-ios-discio-iphonesimulator-source}"
@@ -74,82 +73,18 @@ if [[ "${prepare_only}" == "0" ]]; then
 fi
 
 mkdir -p "$(dirname "${runtime_source}")"
-cp -R "${runtime_ref}" "${runtime_source}"
+# Android and tvOS share generated/profile inputs, but each selects its own
+# maintained source commit; platform changes are no longer layered as patches.
+prepare_platform="${KARTPAD_PREPARE_PLATFORM:-ios}"
+case "${prepare_platform}" in
+  apple) prepare_platform=ios ;; # Preserve the historical selector spelling.
+  ios|android|tvos) ;;
+  *) echo "ERROR: unsupported preparation platform: ${prepare_platform}" >&2; exit 64 ;;
+esac
+python3 "${repo_root}/scripts/stage-maintained-runtime.py" "${prepare_platform}" "${runtime_source}"
 PYTHONPATH="${repo_root}/builder" python3 -m kartpad_builder.release_header \
   "${repo_root}/builder/profiles/mkwii-rmcp01-rev0.json" \
   "${runtime_source}/third_party/kartpad-profile/kartpad_retro_rewind_release.h"
-# Keep the immutable pinned Aurora checkout untouched. The iOS product builds
-# against this disposable copy so its opaque letterbox fix is reproducible.
-cp -R "${repo_root}/ref/upstream/Wiicompiled/aurora-main" \
-  "${runtime_source}/aurora-main"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-present-telemetry.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-metal-view-lifetime.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-gx-resolve-snapshot-copy-src.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-ios-opaque-letterbox.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-ios-simulator-single-pipeline-worker.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-viewport-policy-window-guard.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-viewport-interpolation.patch"
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-ios-native-text-focus.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-apple-runtime.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-rfl-alarm-context.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-ios-low-latency-audio.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-experimental-wiimote-preset.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-apple-network-tls.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-local-wfc-test-route.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-offline-kd-services.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-private-wfc.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-blocking-stream-recv-wait.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-mii-seed.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-ios-arm64-fibers.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-present-telemetry.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-app-integration.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-first-launch-gate.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-touch-core-buttons.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-settings-bridge.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-main-menu.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-physical-controllers.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-motion-steering.patch"
-patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/wiicompiled-ios-discio-import.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-retro-apple-product.patch"
-for dual_patch in \
-    wiicompiled-dual-profile-registry.patch \
-    wiicompiled-dual-profile-mod-loader.patch \
-    wiicompiled-dual-product-selection.patch \
-    wiicompiled-dual-product-target.patch; do
-  patch --batch -p1 -d "${runtime_source}" < "${repo_root}/patches/${dual_patch}"
-done
-
-# Apply after the Apple/dual target patches; device and Simulator share this source.
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-ios-device-cpu-baseline.patch"
-
-# Guard the translated REL diagnostic path on every product sharing this runtime.
-patch --batch --fuzz=0 -p2 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-retro-rel-report-guard.patch"
-
-# Backport upstream e0e362b: SCGetProductSN returns a guest u32 for DWC csnum.
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-sc-serial.patch"
 
 mkdir -p "${runtime_source}/third_party/sse2neon"
 cached_sse2neon="${repo_root}/build/dependency-cache/sse2neon-${sse2neon_sha256}.h"

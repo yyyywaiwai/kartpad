@@ -91,7 +91,7 @@ class JapaneseProfileTests(unittest.TestCase):
         self.assertIn("Translation SDA bases are not Japanese", script)
         public_plist = (REPO / "apple/ios/RuntimeInfo.plist").read_text()
         self.assertIn("$(PRODUCT_BUNDLE_IDENTIFIER)", public_plist)
-        integration = (REPO / "patches/wiicompiled-ios-app-integration.patch").read_text()
+        integration = (REPO / "vendor/runtimes/ios/runtime/cmake/PublicProducts.cmake").read_text()
         self.assertIn("XCODE_ATTRIBUTE_PRODUCT_BUNDLE_IDENTIFIER dev.kartpad.app", integration)
         self.assertNotIn("dev.kartpad.rmcj01.ios", public_plist)
 

@@ -19,6 +19,8 @@ import android.widget.LinearLayout
 import android.widget.ProgressBar
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Switch
+import android.graphics.drawable.RippleDrawable
 import java.util.concurrent.Executors
 
 /** Production owner for choosing the immutable runtime profile before SDL starts. */
@@ -34,18 +36,38 @@ open class KartPadLaunchActivity : Activity() {
     private var retroInstalled = false
     private var gameDataReady = false
     private var pendingProfile: String? = null
+    private var exportSession: String? = null
     private lateinit var preferredLaunch: KartPadPreferredLaunch
+    private var darkMode = true
+    private lateinit var preferenceButton: Button
+    private val primaryTextColor get() = if (darkMode) Color.rgb(247, 247, 247) else Color.rgb(12, 17, 26)
+    private val secondaryForeground get() = if (darkMode) Color.rgb(170, 170, 170) else Color.rgb(94, 94, 94)
+    private val racingRed get() = if (darkMode) Color.rgb(255, 51, 66) else Color.rgb(204, 9, 31)
+
+    private fun rebuildContent() {
+        setContentView(buildContent())
+        original.setOnClickListener { selectMode("base") }
+        retro.setOnClickListener { selectMode("retro_rewind") }
+    }
+
+    private fun updatePreferenceLabel() {
+        val value = KartPadPreferredGame.read(filesDir)
+        val index = KartPadPreferredGame.values.indexOf(value).coerceAtLeast(0)
+        preferenceButton.text = KartPadPreferredGame.labels[index] + "  ⌄"
+        preferenceButton.contentDescription = "On launch: " + KartPadPreferredGame.labels[index]
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        darkMode = getSharedPreferences("kartpad_launcher", MODE_PRIVATE).getBoolean("dark_mode", true)
+        setTheme(if (darkMode) android.R.style.Theme_Material_NoActionBar_Fullscreen else android.R.style.Theme_Material_Light_NoActionBar_Fullscreen)
         super.onCreate(savedInstanceState)
+        exportSession = savedInstanceState?.getString("diagnostic_session")
         preferredLaunch = KartPadPreferredLaunch(
             savedInstanceState?.getBoolean(STATE_PREFERRED_CONSUMED) == true ||
                 intent.getBooleanExtra(EXTRA_SKIP_PREFERRED_GAME, false) || pausedProfile() != null,
         )
         KartPadExitDiagnostics.mark(this, pausedProfile() ?: "chooser")
-        setContentView(buildContent())
-        original.setOnClickListener { selectMode("base") }
-        retro.setOnClickListener { selectMode("retro_rewind") }
+        rebuildContent()
     }
 
     override fun onResume() {
@@ -72,6 +94,7 @@ open class KartPadLaunchActivity : Activity() {
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
+        outState.putString("diagnostic_session", exportSession)
         outState.putBoolean(STATE_PREFERRED_CONSUMED, preferredLaunch.consumed)
         super.onSaveInstanceState(outState)
     }
@@ -207,7 +230,7 @@ open class KartPadLaunchActivity : Activity() {
     private fun label(text: String, size: Float, secondary: Boolean = false) = TextView(this).apply {
         this.text = text
         textSize = size
-        setTextColor(if (secondary) Color.rgb(179, 191, 209) else Color.WHITE)
+        setTextColor(if (secondary) secondaryForeground else primaryTextColor)
         includeFontPadding = false
     }
 
@@ -218,7 +241,7 @@ open class KartPadLaunchActivity : Activity() {
     private fun link(title: String, action: () -> Unit) = Button(this).apply {
         text = title
         isAllCaps = false
-        setTextColor(Color.rgb(122, 191, 255))
+        setTextColor(racingRed)
         setBackgroundColor(Color.TRANSPARENT)
         minHeight = dp(48)
         setOnClickListener { action() }
@@ -268,81 +291,102 @@ open class KartPadLaunchActivity : Activity() {
         val config = resources.configuration
         val largeText = config.fontScale >= 1.3f
         val compact = config.screenHeightDp < 500 && !largeText
-        val stacked = largeText || (!compact && config.screenWidthDp < 660)
         val column = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_VERTICAL
-            setPadding(0, dp(16), 0, dp(16))
+            setPadding(0, dp(12), 0, dp(12))
         }
         val header = LinearLayout(this).apply {
+            orientation = if (largeText) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+        }
+        val brand = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
             addView(ImageView(this@KartPadLaunchActivity).apply {
-                setImageResource(R.drawable.kartpad_app_icon)
+                setImageResource(R.drawable.kartpad_racing_mark)
+                scaleType = ImageView.ScaleType.FIT_CENTER
                 importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
-            }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(16) })
-            addView(label("KartPad", 30f).apply { setTypeface(typeface, Typeface.BOLD) },
-                LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
-            addView(link("Help") { showSetupHelp() })
+            }, LinearLayout.LayoutParams(dp(48), dp(48)).apply { marginEnd = dp(12) })
+            addView(label("KartPad", 30f).apply { setTypeface(typeface, Typeface.BOLD) })
         }
-        column.addView(header, layout(dp(if (compact) 12 else 30)))
-        if (!compact) {
-            column.addView(label(if (pausedProfile() == null) "Choose a game" else "Back to the race", 32f), layout(dp(12)))
-            column.addView(label(if (pausedProfile() == null)
-                "Start with Mario Kart Wii. Add Retro Rewind whenever you're ready."
-                else "Your game is paused. Resume now, or choose a game for the next launch.",
-                17f, true), layout(dp(22)))
+        header.addView(brand, LinearLayout.LayoutParams(if (largeText) -1 else 0, -2, if (largeText) 0f else 1f))
+        val theme = Switch(this).apply {
+            text = "Dark mode"
+            contentDescription = "Dark mode"
+            setTextColor(primaryTextColor)
+            isChecked = darkMode
+            minHeight = dp(48)
+            switchPadding = dp(10)
+            thumbTintList = ColorStateList.valueOf(Color.WHITE)
+            trackTintList = ColorStateList.valueOf(if (darkMode) Color.rgb(230, 6, 29) else Color.GRAY)
+            setOnCheckedChangeListener { _, checked ->
+                if (checked != darkMode) {
+                    getSharedPreferences("kartpad_launcher", MODE_PRIVATE).edit().putBoolean("dark_mode", checked).apply()
+                    // Activity recreation applies the theme to native dialogs as well.
+                    // Saved preferred-launch state prevents a theme change from starting a game.
+                    preferredLaunch.consumed = true
+                    recreate()
+                }
+            }
         }
-        original = ModeButton(this, "Mario Kart Wii", compact, false).apply {
+        header.addView(theme, LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(16) })
+        header.addView(link("Help") { showSetupHelp() })
+        column.addView(header, layout(dp(if (compact) 16 else 28)))
+        original = ModeButton(this, "Mario Kart Wii", compact, false, darkMode).apply {
             id = R.id.kartpad_mode_original
             setIcon(R.drawable.ic_kartpad_checkered_flag)
         }
-        retro = ModeButton(this, "Retro Rewind", compact, true).apply {
+        retro = ModeButton(this, "Retro Rewind", compact, true, darkMode).apply {
             id = R.id.kartpad_mode_retro_rewind
             setIcon(R.drawable.ic_kartpad_gobackward)
         }
         refreshModeCards()
-        val choices = LinearLayout(this).apply {
-            orientation = if (stacked) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
-            for ((index, card) in listOf(original, retro).withIndex()) {
-                addView(card, LinearLayout.LayoutParams(
-                    if (stacked) LinearLayout.LayoutParams.MATCH_PARENT else 0,
-                    LinearLayout.LayoutParams.WRAP_CONTENT, if (stacked) 0f else 1f,
-                ).apply {
-                    if (index == 0) {
-                        if (stacked) bottomMargin = dp(16) else marginEnd = dp(20)
-                    }
-                })
-            }
-        }
-        column.addView(choices, layout(dp(10)))
+        fun divider() = View(this).apply { setBackgroundColor(if (darkMode) Color.rgb(55, 55, 57) else Color.rgb(216, 214, 210)) }
+        column.addView(original, layout(dp(10)))
+        column.addView(divider(), LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(10) })
+        column.addView(retro, layout(dp(10)))
+        column.addView(divider(), LinearLayout.LayoutParams(-1, dp(1)).apply { bottomMargin = dp(10) })
         progress = ProgressBar(this).apply { isIndeterminate = true }
-        column.addView(progress, LinearLayout.LayoutParams(dp(28), dp(28)).apply {
-            gravity = Gravity.CENTER_HORIZONTAL
-        })
+        column.addView(progress, LinearLayout.LayoutParams(dp(24), dp(24)).apply { gravity = Gravity.CENTER_HORIZONTAL })
         status = label("Checking game data…", 13f, true).apply {
             id = R.id.kartpad_mode_status
             accessibilityLiveRegion = View.ACCESSIBILITY_LIVE_REGION_POLITE
         }
         column.addView(status, layout())
-        column.addView(link("Preferred Game…") { showPreferredGame() }, layout())
-        if (!compact) {
-            column.addView(label("A little help getting started", 18f), layout(dp(8)))
-            column.addView(link("Setup guide") { openGuide("INSTALL_ANDROID.md") }, layout())
-            column.addView(link("Troubleshooting") { openGuide("SUPPORT.md") }, layout())
+        preferenceButton = link("Ask every time") { showPreferredGame() }.apply { setTextColor(primaryTextColor) }
+        updatePreferenceLabel()
+        val launchChoice = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label("On launch:", 13f, true), LinearLayout.LayoutParams(-2, -2).apply { marginEnd = dp(8) })
+            addView(preferenceButton)
         }
-        // No fixed minimum width: narrow windows and large text may scroll, never clip.
-        val contentWidth = dp(minOf(920, maxOf(0, config.screenWidthDp - 48)))
+        val footer = LinearLayout(this).apply {
+            orientation = if (largeText || config.screenWidthDp < 650) LinearLayout.VERTICAL else LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(launchChoice)
+            addView(label("Return here anytime from the in-game menu.", 13f, true).apply { gravity = Gravity.END },
+                LinearLayout.LayoutParams(if (orientation == LinearLayout.HORIZONTAL) 0 else -1, -2,
+                    if (orientation == LinearLayout.HORIZONTAL) 1f else 0f).apply { marginStart = dp(16) })
+        }
+        column.addView(footer, layout())
+        val contentWidth = dp(minOf(1040, maxOf(0, config.screenWidthDp - 48)))
         val scroll = ScrollView(this).apply {
             isFillViewport = true
-            addView(column, FrameLayout.LayoutParams(contentWidth,
-                FrameLayout.LayoutParams.WRAP_CONTENT, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
+            addView(column, FrameLayout.LayoutParams(contentWidth, -2, Gravity.TOP or Gravity.CENTER_HORIZONTAL))
         }
         return FrameLayout(this).apply {
-            setBackgroundColor(Color.rgb(9, 13, 20))
+            setBackgroundColor(if (darkMode) Color.rgb(17, 17, 17) else Color.rgb(251, 249, 242))
+            addView(ImageView(this@KartPadLaunchActivity).apply {
+                setImageResource(R.drawable.kartpad_checker)
+                imageTintList = ColorStateList.valueOf(if (darkMode) Color.WHITE else Color.BLACK)
+                alpha = if (darkMode) 1f else 0.65f
+                scaleType = ImageView.ScaleType.CENTER_CROP
+                importantForAccessibility = View.IMPORTANT_FOR_ACCESSIBILITY_NO
+            }, FrameLayout.LayoutParams(dp(70), -1, Gravity.END))
             setPadding(dp(24), 0, dp(24), 0)
-            addView(scroll, FrameLayout.LayoutParams(
-                FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.MATCH_PARENT))
+            addView(scroll, FrameLayout.LayoutParams(-1, -1))
         }
     }
 
@@ -355,6 +399,7 @@ open class KartPadLaunchActivity : Activity() {
                 runCatching { KartPadPreferredGame.write(filesDir, KartPadPreferredGame.values[which]) }
                     .onSuccess {
                         dialog.dismiss()
+                        updatePreferenceLabel()
                         showStatus("Saved for next launch. Game data will be checked before starting.")
                     }
                     .onFailure {
@@ -390,19 +435,25 @@ open class KartPadLaunchActivity : Activity() {
         column.addView(Button(this).apply {
             text = "Export Private Diagnostics…"
             isAllCaps = false
-            setTextColor(Color.argb(184, 255, 255, 255))
+            setTextColor(secondaryForeground)
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
                 AlertDialog.Builder(this@KartPadLaunchActivity)
                     .setTitle("Export Private Diagnostics")
-                    .setMessage("Save recent runtime logs to a location you choose. Logs may contain local paths or personal details. No game images, saves, profiles, or signing material are copied. Keep this file private and review it before sharing.")
+                    .setMessage("Save recent runtime logs and any retained app crash/hang traces to a location you choose. Traces may contain local paths, network information or other personal details. No game images, saves, profiles, or signing material are copied. Keep this file private and review it before sharing.")
                     .setNegativeButton("Cancel", null)
                     .setPositiveButton("Save Locally…") { _, _ ->
-                        startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
-                            addCategory(Intent.CATEGORY_OPENABLE)
-                            type = "application/zip"
-                            putExtra(Intent.EXTRA_TITLE, "KartPad-private-diagnostics.zip")
-                        }, REQUEST_DIAGNOSTICS)
+                        val sessions = runCatching { KartPadDiagnosticExport.sessions(this@KartPadLaunchActivity) }.getOrDefault(emptyList())
+                        if (sessions.isEmpty()) showStatus("No game session logs are available yet.")
+                        else AlertDialog.Builder(this@KartPadLaunchActivity).setTitle("Choose the game session")
+                            .setItems(sessions.map { "${it.id}\nLast written: ${java.util.Date(it.modified)}" }.toTypedArray()) { _, index ->
+                                exportSession = sessions[index].id
+                                startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                    addCategory(Intent.CATEGORY_OPENABLE)
+                                    type = "application/zip"
+                                    putExtra(Intent.EXTRA_TITLE, "KartPad-private-diagnostics.zip")
+                                }, REQUEST_DIAGNOSTICS)
+                            }.setNegativeButton("Back", null).show()
                     }.show()
             }
         }, layout(0))
@@ -431,7 +482,7 @@ open class KartPadLaunchActivity : Activity() {
             }
             refresh()
             isAllCaps = false
-            setTextColor(Color.argb(184, 255, 255, 255))
+            setTextColor(secondaryForeground)
             setBackgroundColor(Color.TRANSPARENT)
             setOnClickListener {
                 val enable = !KartPadRendererDiagnostics.enabled(context)
@@ -449,6 +500,14 @@ open class KartPadLaunchActivity : Activity() {
         }, layout(0))
 
 
+        column.addView(Button(this).apply {
+            text = "Character Graphics Test…"
+            isAllCaps = false
+            setTextColor(secondaryForeground)
+            setBackgroundColor(Color.TRANSPARENT)
+            setOnClickListener { KartPadCharacterGraphicsTestDialog.show(this@KartPadLaunchActivity) }
+        }, layout(0))
+
         val scroll = ScrollView(this).apply { addView(column) }
         AlertDialog.Builder(this).setTitle("Getting Started").setView(scroll)
             .setPositiveButton("Done", null).show()
@@ -458,10 +517,11 @@ open class KartPadLaunchActivity : Activity() {
         super.onActivityResult(requestCode, resultCode, data)
         if (requestCode != REQUEST_DIAGNOSTICS || resultCode != RESULT_OK) return
         val destination = data?.data ?: return
+        val session = exportSession ?: run { showStatus("Choose the game session again before exporting."); return }
         showStatus("Exporting private diagnostics…")
         validator.execute {
             val succeeded = runCatching {
-                KartPadDiagnosticExport.write(applicationContext, destination)
+                KartPadDiagnosticExport.write(applicationContext, destination, session)
             }.isSuccess
             runOnUiThread {
                 if (!isFinishing && !isDestroyed) showStatus(
@@ -495,60 +555,53 @@ open class KartPadLaunchActivity : Activity() {
         private const val REQUEST_DIAGNOSTICS = 4_304
     }
 
-    /** One focusable game card preserves the chooser's existing selection callback. */
+    /** One focusable row retains the same selection callback and controller behavior. */
     private class ModeButton(
         context: android.content.Context, private val gameTitle: String,
-        compact: Boolean, isRetro: Boolean,
+        compact: Boolean, isRetro: Boolean, private val dark: Boolean,
     ) : LinearLayout(context) {
         private fun dp(value: Int) = (value * resources.displayMetrics.density + 0.5f).toInt()
-        private val accent = if (isRetro) Color.rgb(196, 171, 255) else Color.rgb(110, 186, 255)
+        private val accent = if (isRetro) Color.rgb(255, 174, 20) else Color.rgb(26, 133, 255)
+        private val primaryTextColor = if (dark) Color.rgb(247, 247, 247) else Color.rgb(12, 17, 26)
+        private val red = if (dark) Color.rgb(255, 51, 66) else Color.rgb(204, 9, 31)
         private val icon = ImageView(context)
         private fun text(size: Float, color: Int) = TextView(context).apply {
             textSize = size
             setTextColor(color)
             includeFontPadding = false
         }
-        private val badge = text(11f, accent)
-        private val note = text(13f, Color.rgb(179, 191, 209))
-        private val action = text(16f, Color.WHITE).apply {
+        private val badge = text(13f, if (dark) Color.rgb(170, 170, 170) else Color.rgb(94, 94, 94))
+        private val action = text(16f, primaryTextColor).apply {
             gravity = Gravity.CENTER
-            minHeight = dp(50)
-            setPadding(dp(12), dp(12), dp(12), dp(12))
+            minHeight = dp(48)
+            setPadding(dp(16), dp(14), dp(16), dp(14))
         }
         init {
-            orientation = VERTICAL
+            val stacked = resources.configuration.fontScale >= 1.3f || resources.configuration.screenWidthDp < 600
+            orientation = if (stacked) VERTICAL else HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
             isClickable = true
             isFocusable = true
             importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_YES
             descendantFocusability = FOCUS_BLOCK_DESCENDANTS
-            setPadding(dp(24), dp(24), dp(24), dp(24))
-            fun fill(color: Int) = GradientDrawable().apply {
-                cornerRadius = dp(20).toFloat()
-                setColor(color)
-                setStroke(dp(1), Color.rgb(43, 54, 71))
-            }
-            background = StateListDrawable().apply {
-                addState(intArrayOf(android.R.attr.state_pressed), fill(Color.rgb(33, 46, 65)))
-                addState(intArrayOf(android.R.attr.state_focused), fill(Color.rgb(33, 46, 65)))
-                addState(intArrayOf(), fill(Color.rgb(19, 26, 38)))
-            }
-            val top = LinearLayout(context).apply {
+            setPadding(dp(18), dp(16), dp(18), dp(16))
+            val identity = LinearLayout(context).apply {
                 orientation = HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
-                addView(icon, LayoutParams(dp(32), dp(32)).apply { marginEnd = dp(12) })
-                addView(badge.apply { gravity = Gravity.END }, LayoutParams(0, LayoutParams.WRAP_CONTENT, 1f))
+                addView(icon, LayoutParams(dp(36), dp(36)).apply { marginEnd = dp(18) })
+                addView(LinearLayout(context).apply {
+                    orientation = VERTICAL
+                    addView(text(if (compact) 22f else 28f, primaryTextColor).apply {
+                        text = gameTitle
+                        setTypeface(typeface, Typeface.BOLD)
+                    })
+                    addView(badge, LayoutParams(-1, -2).apply { topMargin = dp(4) })
+                }, LayoutParams(-1, -2))
             }
-            addView(top, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(18) })
-            addView(text(if (compact) 22f else 28f, Color.WHITE).apply { text = gameTitle },
-                LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(18) })
-            if (!compact) {
-                addView(text(16f, Color.rgb(179, 191, 209)).apply {
-                    text = if (isRetro) "More tracks, characters and Retro WFC online play. Uses your Mario Kart Wii game data."
-                    else "Grand Prix, time trials and local races. Your original game, on this device."
-                }, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(12) })
-                addView(note, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply { bottomMargin = dp(18) })
-            }
-            addView(action, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT))
+            addView(identity, LayoutParams(if (stacked) -1 else 0, -2, if (stacked) 0f else 1f))
+            addView(action, LayoutParams(if (stacked) -1 else dp(215), -2).apply {
+                if (stacked) topMargin = dp(12) else marginStart = dp(16)
+            })
         }
         override fun getAccessibilityClassName(): CharSequence = Button::class.java.name
         override fun setEnabled(enabled: Boolean) {
@@ -561,13 +614,25 @@ open class KartPadLaunchActivity : Activity() {
             icon.importantForAccessibility = IMPORTANT_FOR_ACCESSIBILITY_NO
         }
         fun update(status: String, actionTitle: String, metadata: String, primary: Boolean) {
-            badge.text = status
-            action.text = "$actionTitle  →"
-            note.text = metadata
-            action.background = GradientDrawable().apply {
-                cornerRadius = dp(8).toFloat()
-                setColor(if (primary) Color.rgb(41, 120, 224) else Color.rgb(48, 59, 79))
+            badge.text = when (status) {
+                "CURRENT GAME · PAUSED" -> "Paused"
+                "NEXT LAUNCH" -> "Next launch"
+                "READY TO PLAY" -> "Ready to play"
+                "BASE GAME REQUIRED" -> "Import Mario Kart Wii first"
+                else -> "Setup needed"
             }
+            action.text = "$actionTitle  →"
+            action.setTextColor(if (primary) Color.WHITE else red)
+            action.background = GradientDrawable().apply {
+                cornerRadius = dp(10).toFloat()
+                setColor(if (primary) Color.rgb(228, 6, 27) else Color.TRANSPARENT)
+            }
+            val current = status == "CURRENT GAME · PAUSED"
+            val shape = GradientDrawable().apply {
+                cornerRadius = dp(14).toFloat()
+                setColor(if (current) { if (dark) Color.rgb(47, 24, 27) else Color.rgb(249, 232, 229) } else Color.TRANSPARENT)
+            }
+            background = RippleDrawable(ColorStateList.valueOf(Color.argb(60, 255, 51, 66)), shape, null)
             contentDescription = "$actionTitle, $gameTitle. $status. $metadata"
         }
     }

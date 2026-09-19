@@ -37,6 +37,8 @@ NSString *DatabasePath() {
       @"NAND/shared2/menu/FaceLib/RFL_DB.dat"];
 }
 
+NSString *PendingGhostPath() { return [SupportRoot() stringByAppendingPathComponent:@"PendingGhost.plist"]; }
+
 NSString *PendingPath() {
   return [SupportRoot() stringByAppendingPathComponent:@"PendingRFL_DB.dat"];
 }
@@ -217,6 +219,9 @@ NSArray<NSDictionary<NSString *, id> *> *KartPadLicenseRecords(NSError **error) 
   NSFileManager *files = NSFileManager.defaultManager;
   NSDictionary *identity = [NSDictionary dictionaryWithContentsOfFile:PendingIdentityPath()];
   NSDictionary *license = [NSDictionary dictionaryWithContentsOfFile:PendingLicensePath()];
+  NSData *databaseData = [NSData dataWithContentsOfFile:DatabasePath()];
+  const auto databaseBytes = Bytes(databaseData);
+  const auto miis = kartpad::mii::ListMiis(databaseBytes);
   for (NSDictionary<NSString *, NSString *> *location in SaveLocations()) {
     NSString *path = location[@"path"];
     if (![files fileExistsAtPath:path]) continue;
@@ -253,6 +258,9 @@ NSArray<NSDictionary<NSString *, id> *> *KartPadLicenseRecords(NSError **error) 
         @"name": name.length > 0 ? name : @"Unnamed",
         @"createId": createId,
         @"pendingOperation": pendingOperation,
+        @"missingLinkedMii": @(!std::any_of(miis.begin(), miis.end(), [&](const auto& mii) {
+          return kartpad::mii::MiiCreateId(databaseBytes, mii.slot) == record.createId;
+        })),
       }];
     }
   }
@@ -380,12 +388,36 @@ BOOL KartPadStagePlayerName(NSUInteger slot, NSString *name,
   return YES;
 }
 
+static NSData *SelectedMiiName(NSUInteger slot, NSData *expectedId, NSError **error) {
+  std::array<uint8_t, kartpad::mii::kCreateIdByteSize> identity{};
+  if (!ReadCreateId(expectedId, identity, error)) return nil;
+  NSData *data = [NSData dataWithContentsOfFile:DatabasePath() options:0 error:error];
+  if (data == nil || !ValidateData(data, error)) return nil;
+  for (const auto& record : kartpad::mii::ListMiis(Bytes(data))) {
+    if (record.slot == slot && kartpad::mii::MiiCreateId(Bytes(data), slot) == identity) {
+      NSData *name = [[NSString stringWithUTF8String:record.name.c_str()]
+          dataUsingEncoding:NSUTF16BigEndianStringEncoding];
+      const auto validation = kartpad::mii::ValidateUtf16BigEndianName(Bytes(name));
+      if (!validation) {
+        if (error != nullptr) *error = ManagerError(21, validation.message);
+        return nil;
+      }
+      return name;
+    }
+  }
+  if (error != nullptr) *error = ManagerError(20,
+      "The selected Mii changed. Reopen Player Identity and choose it again.");
+  return nil;
+}
+
 static BOOL KartPadStageLicenseChange(NSString *profileIdentifier,
                                      NSUInteger slot, NSData *createIdData,
                                      NSString *operation, NSString *name,
-                                     NSError **error) {
+                                     NSError **error,
+                                     NSUInteger selectedSlot = NSNotFound,
+                                     NSData *selectedId = nil) {
   NSFileManager *files = NSFileManager.defaultManager;
-  if ([files fileExistsAtPath:PendingPath()] ||
+  if (KartPadHasPendingSaveRestore() || [files fileExistsAtPath:PendingGhostPath()] || [files fileExistsAtPath:PendingPath()] ||
       [files fileExistsAtPath:PendingIdentityPath()] ||
       [files fileExistsAtPath:PendingLicensePath()]) {
     if (error != nullptr) {
@@ -408,6 +440,9 @@ static BOOL KartPadStageLicenseChange(NSString *profileIdentifier,
   NSData *nameData = nil;
   if ([operation isEqualToString:@"rename"]) {
     nameData = PlayerNameData(name, error);
+    if (nameData == nil) return NO;
+  } else if ([operation isEqualToString:@"mii"]) {
+    nameData = SelectedMiiName(selectedSlot, selectedId, error);
     if (nameData == nil) return NO;
   } else if (![operation isEqualToString:@"delete"]) {
     if (error != nullptr) {
@@ -442,6 +477,10 @@ static BOOL KartPadStageLicenseChange(NSString *profileIdentifier,
     @"createId": createIdData,
   } mutableCopy];
   if (nameData != nil) intent[@"name"] = nameData;
+  if ([operation isEqualToString:@"mii"]) {
+    intent[@"miiSlot"] = @(selectedSlot);
+    intent[@"miiCreateId"] = selectedId;
+  }
   NSData *intentData = [NSPropertyListSerialization
       dataWithPropertyList:intent format:NSPropertyListBinaryFormat_v1_0
                    options:0 error:error];
@@ -451,7 +490,7 @@ static BOOL KartPadStageLicenseChange(NSString *profileIdentifier,
       ![intentData writeToFile:PendingLicensePath()
                         options:NSDataWritingAtomic error:error]) return NO;
 
-  if (nameData != nil && [files fileExistsAtPath:DatabasePath()]) {
+  if ([operation isEqualToString:@"rename"] && [files fileExistsAtPath:DatabasePath()]) {
     NSData *databaseData = [NSData dataWithContentsOfFile:DatabasePath()
                                                    options:NSDataReadingMappedIfSafe
                                                      error:error];
@@ -490,13 +529,25 @@ BOOL KartPadStageLicenseRename(NSString *profileIdentifier, NSUInteger slot,
                                    @"rename", name, error);
 }
 
+BOOL KartPadStageLicenseMii(NSString *profileIdentifier, NSUInteger slot,
+                           NSData *createId, NSUInteger miiSlot, NSData *miiCreateId,
+                           NSError **error) {
+  return KartPadStageLicenseChange(profileIdentifier, slot, createId,
+                                   @"mii", nil, error, miiSlot, miiCreateId);
+}
+
 BOOL KartPadStageLicenseDeletion(NSString *profileIdentifier, NSUInteger slot,
                                 NSData *createId, NSError **error) {
   return KartPadStageLicenseChange(profileIdentifier, slot, createId,
                                    @"delete", nil, error);
 }
 
+static BOOL KartPadApplyPendingGhost(NSError **error);
+static BOOL KartPadApplyPendingSaveRestore(NSError **error);
+
 BOOL KartPadApplyPendingMiiDatabase(NSError **error) {
+  if (!KartPadApplyPendingSaveRestore(error)) return NO;
+  if (!KartPadApplyPendingGhost(error)) return NO;
   NSString *pending = PendingPath();
   NSString *pendingIdentity = PendingIdentityPath();
   NSString *pendingLicense = PendingLicensePath();
@@ -596,6 +647,7 @@ BOOL KartPadApplyPendingMiiDatabase(NSError **error) {
          (nameData.length == 0 || nameData.length > kartpad::mii::kMiiNameByteSize ||
           (nameData.length % 2) != 0)) ||
         (![operation isEqualToString:@"rename"] &&
+         ![operation isEqualToString:@"mii"] &&
          ![operation isEqualToString:@"delete"])) {
       if (error != nullptr && *error == nil) {
         *error = ManagerError(18, "The pending license change is invalid.");
@@ -610,7 +662,18 @@ BOOL KartPadApplyPendingMiiDatabase(NSError **error) {
     std::vector<uint8_t> updatedSave(
         static_cast<const uint8_t *>(saveData.bytes),
         static_cast<const uint8_t *>(saveData.bytes) + saveData.length);
-    const auto result = [operation isEqualToString:@"rename"]
+    std::array<uint8_t, kartpad::mii::kCreateIdByteSize> selectedId{};
+    if ([operation isEqualToString:@"mii"]) {
+      NSNumber *selectedSlot = [intent[@"miiSlot"] isKindOfClass:NSNumber.class] ? intent[@"miiSlot"] : nil;
+      NSData *selectedData = [intent[@"miiCreateId"] isKindOfClass:NSData.class] ? intent[@"miiCreateId"] : nil;
+      if (selectedSlot == nil || !ReadCreateId(selectedData, selectedId, error)) return NO;
+      nameData = SelectedMiiName(selectedSlot.unsignedIntegerValue, selectedData, error);
+      if (nameData == nil) return NO;
+    }
+    const auto result = [operation isEqualToString:@"mii"]
+        ? kartpad::mii::SetLicenseMii(updatedSave,
+              slotNumber.unsignedIntegerValue, createId, selectedId, Bytes(nameData))
+        : [operation isEqualToString:@"rename"]
         ? kartpad::mii::RenameLicense(updatedSave,
               slotNumber.unsignedIntegerValue, createId, Bytes(nameData))
         : kartpad::mii::DeleteLicense(updatedSave,
@@ -664,7 +727,121 @@ BOOL KartPadApplyPendingMiiDatabase(NSError **error) {
 }
 
 BOOL KartPadHasPendingMiiChanges(void) {
-  return [NSFileManager.defaultManager fileExistsAtPath:PendingPath()] ||
+  return KartPadHasPendingSaveRestore() || [NSFileManager.defaultManager fileExistsAtPath:PendingGhostPath()] || [NSFileManager.defaultManager fileExistsAtPath:PendingPath()] ||
       [NSFileManager.defaultManager fileExistsAtPath:PendingIdentityPath()] ||
       [NSFileManager.defaultManager fileExistsAtPath:PendingLicensePath()];
+}
+
+#include "kartpad/ghost/rkg.h"
+
+NSArray<NSDictionary<NSString *, id> *> *KartPadOriginalGhosts(NSUInteger license, NSError **error) {
+  NSData *save = [NSData dataWithContentsOfFile:SaveLocation(@"original")[@"path"] options:0 error:error];
+  if (save == nil) return nil;
+  try {
+    std::span<const uint8_t> bytes((const uint8_t *)save.bytes, save.length);
+    kartpad::ghost::ValidateSave(bytes, (unsigned)license);
+    NSMutableArray *records = [NSMutableArray array];
+    for (bool downloaded : {false, true}) {
+      const auto bits = kartpad::ghost::Read32(bytes, 8 + license * 0x8cc0 + (downloaded ? 8 : 4));
+      for (unsigned slot = 0; slot < 32; ++slot) if (bits & (1u << slot)) {
+        try {
+          auto data = kartpad::ghost::Export(bytes, (unsigned)license, slot, downloaded);
+          [records addObject:@{@"name": [NSString stringWithFormat:@"%s — %@", kartpad::ghost::CourseNames[slot], downloaded ? @"Downloaded" : @"Personal Best"],
+              @"data": [NSData dataWithBytes:data.data() length:data.size()]}];
+        } catch (const std::exception&) { /* A corrupt ghost must not prevent exporting another valid slot. */ }
+      }
+    }
+    return records;
+  } catch (const std::exception& e) {
+    if (error) *error = ManagerError(40, e.what());
+    return nil;
+  }
+}
+
+BOOL KartPadStageOriginalGhost(NSData *ghost, NSUInteger license, NSError **error) {
+  if (KartPadHasPendingMiiChanges()) {
+    if(error) *error=ManagerError(41,"Restart to apply the pending data change first.");
+    return NO;
+  }
+  NSString *path=SaveLocation(@"original")[@"path"];
+  NSData *save=[NSData dataWithContentsOfFile:path options:0 error:error];
+  if(!save)return NO;
+  try {
+    auto result=kartpad::ghost::Import(std::span<const uint8_t>((const uint8_t*)save.bytes,save.length),
+        std::span<const uint8_t>((const uint8_t*)ghost.bytes,ghost.length),(unsigned)license);
+    (void)result;
+    NSDictionary *request=@{@"ghost":ghost,@"license":@(license),
+        @"identity":[save subdataWithRange:NSMakeRange(8+license*0x8cc0+0x28,8)]};
+    NSData *plist=[NSPropertyListSerialization dataWithPropertyList:request format:NSPropertyListBinaryFormat_v1_0 options:0 error:error];
+    return plist && [plist writeToFile:PendingGhostPath() options:NSDataWritingAtomic error:error];
+  }catch(const std::exception& e){if(error)*error=ManagerError(42,e.what());return NO;}
+}
+
+static BOOL KartPadApplyPendingGhost(NSError **error) {
+  NSString *pending=PendingGhostPath();
+  NSFileManager *files=NSFileManager.defaultManager;
+  if(![files fileExistsAtPath:pending])return YES;
+  if([files fileExistsAtPath:PendingPath()]||[files fileExistsAtPath:PendingIdentityPath()]||[files fileExistsAtPath:PendingLicensePath()]) {
+    if(error)*error=ManagerError(43,"Conflicting pending changes. Existing saves and requests were retained.");return NO;
+  }
+  NSDictionary *attrs=[files attributesOfItemAtPath:pending error:error];
+  if(!attrs || [attrs fileSize]>32*1024){if(error)*error=ManagerError(44,"Invalid pending ghost request.");return NO;}
+  NSData *data=[NSData dataWithContentsOfFile:pending options:0 error:error];
+  id request=data ? [NSPropertyListSerialization propertyListWithData:data options:0 format:nil error:error] : nil;
+  if(![request isKindOfClass:NSDictionary.class]||![request[@"ghost"] isKindOfClass:NSData.class]||![request[@"identity"] isKindOfClass:NSData.class]||![request[@"license"] isKindOfClass:NSNumber.class])return NO;
+  NSString *active=SaveLocation(@"original")[@"path"];
+  NSData *current=[NSData dataWithContentsOfFile:active options:0 error:error];
+  const NSUInteger license=[request[@"license"] unsignedIntegerValue];
+  if(license>=4 || current.length!=kartpad::ghost::SaveBytes || ![[current subdataWithRange:NSMakeRange(8+license*0x8cc0+0x28,8)] isEqual:request[@"identity"]]){
+    if(error)*error=ManagerError(45,"The selected license changed. Cancel the pending ghost import and choose the license again.");return NO;
+  }
+  NSData *after=nil;
+  try {
+    NSData *ghost=request[@"ghost"];
+    auto result=kartpad::ghost::Import(std::span<const uint8_t>((const uint8_t*)current.bytes,current.length),std::span<const uint8_t>((const uint8_t*)ghost.bytes,ghost.length),(unsigned)license);
+    after=[NSData dataWithBytes:result.data() length:result.size()];
+  }catch(const std::exception& e){if(error)*error=ManagerError(46,e.what());return NO;}
+  if(![current isEqualToData:after]) {
+    if(!BackupFile(active,@"SaveBackups",@"rksys-ghost",NSUUID.UUID.UUIDString,error))return NO;
+    if(![after writeToFile:active options:NSDataWritingAtomic error:error])return NO;
+  }
+  return [files removeItemAtPath:pending error:error];
+}
+
+BOOL KartPadHasPendingGhost(void) { return [NSFileManager.defaultManager fileExistsAtPath:PendingGhostPath()]; }
+BOOL KartPadCancelPendingGhost(NSError **error) { return !KartPadHasPendingGhost() || [NSFileManager.defaultManager removeItemAtPath:PendingGhostPath() error:error]; }
+
+static NSString *RawSavePendingPath(){return [SupportRoot() stringByAppendingPathComponent:@"PendingSaveRestore.plist"];}
+static BOOL ValidateRawSave(NSData *data,NSError **error){
+  auto b=std::span<const uint8_t>((const uint8_t*)data.bytes,data.length);
+  try{kartpad::ghost::Require(b.size()==kartpad::ghost::SaveBytes,"A save must be exactly 2867200 bytes.");kartpad::ghost::Require(kartpad::ghost::Read32(b,0)==0x524b5344&&kartpad::ghost::Read32(b,4)==0x30303036,"Unsupported save format.");kartpad::ghost::Require(kartpad::ghost::Read32(b,0x27ffc)==kartpad::ghost::Crc(b.first(0x27ffc)),"Save checksum mismatch.");return YES;}catch(const std::exception &e){if(error)*error=ManagerError(50,e.what());return NO;}
+}
+NSData *KartPadReadSave(NSString *profile,NSError **error){
+  NSDictionary *location=SaveLocation(profile);if(!location){if(error)*error=ManagerError(51,"Unknown save profile.");return nil;}
+  NSDictionary *attrs=[NSFileManager.defaultManager attributesOfItemAtPath:location[@"path"] error:error];if(!attrs)return nil;
+  if([attrs fileSize]!=kartpad::ghost::SaveBytes){if(error)*error=ManagerError(52,"Unsupported save size.");return nil;}
+  NSData *data=[NSData dataWithContentsOfFile:location[@"path"] options:0 error:error];return data&&ValidateRawSave(data,error)?data:nil;
+}
+BOOL KartPadHasPendingSaveRestore(void){return [NSFileManager.defaultManager fileExistsAtPath:RawSavePendingPath()];}
+BOOL KartPadCancelSaveRestore(NSError **error){return !KartPadHasPendingSaveRestore()||[NSFileManager.defaultManager removeItemAtPath:RawSavePendingPath() error:error];}
+BOOL KartPadStageSaveRestore(NSString *profile,NSData *data,NSError **error){
+  if(KartPadHasPendingMiiChanges()){if(error)*error=ManagerError(53,"Apply or cancel the pending data change first.");return NO;}
+  if(!SaveLocation(profile)||!ValidateRawSave(data,error))return NO;
+  NSData *request=[NSPropertyListSerialization dataWithPropertyList:@{@"profile":profile,@"data":data} format:NSPropertyListBinaryFormat_v1_0 options:0 error:error];
+  return request&&[request writeToFile:RawSavePendingPath() options:NSDataWritingAtomic error:error];
+}
+static BOOL KartPadApplyPendingSaveRestore(NSError **error){
+  if(!KartPadHasPendingSaveRestore())return YES;
+  NSFileManager *files=NSFileManager.defaultManager;
+  if([files fileExistsAtPath:PendingPath()]||[files fileExistsAtPath:PendingIdentityPath()]||[files fileExistsAtPath:PendingLicensePath()]||KartPadHasPendingGhost()){if(error)*error=ManagerError(54,"Conflicting pending data changes.");return NO;}
+  NSDictionary *attrs=[files attributesOfItemAtPath:RawSavePendingPath() error:error];if(!attrs||[attrs fileSize]>kartpad::ghost::SaveBytes+4096)return NO;
+  NSData *request=[NSData dataWithContentsOfFile:RawSavePendingPath() options:0 error:error];
+  NSDictionary *plist=[NSPropertyListSerialization propertyListWithData:request options:NSPropertyListImmutable format:nil error:error];
+  if(![plist isKindOfClass:NSDictionary.class]||![plist[@"profile"] isKindOfClass:NSString.class]||![plist[@"data"] isKindOfClass:NSData.class])return NO;
+  NSDictionary *location=SaveLocation(plist[@"profile"]);if(!location||!ValidateRawSave(plist[@"data"],error))return NO;
+  NSString *active=location[@"path"];
+  if([files fileExistsAtPath:active]){NSData *current=KartPadReadSave(plist[@"profile"],error);if(!current)return NO;if(![current isEqual:plist[@"data"]]&&!BackupFile(active,@"SaveBackups",@"rksys-restore",NSUUID.UUID.UUIDString,error))return NO;}
+  if(![files createDirectoryAtPath:active.stringByDeletingLastPathComponent withIntermediateDirectories:YES attributes:nil error:error])return NO;
+  if(![plist[@"data"] writeToFile:active options:NSDataWritingAtomic error:error])return NO;
+  return KartPadCancelSaveRestore(error);
 }

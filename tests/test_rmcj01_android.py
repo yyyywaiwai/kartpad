@@ -49,8 +49,10 @@ class JapaneseAndroidTests(unittest.TestCase):
             storage = (sources / "KartPadGameDataStorage.kt").read_text()
             self.assertIn('"RMCJ01".toByteArray()', storage)
             self.assertIn("1b9621ef7c5d97dada103e50e5389730e67f3c2545dda592edd4b5843655af91", storage)
-            for name in ("KartPadSaveStorage.kt", "KartPadIdentityStorage.kt"):
-                self.assertIn("524d434a/data/rksys.dat", (sources / name).read_text())
+            self.assertIn("524d434a/data/rksys.dat",
+                          (sources / "KartPadIdentityStorage.kt").read_text())
+            self.assertIn("KartPadIdentityStorage.paths.getValue(profile)",
+                          (sources / "KartPadSaveStorage.kt").read_text())
             self.assertIn("RetroWFC/RMCJ/rksys.dat", (sources / "KartPadIdentityStorage.kt").read_text())
             release = (sources / "RetroRewindRelease.java").read_text()
             self.assertIn("payload?g=RMCJD00", release)

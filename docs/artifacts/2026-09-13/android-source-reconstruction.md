@@ -1,4 +1,4 @@
-# Reconstruct the Android 0.4.18 source inputs
+# Reconstruct the Android 0.4.19 source inputs
 
 Start with the checksum-verified source delivery. Restore the inner Git snapshots
 with their included `restore-source-git.py` and metadata. Preserve the exact

@@ -13,12 +13,7 @@ translation_root="$(absolute_from_repo "${1:-private/builder/dual-pipeline-smoke
 runtime_source="$(absolute_from_repo "${2:-build/tvos-game-runtime-source}")"
 runtime_build="$(absolute_from_repo "${3:-build/tvos-game-runtime-build}")"
 
-env KARTPAD_PREPARE_ONLY=1 \
+env KARTPAD_PREPARE_PLATFORM=tvos KARTPAD_PREPARE_ONLY=1 \
   "${repo_root}/scripts/prepare-ios-game-runtime.sh" \
   "${translation_root}" "${runtime_source}" "${runtime_build}" dual
-patch --batch -p1 -d "${runtime_source}/aurora-main" < \
-  "${repo_root}/patches/aurora-tvos-dawn-package.patch"
-patch --batch -p1 -d "${runtime_source}" < \
-  "${repo_root}/patches/wiicompiled-tvos-runtime.patch"
-
 echo "Prepared independent KartPad tvOS runtime source: ${runtime_source}"

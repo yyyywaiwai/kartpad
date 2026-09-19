@@ -7,6 +7,11 @@ internal data class KartPadReportEvidence(
     val reviewed: Boolean = false,
     val reason: String = "",
 ) {
+    /** Browser drafts never transfer the selected file or require selecting it twice. */
+    fun browserSummary(): String = if (choice == "unavailable" && reason.isNotBlank()) {
+        "Logs not included yet: ${reason.trim().take(300)}. Nothing was uploaded by KartPad."
+    } else "Logs not included yet. Attach reviewed logs or screenshots in this GitHub draft. Nothing was uploaded by KartPad."
+
     fun validationError(): String? = when {
         choice == "logs" && !hasFile -> "Choose a reviewed log text file first."
         choice == "logs" && !reviewed -> "Confirm that you reviewed the selected log file."

@@ -60,6 +60,9 @@ class KartPadActivity : SDLActivity() {
     private var menuSafeInsetBottom = 0
     private var menuSafeInsetsInitialized = false
     private var runtimeProfile = "base"
+    private var ghostLicense = -1
+    private var ghostSlot = -1
+    private var ghostDownloaded = false
     private var saveDocumentProfile: String? = null
     private var saveRestoreStartupError: String? = null
     private lateinit var inputManager: InputManager
@@ -91,11 +94,15 @@ class KartPadActivity : SDLActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         saveDocumentProfile = savedInstanceState?.getString("save_document_profile")
             ?.takeIf { it in KartPadSaveStorage.profiles }
+        ghostLicense = savedInstanceState?.getInt("ghost_license", -1) ?: -1
+        ghostSlot = savedInstanceState?.getInt("ghost_slot", -1) ?: -1
+        ghostDownloaded = savedInstanceState?.getBoolean("ghost_downloaded", false) ?: false
         Os.setenv("KARTPAD_ANDROID_FILES_DIR", filesDir.absolutePath, true)
         Os.setenv("KARTPAD_ANDROID_CACHE_DIR", cacheDir.absolutePath, true)
         KartPadRendererDiagnostics.configure(this)
+        KartPadCharacterGraphicsTest.configure(this)
         if (BuildConfig.GAME_RUNTIME) {
-            RetroRewindInstallStorage.recover(filesDir)
+            RetroRewindInstallStorage.recoverForLaunch(filesDir, requestedRuntimeProfile())
             if (!identityStartupChecked) {
                 saveRestoreStartupError = KartPadSaveStorage.applyPending(filesDir)
                 KartPadMiiStorage.applyPending(filesDir)?.let { error -> Log.e(TAG, error) }
@@ -363,6 +370,9 @@ class KartPadActivity : SDLActivity() {
 
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putString("save_document_profile", saveDocumentProfile)
+        outState.putInt("ghost_license", ghostLicense)
+        outState.putInt("ghost_slot", ghostSlot)
+        outState.putBoolean("ghost_downloaded", ghostDownloaded)
         if (debugActivityRecreateRequested) {
             outState.putBoolean(DEBUG_STATE_ACTIVITY_RECREATE, true)
         }
@@ -547,14 +557,14 @@ class KartPadActivity : SDLActivity() {
     private fun showControlsMenu() = showKartPadMenuPage(
         "Controls",
         listOf(
-            MenuRow("Controller Player Setup…", R.drawable.ic_kartpad_gamecontroller) {
-                closeKartPadMenu(::showControllerPlayers)
-            },
             MenuRow("Controller Button Mapping…", R.drawable.ic_kartpad_gamecontroller) {
                 closeKartPadMenu(::showControllerMapping)
             },
             MenuRow("Touch Control Settings…", R.drawable.ic_kartpad_hand) {
                 closeKartPadMenu(::showTouchControlSettings)
+            },
+            MenuRow("Controller Player Setup…", R.drawable.ic_kartpad_gamecontroller) {
+                closeKartPadMenu(::showControllerPlayers)
             },
             MenuRow("Motion Steering…", R.drawable.ic_kartpad_gyroscope) {
                 closeKartPadMenu(::showMotionSteering)
@@ -572,52 +582,24 @@ class KartPadActivity : SDLActivity() {
     )
 
     private fun showDisplayMenu() = showKartPadMenuPage(
-        "Display",
-        listOf(
-            MenuRow("FPS Counter Size…", R.drawable.ic_kartpad_speedometer) {
-                closeKartPadMenu(::showFpsSizeSettings)
-            },
-            MenuRow("Aspect Ratio…", R.drawable.ic_kartpad_display) {
-                closeKartPadMenu(::showAspectRatioSettings)
-            },
-            MenuRow("Render Resolution…", R.drawable.ic_kartpad_display) {
-                closeKartPadMenu(::showResolutionSettings)
-            },
-        ),
-        showBack = true,
+        "Display", listOf(
+            MenuRow("Aspect Ratio", R.drawable.ic_kartpad_display, submenu = true) { closeKartPadMenu(::showAspectRatioSettings) },
+            MenuRow("Render Resolution", R.drawable.ic_kartpad_display, submenu = true) { closeKartPadMenu(::showResolutionSettings) },
+            MenuRow("FPS Counter Size", R.drawable.ic_kartpad_speedometer, submenu = true) { closeKartPadMenu(::showFpsSizeSettings) },
+            MenuRow("Android Graphics Diagnostics…", R.drawable.ic_kartpad_display) { closeKartPadMenu { KartPadCharacterGraphicsTestDialog.show(this) } },
+        ), showBack = true,
     )
 
     private fun showGameDataMenu() = showKartPadMenuPage(
-        "Game Data & Saves",
-        listOf(
-            MenuRow("Import or Reimport Wii Disc Image…", R.drawable.ic_kartpad_refresh) {
-                closeKartPadMenu {
-                    openGameDataManager(KartPadGameDataActivity.ACTION_IMPORT)
-                }
-            },
-            MenuRow("Import from Extracted Folder…", R.drawable.ic_kartpad_folder) {
-                closeKartPadMenu {
-                    openGameDataManager(KartPadGameDataActivity.ACTION_IMPORT_FOLDER)
-                }
-            },
-            MenuRow("Remove Stored Game Data…", R.drawable.ic_kartpad_trash) {
-                closeKartPadMenu {
-                    openGameDataManager(KartPadGameDataActivity.ACTION_REMOVE)
-                }
-            },
-            MenuRow("Manage Retro Rewind…", R.drawable.ic_kartpad_gobackward) {
-                closeKartPadMenu {
-                    startActivity(Intent(this, RetroRewindInstallActivity::class.java))
-                }
-            },
-            MenuRow("Manage Saves…", R.drawable.ic_kartpad_folder) {
-                closeKartPadMenu(::showSaveManager)
-            },
-            MenuRow("Player Identity…", R.drawable.ic_kartpad_mii) {
-                closeKartPadMenu(::showPlayerIdentity)
-            },
-        ),
-        showBack = true,
+        "Game Data & Saves", listOf(
+            MenuRow("Player Identity…", R.drawable.ic_kartpad_mii) { closeKartPadMenu(::showPlayerIdentity) },
+            MenuRow("Time Trial Ghosts (.rkg)…", R.drawable.ic_kartpad_folder) { closeKartPadMenu(::showGhostManager) },
+            MenuRow("Manage Saves…", R.drawable.ic_kartpad_folder) { closeKartPadMenu(::showSaveManager) },
+            MenuRow("Manage Retro Rewind…", R.drawable.ic_kartpad_gobackward) { closeKartPadMenu { startActivity(Intent(this, RetroRewindInstallActivity::class.java)) } },
+            MenuRow("Import or Reimport Wii Disc Image…", R.drawable.ic_kartpad_refresh) { closeKartPadMenu { openGameDataManager(KartPadGameDataActivity.ACTION_IMPORT) } },
+            MenuRow("Import from Extracted Folder…", R.drawable.ic_kartpad_folder) { closeKartPadMenu { openGameDataManager(KartPadGameDataActivity.ACTION_IMPORT_FOLDER) } },
+            MenuRow("Remove Stored Game Data…", R.drawable.ic_kartpad_trash) { closeKartPadMenu { openGameDataManager(KartPadGameDataActivity.ACTION_REMOVE) } },
+        ), showBack = true,
     )
 
     private fun showKartPadMenuPage(
@@ -818,11 +800,11 @@ class KartPadActivity : SDLActivity() {
     }
 
     private fun showResolutionSettings() {
-        val labels = arrayOf("1× (Native)", "2×", "3×", "4×")
-        val scales = floatArrayOf(1f, 2f, 3f, 4f)
+        val labels = arrayOf("0.5× (Lowest detail)", "0.75× (Lower detail)", "1× (Native)", "2×", "3×", "4×")
+        val scales = floatArrayOf(0.5f, 0.75f, 1f, 2f, 3f, 4f)
         val selected = scales.indexOfFirst {
             kotlin.math.abs(it - KartPadTouchSettings.resolutionScale(this)) < 0.01f
-        }.coerceAtLeast(0)
+        }.let { if (it >= 0) it else scales.indexOfFirst { scale -> scale == 1f } }
         AlertDialog.Builder(this)
             .setTitle("Render Resolution")
             .setSingleChoiceItems(labels, selected) { dialog, which ->
@@ -964,7 +946,7 @@ class KartPadActivity : SDLActivity() {
         content.addView(settingsLabel(if (controllers.isEmpty()) {
             "No extended controller is connected. You can review or reset the saved mapping; connect a controller to test it."
         } else {
-            "Connected: ${controllers.joinToString()}. A, B, X, Y, Z, R, and D-pad Up can be remapped. Analog triggers, sticks, D-pad Down/Left/Right, and Start stay direct."
+            "Connected: ${controllers.joinToString()}. Buttons, D-pad directions, and trigger presses can be remapped. Sticks and Start stay direct."
         }))
         lateinit var dialog: AlertDialog
         KartPadControllerMapping.gameButtonNames.forEachIndexed { game, gameName ->
@@ -978,6 +960,15 @@ class KartPadActivity : SDLActivity() {
                 }
             })
         }
+        content.addView(Button(this).apply {
+            text = "Use L1 for Items"
+            setOnClickListener {
+                KartPadControllerMapping.assign(this@KartPadActivity, 10, 4)
+                applyControllerMapping()
+                dialog.dismiss()
+                menuButton.post { showControllerMapping() }
+            }
+        })
         content.addView(Button(this).apply {
             text = "Reset to Default"
             contentDescription = "Reset controller mapping to default"
@@ -1007,15 +998,20 @@ class KartPadActivity : SDLActivity() {
             setPadding(dp(24), dp(4), dp(24), dp(8))
         }
         content.addView(settingsLabel(
-            "Choose the physical controller button. If it is already assigned, the two assignments swap.",
+            "Choose the physical controller button. Assignments swap by default. Enable the option below to keep both actions.",
         ))
+        val keepOtherAssignments = android.widget.CheckBox(this).apply {
+            text = "Keep other actions on this button"
+            contentDescription = "Allow one physical button to perform multiple game actions"
+        }
+        content.addView(keepOtherAssignments)
         lateinit var dialog: AlertDialog
         KartPadControllerMapping.physicalButtonNames.forEachIndexed { physical, name ->
             content.addView(Button(this).apply {
                 text = name
                 contentDescription = "Map game $gameName to physical $name"
                 setOnClickListener {
-                    KartPadControllerMapping.assign(this@KartPadActivity, game, physical)
+                    KartPadControllerMapping.assign(this@KartPadActivity, game, physical, keepOtherAssignments.isChecked)
                     applyControllerMapping()
                     dialog.dismiss()
                     menuButton.post { showControllerMapping() }
@@ -1113,14 +1109,15 @@ class KartPadActivity : SDLActivity() {
     }
 
     private fun showPlayerIdentity() {
-        val choices = arrayOf("Edit Mii Name…", "Rename or Delete Licenses…", "Mii Appearance…", "About Player Identity")
-        AlertDialog.Builder(this).setTitle("Player Identity")
+        val choices = arrayOf("Rename or Delete Licenses…", "Edit Mii Name…", "Mii Appearance…", "About Player Identity")
+        AlertDialog.Builder(this).setTitle(if (KartPadIdentityStorage.hasPending(filesDir))
+                "Player Identity · Change Scheduled" else "Player Identity")
             .setItems(choices) { dialog, which ->
                 dialog.dismiss()
                 menuButton.post {
                     when (which) {
-                        0 -> showIdentityRecords(true)
-                        1 -> showIdentityRecords(false)
+                        0 -> showIdentityRecords(false)
+                        1 -> showIdentityRecords(true)
                         2 -> showMiiManager()
                         else -> showParityBoundary("Player Identity",
                             "A Mii is your identity and appearance; a license holds progress for one game profile. Create a license with New inside the game, then choose your Mii. Renaming a Mii updates its linked licenses without changing friend codes or progress. Fully close KartPad from Recents and reopen to apply edits; returning to the menu and resuming does not apply them.")
@@ -1140,14 +1137,18 @@ class KartPadActivity : SDLActivity() {
             return
         }
         AlertDialog.Builder(this).setTitle(if (miis) "Edit Mii Name" else "Rename or Delete Licenses")
-            .setItems(records.map { "${KartPadIdentityStorage.titles[it.profile]} • Slot ${it.slot + 1} — ${it.name}" }.toTypedArray()) { dialog, index ->
+            .setItems(records.map { "${KartPadIdentityStorage.titles[it.profile]} • Slot ${it.slot + 1} — ${it.name}${if (it.missingLinkedMii) " (Mii missing)" else ""}" }.toTypedArray()) { dialog, index ->
                 dialog.dismiss()
                 val record = records[index]
                 menuButton.post {
                     if (miis) editIdentityName(record)
                     else AlertDialog.Builder(this).setTitle("${KartPadIdentityStorage.titles[record.profile]} • Slot ${record.slot + 1}")
-                        .setMessage("Rename updates this license and its matching Mii, keeping the account and progress. Other licenses may share that Mii. Delete removes only this license slot after another confirmation. Fully close KartPad from Recents and reopen to apply.")
-                        .setPositiveButton("Rename License…") { _, _ -> menuButton.post { editIdentityName(record) } }
+                        .setMessage(if (record.missingLinkedMii)
+                            "This license's Mii is missing. The game can show Player even when the saved name is correct. Choose a Mii to repair the link; your progress and friend code are kept."
+                            else "Rename the name shown in the game. Progress and friend code are kept. Changes apply after fully closing and reopening KartPad.")
+                        .setPositiveButton(if (record.missingLinkedMii) "Choose Mii…" else "Rename License…") { _, _ -> menuButton.post {
+                            if (record.missingLinkedMii) chooseLicenseMii(record) else editIdentityName(record)
+                        } }
                         .setNeutralButton("Delete License…") { _, _ -> menuButton.post {
                             AlertDialog.Builder(this).setTitle("Delete This License?")
                                 .setMessage("Delete ${record.name} from ${KartPadIdentityStorage.titles[record.profile]}, slot ${record.slot + 1}? Other licenses remain intact. A private backup is retained when this applies on next launch.")
@@ -1158,7 +1159,34 @@ class KartPadActivity : SDLActivity() {
             }.setNegativeButton("Back", null).show()
     }
 
+    private fun chooseLicenseMii(record: KartPadIdentityStorage.Record) {
+        val miis = runCatching { KartPadIdentityStorage.records(filesDir, true) }.getOrElse {
+            showParityBoundary("Miis Could Not Be Read", "No changes were made. Try importing a Mii appearance first.")
+            return
+        }
+        if (miis.isEmpty()) {
+            showParityBoundary("No Miis Available", "Import a Mii in Player Identity → Mii Appearance, then return here to link it to this license.")
+            return
+        }
+        AlertDialog.Builder(this).setTitle("Choose Mii for This License")
+            .setItems(miis.map { it.name }.toTypedArray()) { dialog, index ->
+                dialog.dismiss()
+                val mii = miis[index]
+                menuButton.post {
+                    AlertDialog.Builder(this).setTitle("Use ${mii.name}?")
+                        .setMessage("${KartPadIdentityStorage.titles[record.profile]}, slot ${record.slot + 1}, will use this Mii's name and appearance. Progress and friend code stay intact. Fully close KartPad from Recents and reopen to apply.")
+                        .setNegativeButton("Cancel", null)
+                        .setPositiveButton("Save for Next Launch") { _, _ ->
+                            runCatching { KartPadIdentityStorage.stageLicenseMii(filesDir, record, mii) }
+                                .onSuccess { menuButton.post { identityScheduled() } }
+                                .onFailure { error -> menuButton.post { showParityBoundary("Mii Link Not Scheduled", error.message ?: "No changes were made.") } }
+                        }.show()
+                }
+            }.setNegativeButton("Cancel", null).show()
+    }
+
     private fun editIdentityName(record: KartPadIdentityStorage.Record) {
+        if (record.missingLinkedMii) { chooseLicenseMii(record); return }
         val field = EditText(this).apply {
             isSingleLine = true
             setText(record.name)
@@ -1266,6 +1294,49 @@ class KartPadActivity : SDLActivity() {
         dialog.show()
     }
 
+    private fun showGhostManager() {
+        val records = runCatching { KartPadIdentityStorage.records(filesDir, false).filter { it.profile == "original" } }.getOrDefault(emptyList())
+        if (records.isEmpty()) { showParityBoundary("No Original Licenses", "Create a license in Original Mario Kart Wii first."); return }
+        AlertDialog.Builder(this).setTitle("Original Time Trial Ghosts")
+            .setItems(records.map { "License ${it.slot + 1}: ${it.name}" }.toTypedArray()) { _, index ->
+                ghostLicense = records[index].slot
+                showGhostActions()
+            }.setNegativeButton("Cancel", null).show()
+    }
+
+    private fun showGhostActions() {
+        AlertDialog.Builder(this).setTitle("Original Ghosts — License ${ghostLicense + 1}")
+            .setItems(arrayOf("Export a Ghost…", "Import Comparison Ghost…")) { _, action ->
+                if (action == 0) {
+                    val save = runCatching { KartPadSaveStorage.readActive(filesDir) }.getOrNull()
+                    if (save == null) { showParityBoundary("Ghost Export Failed", "No valid Original save is available."); return@setItems }
+                    val choices = mutableListOf<Pair<Int, Boolean>>()
+                    for (downloaded in listOf(false, true)) for (slot in 0 until 32) {
+                        val offset = 8 + ghostLicense * 0x8cc0 + if (downloaded) 8 else 4
+                        val bitfield = java.nio.ByteBuffer.wrap(save, offset, 4).int
+                        if ((bitfield and (1 shl slot)) != 0 && nativeGhostTransfer(save, null, ghostLicense, slot, downloaded) != null) choices.add(slot to downloaded)
+                    }
+                    if (choices.isEmpty()) { showParityBoundary("No Saved Ghosts", "Complete and save an Original time trial first."); return@setItems }
+                    AlertDialog.Builder(this).setTitle("Choose Ghost")
+                        .setItems(choices.map { "${GHOST_COURSES[it.first]} — ${if (it.second) "Downloaded" else "Personal Best"}" }.toTypedArray()) { _, choice ->
+                            ghostSlot = choices[choice].first; ghostDownloaded = choices[choice].second
+                            startActivityForResult(Intent(Intent.ACTION_CREATE_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE); type = "application/octet-stream"
+                                putExtra(Intent.EXTRA_TITLE, "KartPad-${GHOST_COURSES[ghostSlot]}.rkg")
+                            }, REQUEST_EXPORT_GHOST)
+                        }.setNegativeButton("Cancel", null).show()
+                } else {
+                    AlertDialog.Builder(this).setTitle("Import Original Comparison Ghost")
+                        .setMessage("The course is read from the .rkg file. This replaces its downloaded comparison ghost after restart, with a save backup. Personal-best records stay unchanged. Retro Rewind custom-track ghosts are not supported here.")
+                        .setPositiveButton("Choose .rkg") { _, _ ->
+                            startActivityForResult(Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                                addCategory(Intent.CATEGORY_OPENABLE); type = "*/*"
+                            }, REQUEST_IMPORT_GHOST)
+                        }.setNegativeButton("Cancel", null).show()
+                }
+            }.setNegativeButton("Done", null).show()
+    }
+
     private fun showSaveManager() {
         kartPadOverlay.clearTouchInput()
         AlertDialog.Builder(this)
@@ -1293,6 +1364,19 @@ class KartPadActivity : SDLActivity() {
             else -> "No valid $title save is available for export. You can restore a compatible backup here."
         }))
         content.addView(settingsLabel("Raw save actions only affect $title. Choose Separate Save only if that option is enabled in Retro Rewind. Saves do not include Miis or console identity."))
+        if (profile == "original" && KartPadSaveStorage.hasPendingGhost(filesDir)) content.addView(Button(this).apply {
+            text = "Cancel Pending Ghost Import"
+            setOnClickListener {
+                runCatching { KartPadSaveStorage.cancelPendingGhost(filesDir) }
+                    .onSuccess { dialog.dismiss(); showSaveManager(profile) }
+                    .onFailure { showParityBoundary("Cancel Failed", "The pending ghost could not be cancelled.") }
+            }
+        })
+        if (profile == "original") content.addView(Button(this).apply {
+            text = "Time Trial Ghosts (.rkg)…"
+            isEnabled = validSave && !pending
+            setOnClickListener { dialog.dismiss(); showGhostManager() }
+        })
         content.addView(Button(this).apply {
             text = "Export Save Backup…"
             contentDescription = "Export $title save backup"
@@ -1418,6 +1502,37 @@ class KartPadActivity : SDLActivity() {
                 .setPositiveButton("Restart to Selector") { _, _ -> restartToGameSelector() }
                 .setNegativeButton("Later", null)
                 .show()
+            return
+        }
+        if (requestCode == REQUEST_IMPORT_GHOST || requestCode == REQUEST_EXPORT_GHOST) {
+            if (resultCode != RESULT_OK) return
+            val uri = data?.data ?: return
+            if (ghostLicense !in 0..3) { showParityBoundary("Choose License Again", "The ghost selection could not be recovered. No save was changed."); return }
+            val result = runCatching {
+                val save = KartPadSaveStorage.readActive(filesDir)
+                if (requestCode == REQUEST_IMPORT_GHOST) {
+                    val ghost = contentResolver.openInputStream(uri)?.use { it.readBytesBounded(0x2800) }
+                        ?: error("The ghost could not be opened.")
+                    val updated = nativeGhostTransfer(save, ghost, ghostLicense, 0, false)
+                        ?: error("The ghost failed format, course, input or checksum validation.")
+                    val course = (java.nio.ByteBuffer.wrap(ghost).getInt(4) ushr 2) and 63
+                    val slot = GHOST_COURSE_IDS.indexOf(course)
+                    KartPadSaveStorage.writePendingGhost(filesDir, save, updated, ghostLicense, slot)
+                } else {
+                    val ghost = nativeGhostTransfer(save, null, ghostLicense, ghostSlot, ghostDownloaded)
+                        ?: error("The selected ghost is unavailable or invalid.")
+                    contentResolver.openOutputStream(uri, "wt")?.use { it.write(ghost) }
+                        ?: error("The destination could not be opened.")
+                }
+            }
+            ghostLicense = -1; ghostSlot = -1
+            result.onFailure { showParityBoundary("Ghost Transfer Failed", it.message ?: "The transfer failed.") }
+                .onSuccess {
+                    if (requestCode == REQUEST_IMPORT_GHOST) AlertDialog.Builder(this)
+                        .setTitle("Ghost Import Scheduled").setMessage("Restart now to apply the comparison ghost with a save backup. Your personal-best records are unchanged.")
+                        .setPositiveButton("Restart Now") { _, _ -> restartToGameSelector() }.setNegativeButton("Later", null).show()
+                    else showParityBoundary("Ghost Exported", "The .rkg file was saved to your chosen location.")
+                }
             return
         }
         val saveProfile = if (requestCode == REQUEST_EXPORT_SAVE || requestCode == REQUEST_IMPORT_SAVE || requestCode == REQUEST_IMPORT_RATINGS) {
@@ -1583,8 +1698,11 @@ class KartPadActivity : SDLActivity() {
         val performance = buildString {
             appendLine("Configured render resolution: ${KartPadTouchSettings.resolutionScale(this@KartPadActivity)}x")
             appendLine("Configured aspect: $aspect")
+            appendLine("Active character graphics test: ${KartPadCharacterGraphicsTest.active.label}")
             append("Active renderer validation: ${if (KartPadRendererDiagnostics.active) "On" else "Off"}")
         }
+        val context = KartPadReportContext.snapshot(this, runtimeProfile, KartPadRendererDiagnostics.active)
+        val provenance = context.optJSONObject("build_provenance")
         val technical = buildString {
             appendLine("Version: ${BuildConfig.VERSION_NAME} (${BuildConfig.VERSION_CODE})")
             appendLine("Android: ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
@@ -1592,8 +1710,11 @@ class KartPadActivity : SDLActivity() {
             appendLine("Runtime profile: $runtimeProfile")
             appendLine("Retro Rewind release: ${RetroRewindRelease.VERSION}")
             appendLine(performance)
-            appendLine("Technical context:")
-            appendLine(KartPadReportContext.snapshot(this@KartPadActivity, runtimeProfile, KartPadRendererDiagnostics.active).toString(2))
+            appendLine("Installed Retro version: ${context.opt("retro_installed_version")}")
+            appendLine("Retro version state: ${context.opt("retro_version_state")}")
+            appendLine("KartPad source revision: ${provenance?.optString("source_revision") ?: "unknown"}")
+            appendLine("Source dirty: ${provenance?.opt("source_dirty") ?: "unknown"}")
+            append("Source revision does not identify upstream dependencies or prove binary identity.")
         }
         startActivity(Intent(this, KartPadProblemReportActivity::class.java).apply {
             putExtra(KartPadProblemReportActivity.TECHNICAL_CONTEXT, technical)
@@ -1974,13 +2095,17 @@ class KartPadActivity : SDLActivity() {
             sources and InputDevice.SOURCE_JOYSTICK == InputDevice.SOURCE_JOYSTICK
     }
 
-    private fun configureRuntimeProfile() {
+    private fun requestedRuntimeProfile(): String {
         val debugRequested = if (BuildConfig.DEBUG) {
             intent.getStringExtra(DEBUG_EXTRA_RUNTIME_PROFILE)
         } else {
             null
         }
-        val requested = debugRequested ?: intent.getStringExtra(EXTRA_RUNTIME_PROFILE) ?: "base"
+        return debugRequested ?: intent.getStringExtra(EXTRA_RUNTIME_PROFILE) ?: "base"
+    }
+
+    private fun configureRuntimeProfile() {
+        val requested = requestedRuntimeProfile()
         runtimeProfile = requested
 
         when (requested) {
@@ -2066,6 +2191,13 @@ class KartPadActivity : SDLActivity() {
 
     private fun configureDebugStateTrace() {
         if (!BuildConfig.DEBUG) return
+
+        // Private hardware benchmark only; never enabled by release builds or UI settings.
+        if (File(filesDir, "KartPad/Diagnostics/FullRaceCpu.enable").isFile) {
+            Os.setenv("KARTPAD_FULL_RACE_CPU", "1", true)
+        } else {
+            Os.unsetenv("KARTPAD_FULL_RACE_CPU")
+        }
 
         val marker = File(filesDir, DEBUG_STATE_TRACE_MARKER_RELATIVE_PATH)
         if (marker.isFile) {
@@ -2166,6 +2298,7 @@ class KartPadActivity : SDLActivity() {
 
     private external fun nativeDebugDisplaySettings(): String
 
+    private external fun nativeGhostTransfer(save: ByteArray, ghost: ByteArray?, license: Int, slot: Int, downloaded: Boolean): ByteArray?
     private external fun nativeApplyControllerMapping(mapping: IntArray)
     private external fun nativeControllerDevices(): Array<String>
     private external fun nativeAssignControllerPlayer(instance: Long, player: Int): Boolean
@@ -2180,6 +2313,10 @@ class KartPadActivity : SDLActivity() {
         private const val SELECTOR_RESTART_DELAY_MS = 250L
         private const val REQUEST_IMPORT_MII = 4_301
         private const val REQUEST_MANAGE_GAME_DATA = 4_302
+        private const val REQUEST_EXPORT_GHOST = 4_320
+        private const val REQUEST_IMPORT_GHOST = 4_321
+        private val GHOST_COURSE_IDS = intArrayOf(8,1,2,4,0,5,6,7,9,15,3,11,10,14,12,13,31,25,24,30,27,26,29,28,16,17,18,19,20,21,22,23)
+        private val GHOST_COURSES = arrayOf("Luigi Circuit", "Moo Moo Meadows", "Mushroom Gorge", "Toad's Factory", "Mario Circuit", "Coconut Mall", "DK Summit", "Wario's Gold Mine", "Daisy Circuit", "Koopa Cape", "Grumble Volcano", "Maple Treeway", "Moonview Highway", "Dry Dry Ruins", "Bowser's Castle", "Rainbow Road", "GBA Shy Guy Beach", "SNES Ghost Valley 2", "SNES Mario Circuit 3", "GBA Bowser Castle 3", "N64 Sherbet Land", "N64 Mario Raceway", "N64 DK's Jungle Parkway", "N64 Bowser's Castle", "GCN Peach Beach", "GCN Mario Circuit", "GCN Waluigi Stadium", "GCN DK Mountain", "DS Yoshi Falls", "DS Desert Hills", "DS Peach Gardens", "DS Delfino Square")
         private const val REQUEST_EXPORT_SAVE = 4_303
         private const val REQUEST_IMPORT_SAVE = 4_304
         private const val REQUEST_IMPORT_RATINGS = 4_305

@@ -50,10 +50,10 @@
         196
       ],
       "state": "awaiting-reporter",
-      "next_action": "Build39 still failed the matching iPhone17 Pro Max/iOS27 retest. Issue196 was reopened during current review after an unsupported completed closure. Await the already requested new per-mode crash analytics or in-app Share Report; reporter said current analytics were absent. Do not rebuild the same IPA or repeat old simulator tests as a fix.",
+      "next_action": "The new #196 microstackshot matches build39 and symbolizes through func_8000A3F8 to FatalMissingGuestTarget. Obtain only the missing target address/Caller LR from an existing fatal text log, as requested. Disk-write Action none is not a termination cause. Build42 is a reporting aid, not a confirmed crash correction; source ancestry does not prove regenerated translation. Independently, anonymous guest RAM is merged and local build43 is audited; it removes temporary-file backing but does not fix the missing target. Signed-device launch/race/relaunch and complete source delivery remain before publishing that candidate.",
       "dependency": {
         "owner": "issue196 reporter",
-        "needs": "Already requested new crash report or recent in-app log, or confirmation that the menu cannot be reached. Preserve installation and data."
+        "needs": "Existing fatal text record containing missing_target/not translated and Caller LR; no repeated crashes or generic analytics request."
       },
       "acceptance": "The same corrected candidate preserves existing data and passes both Original and Retro launch, race and relaunch on the matching iPhone 17 Pro Max/iOS 27 target. Package/reporter/release acceptance remain separate.",
       "checkpoint": "docs/artifacts/2026-09-13/platform-candidate-handoff.md",
@@ -66,7 +66,7 @@
         206
       ],
       "state": "awaiting-reporter",
-      "next_action": "Await #206's already requested reporter confirmation that Wi-Fi stays connected beyond the prior four/five-race window. The mobile-data-versus-Wi-Fi comparison was acknowledged at https://github.com/chrissotraidis/kartpad/issues/206#issuecomment-5642834780; it narrows a network-dependent subcase without proving a carrier/NAT or shared runtime cause. Do not repeat the acknowledgement, known build/device questions or generic log request. Issue #123 is closed upstream and retained only as historical evidence; its closure is not a technical online acceptance claim.",
+      "next_action": "#277 is closed as duplicate of #206: same reporter/SM-S921W, now code80, quick connection but mobile-data matchmaking fails while Wi-Fi works. Keep its new build evidence in #206. Do not claim code90 fixes networking or repeat known device/connection questions.",
       "dependency": {
         "owner": "#206 reporter",
         "needs": "The already requested Wi-Fi endurance confirmation beyond the prior four/five-race window; no reinstall, data clear or generic log request"
@@ -87,14 +87,14 @@
         193,
         211
       ],
-      "state": "ready-local",
-      "next_action": "Recover the retained actual-draw/PNMTX experiment into a clean current-code83 worktree, preserving draw identity and disabling diagnostic draw merging as already reviewed. Compile generated vertex shaders and prepare a compatible-signer dynamic/literal/dynamic comparison for an affected device. Passing synthetic probes are not gameplay acceptance.",
+      "state": "awaiting-reporter",
+      "next_action": "Code91 supplies the reviewed actual-shader original/literal/original comparison for the two #193 pipelines, with durable restart-only selection, equal merge guard and bounded pipeline logs. Code91 is published; use the existing #193 three-phase handoff and await same-scene results. Keep code85 negative results; code90 was not a graphics fix. Do not repeat generic settings sweeps or claim a fix before matching target logs and affected-device comparison.",
       "dependency": {
         "owner": "renderer worker and affected-device tester",
-        "needs": "Current immutable diagnostic and concrete delivery; signer location is known. Affected S24/Adreno or 840 test of the actual selected failing draw still required."
+        "needs": "Code91 same-character original/compatibility/original comparison with matching KartPadPNMTX draw_binding evidence on an affected device. Host shader validation and package audit are complete."
       },
       "acceptance": "A correlated actual bad draw discriminates the hypothesis; a subsequent narrow correction removes the reported corruption on the affected GPU with a matched baseline and no relevant regression.",
-      "checkpoint": "docs/MAINTENANCE-BOARD.md",
+      "checkpoint": "docs/artifacts/2026-09-14/issue193-targeted-pnmtx-candidate.md",
       "priority_reason": "Multiple independent reports show real-game corruption; complete a controlled affected-draw experiment."
     },
     {
@@ -156,10 +156,10 @@
         193,
         211
       ],
-      "state": "ready-local",
-      "next_action": "Inventory the retained diagnostic source, APK and symbols and prove their immutable identities before reuse. Compare prepared source to the intended dynamic/literal/dynamic experiment; use the verified Community Release signing capability only through the authorized operator. Prepare the exact compatible-candidate build/audit recipe and redacted test card. Rebuild only if inspection establishes it is necessary and host build ownership is available. Do not assume an existing scratch artifact is valid.",
+      "state": "accepted",
+      "next_action": "Local preparation completed: reviewed native/UI change, exact rebuilt library, Community Release APK91, corresponding source, notices, audits and three-phase test card. Affected-device graphics acceptance remains on adreno-geometry; do not rebuild the same candidate without new evidence.",
       "acceptance": "A reviewed source/artifact inventory, compatible signing plan, exact build/audit recipe and three-phase test card are ready. If a candidate is produced, retain its source/hash/symbol identity. Then park delivery and affected-GPU execution on adreno-geometry; no graphics fix or hardware acceptance is implied.",
-      "checkpoint": "docs/artifacts/2026-09-13/maintenance-ready-actions.md",
+      "checkpoint": "docs/releases/v0.4.21-android-matrix.1.md",
       "priority_reason": "Local identity and delivery preparation is executable before an affected reporter or private transfer channel is available."
     },
     {

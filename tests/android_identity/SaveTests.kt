@@ -95,6 +95,24 @@ fun testSaveProfiles(fixtures: File) {
         check(!KartPadSaveStorage.hasPending(root))
         check(KartPadSaveStorage.readActive(root, "retro_rewind").contentEquals(save(70)))
         check(KartPadSaveStorage.readActive(root, "retro_rewind_separate").contentEquals(save(71)))
+        // A pending ghost patches only its slot against the latest progress.
+        seed("original", save(80))
+        val ghostBefore = KartPadSaveStorage.readActive(root)
+        val ghostAfter = ghostBefore.copyOf().apply { this[0x78000] = 42 }
+        KartPadSaveStorage.writePendingGhost(root, ghostBefore, ghostAfter, 0, 0)
+        check(runCatching { KartPadSaveStorage.writePending(root, save(81)) }.isFailure)
+        seed("original", save(82))
+        check(KartPadSaveStorage.applyPending(root) == null)
+        val ghostApplied = KartPadSaveStorage.readActive(root)
+        check(ghostApplied[0x100] == 82.toByte() && ghostApplied[0x78000] == 42.toByte())
+        check(backups().any { it.readBytes().contentEquals(save(82)) })
+        KartPadSaveStorage.writePendingGhost(root, ghostApplied, ghostApplied, 0, 0)
+        val ghostRequest = File(root, "KartPad/PendingGhost.bin")
+        ghostRequest.writeBytes(ghostRequest.readBytes().apply { this[30] = (this[30].toInt() xor 1).toByte() })
+        check(KartPadSaveStorage.applyPending(root) != null)
+        check(KartPadSaveStorage.readActive(root).contentEquals(ghostApplied))
+        KartPadSaveStorage.cancelPendingGhost(root)
+        check(!KartPadSaveStorage.hasPendingGhost(root))
         println("Android save profiles passed: all three targets, isolated export/restore, backups, legacy pending, invalid inputs, identity conflicts, interrupted publication, first import")
     } finally {
         AtomicFile.failSuffix = null

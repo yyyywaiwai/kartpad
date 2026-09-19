@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+from runtime_sources import runtime_source, assert_runtime_staging
 import unittest
 from pathlib import Path
 
@@ -49,9 +50,7 @@ class AndroidTlsContractTests(unittest.TestCase):
         source = (
             REPO / "runtime/src/hle/net/android_mbedtls.cpp"
         ).read_text()
-        patch = (
-            REPO / "patches/wiicompiled-android-network-tls.patch"
-        ).read_text()
+        patch = runtime_source('android', 'runtime/src/hle/net/network_ssl.cpp')
         prepare = (REPO / "scripts/prepare-android-game-runtime.sh").read_text()
         cmake = (REPO / "android/app/src/main/cpp/CMakeLists.txt").read_text()
 
@@ -67,17 +66,15 @@ class AndroidTlsContractTests(unittest.TestCase):
         self.assertIn("SetRootCaDer", patch)
         self.assertIn("SetBuiltinRootCaFile", patch)
         self.assertIn("AttachSocket", patch)
-        self.assertIn("wiicompiled-android-network-tls.patch", prepare)
+        assert_runtime_staging(self, 'android')
         self.assertIn('runtime/src/hle/net/android_mbedtls.cpp"', cmake)
         self.assertIn("MINIZIP::minizip mbedtls", cmake)
 
     def test_guest_ioctlv_fixture_exercises_the_product_handler(self) -> None:
-        fixture_patch = (
-            REPO / "patches/wiicompiled-android-tls-ioctlv-fixture.patch"
-        ).read_text()
+        fixture_patch = runtime_source('android', 'runtime/src/hle/net/network.h', 'runtime/src/main.cpp', 'runtime/src/hle/net/network_ssl.cpp')
         prepare = (REPO / "scripts/prepare-android-game-runtime.sh").read_text()
 
-        self.assertIn("wiicompiled-android-tls-ioctlv-fixture.patch", prepare)
+        assert_runtime_staging(self, 'android')
         self.assertIn("RunAndroidTlsIoctlvFixture()", fixture_patch)
         self.assertIn("std::memcpy(saved.data(), scratch, saved.size())", fixture_patch)
         self.assertIn("std::memcpy(scratch, saved.data(), saved.size())", fixture_patch)
@@ -126,22 +123,21 @@ class AndroidTlsContractTests(unittest.TestCase):
         self.assertIn(".KartPadLaunchActivity", runner)
 
     def test_guest_dns_ioctl_fixture_uses_product_deferred_path(self) -> None:
-        fixture_patch = (
-            REPO / "patches/wiicompiled-android-dns-ioctl-fixture.patch"
-        ).read_text()
+        fixture_patch = runtime_source('android', 'runtime/src/hle/net/network.h', 'runtime/src/main.cpp', 'runtime/src/hle/net/network_deferred.cpp')
         prepare = (REPO / "scripts/prepare-android-game-runtime.sh").read_text()
         runner = (
             REPO / "scripts/test-android-dns-ioctl-emulator.sh"
         ).read_text()
 
-        self.assertIn("wiicompiled-android-dns-ioctl-fixture.patch", prepare)
+        assert_runtime_staging(self, 'android')
         self.assertIn("StartScalarDeferredIoctl", fixture_patch)
         self.assertIn("IOCTL_SO_GETHOSTBYNAME", fixture_patch)
         self.assertIn("ApplyDeferredDnsCompletion", fixture_patch)
         self.assertIn("AndroidFixtureRoute", fixture_patch)
         self.assertIn("TakeAndroidFixtureCompletion", fixture_patch)
         self.assertIn("CancelAndroidFixtureCompletion", fixture_patch)
-        self.assertNotIn("getaddrinfo(", fixture_patch)
+        fixture_body = runtime_source("android", "runtime/src/hle/net/network_deferred.cpp").split("bool RunAndroidDnsIoctlFixture() {", 1)[1]
+        self.assertNotIn("getaddrinfo(", fixture_body)
         self.assertIn("request_marshaled=yes", fixture_patch)
         self.assertIn("worker_resolved=yes", fixture_patch)
         self.assertIn("guest_hostent=yes", fixture_patch)

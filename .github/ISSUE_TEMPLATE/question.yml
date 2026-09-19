@@ -3,7 +3,7 @@ description: Ask how something works or describe a missing capability.
 body:
   - type: markdown
     attributes:
-      value: Please check the [support guide](https://github.com/chrissotraidis/kartpad/blob/main/docs/SUPPORT.md) and existing issues first. Logs are not needed for a feature request unless something is also failing.
+      value: Please check [where to report and follow up](https://github.com/chrissotraidis/kartpad/blob/main/docs/REPORTING.md), the [support guide](https://github.com/chrissotraidis/kartpad/blob/main/docs/SUPPORT.md) and existing issues first. Logs are not needed for a feature request unless something is also failing.
   - type: textarea
     id: question
     attributes:

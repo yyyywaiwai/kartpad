@@ -34,6 +34,32 @@ def issue(number, title, body="", comments=None):
 
 
 class MaintenanceLoopTests(unittest.TestCase):
+    def test_migrated_scopes_follow_source_edits(self):
+        paths = {
+            123: "vendor/runtimes/android/runtime/src/hle/net/network_socket.cpp",
+            200: "vendor/runtimes/android/runtime/src/hle/net/network_ssl.cpp",
+            193: "vendor/runtimes/android/aurora-main/lib/gx/command_processor.cpp",
+        }
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            with patch.object(MAINTENANCE_LOOP, "REPO", root), patch.object(MAINTENANCE_LOOP, "command", return_value="same-head"):
+                for number, relative in paths.items():
+                    before = MAINTENANCE_LOOP.test_fingerprint(number)
+                    source = root / relative
+                    source.parent.mkdir(parents=True, exist_ok=True)
+                    source.write_text("first source edit")
+                    first = MAINTENANCE_LOOP.test_fingerprint(number)
+                    source.write_text("second source edit")
+                    second = MAINTENANCE_LOOP.test_fingerprint(number)
+                    self.assertEqual(len({before, first, second}), 3)
+
+    def test_maintenance_wide_reuses_recursive_source_fingerprint(self):
+        with patch.object(MAINTENANCE_LOOP, "command", return_value="same-head"), patch.object(MAINTENANCE_LOOP, "source_fingerprint", side_effect=["first-dirty-content", "second-dirty-content"]) as fingerprint:
+            first = MAINTENANCE_LOOP.test_fingerprint()
+            second = MAINTENANCE_LOOP.test_fingerprint()
+        self.assertNotEqual(first, second)
+        self.assertEqual(fingerprint.call_args_list, [unittest.mock.call(MAINTENANCE_LOOP.REPO)] * 2)
+
     def test_intake_reads_more_than_100_issues_and_comment_pages(self):
         def page(nodes, more=False, cursor=None):
             return {"nodes": nodes, "pageInfo": {"hasNextPage": more, "endCursor": cursor}}
