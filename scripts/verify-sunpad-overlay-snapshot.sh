@@ -22,14 +22,14 @@ files=(
 
 for upstream in "${files[@]}"; do
   name="$(basename "${upstream}")"
+  # Pin KartPad adaptations without requiring Git history in source archives.
   case "${name}" in
-    SunPadDiagnostics.mm|SunPadControllerMapping.h|SunPadControllerMapping.mm)
-      # KartPad's reviewed lifecycle diagnostics and expanded controller mapping.
-      git -C "${repo_root}" show "221caaf9b9fa6d5e0a97ddb417d5523f26492b25:apple/third_party/sunpad/${name}" | \
-        cmp - "${snapshot}/${name}"
-      ;;
-    *) cmp "${reference}/${upstream}" "${snapshot}/${name}" ;;
+    SunPadDiagnostics.mm) expected_hash=da46cfc2d15e571c6e6b01960859cc63e07023d703d7785e2f872588c5016b4f ;;
+    SunPadControllerMapping.h) expected_hash=71054371f6a5a613e6ba54bb68f5505da93fe1038b10a0b0f9015e2bff17e5a3 ;;
+    SunPadControllerMapping.mm) expected_hash=1fa1a0405c4af28f1e5b0dd581802664cb8837198cd7093c9e55d99497f93dd4 ;;
+    *) cmp "${reference}/${upstream}" "${snapshot}/${name}"; continue ;;
   esac
+  printf '%s  %s\n' "${expected_hash}" "${snapshot}/${name}" | shasum -a 256 -c - >/dev/null
 done
 
 expected_commit="e43f0ea6b797e5110787171957c9dc3c6213269c"
