@@ -27,6 +27,14 @@ explicitly changes this distribution decision. Personal Apple test builds stay
 private. Keep candidate releases as drafts until their acceptance gates and the
 owner's final publication instruction are satisfied.
 
+The owner explicitly requested the fork's Japanese `v0.8.0-japan.1` release
+use its previous unsigned iOS IPA and ad-hoc-signed Mac DMG distribution. This
+is a Japan-only exception, not a change to the upstream PAL delivery set. The
+IPA/DMG contain no game data, saves, keys or personal signing material. Audit
+both packages and review any translated-code scanner findings individually;
+the PAL Android race gate applies only when shipping an Android APK. Record
+the Japanese iPad and Mac acceptance separately.
+
 The game pack must match the app's pack fingerprint. Never publish disc data, extracted game files, saves, console keys or signing material. This exception is for KartPad only; other Pad projects still publish through PadMint.
 
-Before any public release, every artifact must pass the repo's own APK/IPA audits, and `python3 -m padmint audit <artifact>` may flag the documented translated-code findings only in the ready-to-play APK (address-named functions and the embedded data-section marker; see RELEASE-CHECKLIST). Source-scanner hits must be traced to the exact tracked translator source or synthetic tests and recorded; never suppress findings to obtain a pass. Any key, disc or private-path finding is a stop. The Android build must reach a race on an emulator or device, both as an update over the previous release and as a fresh install with a first-launch game-data import. A failure is a stop, not a note.
+Before any public release, every artifact must pass the repo's own APK/IPA audits. `python3 -m padmint audit <artifact>` may flag the documented translated-code findings in the ready-to-play APK or this Japan-only IPA/DMG (address-named functions and the embedded data-section marker; see RELEASE-CHECKLIST). Source-scanner hits must be traced to the exact tracked translator source or synthetic tests and recorded; never suppress findings to obtain a pass. Any key, disc or private-path finding is a stop. The Android build must reach a race on an emulator or device, both as an update over the previous release and as a fresh install with a first-launch game-data import. A failure is a stop, not a note.

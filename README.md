@@ -410,11 +410,12 @@ saves, account identifiers or signing material. Choose the relevant tracker in t
 | Game ID | Region | Revision | Accepted input |
 |---|---|---|---|
 | `RMCP01` | PAL / Europe | 0 | Public community builds |
-| `RMCJ01` | Japan | 0 | Separate private development builds only |
+| `RMCJ01` | Japan | 0 | [Fork release: unsigned iOS IPA and Apple Silicon Mac DMG](https://github.com/yyyywaiwai/kartpad/releases/tag/v0.8.0-japan.1) |
 
 Japanese work uses `scripts/build-rmcj01-macos.sh`, `scripts/translate-rmcj01-retro.sh`,
 and `scripts/build-rmcj01-ios.sh`. These are region-specific builds, not a universal
-binary. See [RMCJ01 port status](docs/RMCJ01.md).
+binary. The Japanese release is not a PadMint input and still needs your own
+matching Japanese game data. See [RMCJ01 port status](docs/RMCJ01.md).
 ## Community and support
 
 [Join the Discord](https://discord.gg/xwHfUD2bxW) for help and news. It is one

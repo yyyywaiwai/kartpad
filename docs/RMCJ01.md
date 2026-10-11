@@ -2,7 +2,10 @@
 
 ## Current boundary
 
-**A separate Japanese ARM64 macOS development runtime now builds and boots.**
+**A separate Japanese ARM64 macOS runtime builds and boots.** The fork's
+`v0.8.0-japan.1` delivery uses the earlier unsigned iOS IPA and ad-hoc Mac DMG
+format, not the PAL-only PadMint recipe; release-specific acceptance and limits
+are in [the Japan release notes](releases/v0.8.0-japan.1.md).
 The supplied DATA partition passed Japanese menu, license creation,
 save/reload, two completed three-lap time trials, restart/results, and host
 audio checks. The final app also completed a retail staff-ghost replay at the
