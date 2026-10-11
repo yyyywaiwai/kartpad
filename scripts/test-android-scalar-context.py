@@ -12,6 +12,7 @@ import shutil
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--baseline-header', type=Path, required=True)
+    parser.add_argument('--baseline-semantics', type=Path, help='Optional old portable semantics header for an isolated baseline')
     parser.add_argument('--runtime', type=Path, default=Path('vendor/runtimes/android'))
     parser.add_argument('--output', type=Path, default=Path('build/scalar-context'))
     parser.add_argument('--serial', help='Explicit emulator or authorized physical device; omitted builds only')
@@ -22,6 +23,11 @@ def main():
     out.mkdir(parents=True, exist_ok=True)
     baseline = out / 'baseline-ppc_runtime.h'
     baseline.write_bytes(args.baseline_header.read_bytes())
+    baseline_include = out / 'baseline-include'
+    if args.baseline_semantics:
+        header = baseline_include / 'kartpad/semantics/ppc_semantics.h'
+        header.parent.mkdir(parents=True, exist_ok=True)
+        header.write_bytes(args.baseline_semantics.read_bytes())
     # Preparation downloads this pinned compatibility header. Keep test-only
     # dependencies in the output tree, not in the maintained runtime checkout.
     sse_hash = '44b9fa3dec3a52ea473246e04b9f692a4e5b0ed654299eef7fe7ec3049e223e0'
@@ -42,7 +48,13 @@ def main():
     names = re.findall(r'inline (?:bool|uint32_t|double) (Ppc\w+)\(', baseline.read_text())
     for variant, header in [('baseline', baseline), ('candidate', runtime / 'runtime/include/ppc_runtime.h')]:
         definitions = [f'-D{name}={variant}_{name}' for name in sorted(set(names))]
-        subprocess.run(flags + definitions + [f'-DTEST_ENTRY={variant}',
+        # The evaluator bodies also differ when comparing portable semantics.
+        # Renaming only adapters allows weak evaluator symbols to coalesce.
+        definitions.append(f'-Dsemantics={variant}_semantics')
+        variant_flags = flags
+        if variant == 'baseline' and args.baseline_semantics:
+            variant_flags = flags[:1] + ['-I' + str(baseline_include)] + flags[1:]
+        subprocess.run(variant_flags + definitions + [f'-DTEST_ENTRY={variant}',
                        f'-DTEST_RUNTIME_HEADER="{header}"', '-c',
                        str(repo / 'runtime/tests/android_scalar_context_case.cpp'),
                        '-o', str(out / (variant + '.o'))], check=True)

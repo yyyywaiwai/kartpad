@@ -1,0 +1,40 @@
+{
+  "release": "v0.5.1-experimental.1",
+  "status": "audited_for_authorized_experimental_publication",
+  "compiled_source": "67c7e2f942c1226af149e6a9cc571f647528e25e",
+  "apple_version": "0.5.1",
+  "apple_build": "60",
+  "ios_diagnostic_candidate": false,
+  "ios_dsym_uuid": "4BD45C7C-EAA0-3D19-83DC-2E674DF87015",
+  "android_unchanged": "0.5.0/code135 does not force the iOS diagnostic mode",
+  "validation": [
+    "iOS Release incremental compile",
+    "Mac Release main entry point recompiled and linked",
+    "iOS full app audit",
+    "Mac full app audit and extracted archive signature verification",
+    "four diagnostic contracts passed",
+    "four package diagnostic-mode tests passed",
+    "source manifest and matching embedded app source checked",
+    "archive bytes and modes read back"
+  ],
+  "physical_performance_acceptance": false,
+  "crash_cause": "unclassified; matching reporter excerpt pending",
+  "artifacts": {
+    "KartPad-v0.5.1-experimental.1-ios-unsigned.ipa": {
+      "bytes": 41985168,
+      "sha256": "1474809c8e14447c159c30902aaf66b022db89d28a3181d69acfac3467508f58"
+    },
+    "KartPad-v0.5.1-experimental.1-macos-arm64.zip": {
+      "bytes": 41877702,
+      "sha256": "ce76ac8262cddbb28dfbf7334dde841b224654be6d5a425c61e6b06369ab7cf4"
+    },
+    "KartPad-v0.5.1-experimental.1-notices.zip": {
+      "bytes": 235412,
+      "sha256": "4cca44ced287107f545378419c17c18614a2a142cd0ec89e9c1630c68a43362f"
+    },
+    "KartPad-v0.5.1-experimental.1-source.tar.gz": {
+      "bytes": 361531088,
+      "sha256": "3a7f14e76d289efb398c1f42b3817e9eacd828cceef4d40d185663743c916360"
+    }
+  }
+}

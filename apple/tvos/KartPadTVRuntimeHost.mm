@@ -19,6 +19,8 @@ namespace {
 NSString *const kKartPadTVProfileKey = @"KartPadTVRuntimeProfile";
 NSString *const kKartPadSupportedDOLHash =
     @"80d18895b39c63bd80f457398bfcbb91b7d16ac116a41a88967e954080155b05";
+NSString *const kKartPadSupportedRELHash =
+    @"16d9d146112541fefea701ecb5bc1a496f9d50e4a752fbb5b6778e7c6399f67d";
 
 BOOL gKartPadTVRuntimeActive = NO;
 BOOL gKartPadTVRetroRewindSelected = NO;
@@ -96,7 +98,12 @@ NSString *KartPadTVValidateGameData(NSError **error) {
   NSString *hash = KartPadTVSHA256(
       [root stringByAppendingPathComponent:@"sys/main.dol"], error);
   if (![hash isEqualToString:kKartPadSupportedDOLHash]) {
-    return @"sys/main.dol does not match the supported RMCP01 revision 0.";
+    return @"This game data is modified (for example Wiimmfi-patched or pre-patched). Please use a clean RMCP01 dump.";
+  }
+  NSString *relHash = KartPadTVSHA256(
+      [root stringByAppendingPathComponent:@"files/rel/StaticR.rel"], error);
+  if (![relHash isEqualToString:kKartPadSupportedRELHash]) {
+    return @"This game data is modified (for example Wiimmfi-patched or pre-patched). Please use a clean RMCP01 dump.";
   }
   return nil;
 }

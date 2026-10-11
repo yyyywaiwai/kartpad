@@ -1,0 +1,10 @@
+{
+  "file": "KartPad-0.5.1-upstream.2-code172-private.apk",
+  "sha256": "d6759335389f9626763408ccc71e94f57b03edefea415551b64c9ae32e4cdc51",
+  "bytes": 173503155,
+  "runtimeCommit": "9d2c25d045f40331024613753ec34e21be39a9d6",
+  "builtBeforeRuntimeCommit": true,
+  "buildId": "Build ID: 18cd13aa69335562036bc7da24af0c01031918a2",
+  "status": "installed; Original title screen observed on attached Android",
+  "supersedesAndroidCode": 171
+}

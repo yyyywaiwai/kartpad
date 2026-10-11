@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 import os
+import platform
 import shutil
 import subprocess
 import urllib.request
@@ -13,7 +14,25 @@ from .pipeline import BuildError, run
 from .profiles import Profile
 
 
-REQUIRED_COMMANDS = ("cmake", "ninja", "git", "rg", "python3", "dotnet", "nodtool", "xcrun")
+REQUIRED_COMMANDS = {
+    "ios": ("cmake", "ninja", "git", "rg", "python3", "dotnet", "nodtool", "xcrun"),
+    # PadMint's Mac app recipe: PadMint supplies dotnet, cmake, ninja and nodtool;
+    # Xcode supplies git, python3 and xcrun. No Homebrew tools are required.
+    "macos": ("cmake", "ninja", "git", "python3", "dotnet", "nodtool", "xcrun"),
+    # The game pack builds on Windows, Linux and macOS (PadMint supplies the tools).
+    "android-pack": ("cmake", "ninja", "git", "dotnet", "nodtool"),
+    "ios-pack": ("cmake", "ninja", "git", "dotnet", "nodtool", "xcrun"),
+}
+# Source checkouts each target reads; the iPhone build uses the profile's full list.
+ANDROID_PACK_SOURCES = ("WiiCompiled",)
+TRANSLATOR_GITLINK = "vendor/wiicompiled"
+ANDROID_PACK_GITLINKS = ("vendor/runtimes/android", TRANSLATOR_GITLINK)
+PACK_GITLINKS = {"android-pack": ANDROID_PACK_GITLINKS,
+                 "ios-pack": ("vendor/runtimes/ios", TRANSLATOR_GITLINK)}
+# The Mac app reads only its own runtime, the translator and the WiiCompiled
+# function map, like the packs: not SunPad or Dolphin, whose nested
+# repositories run to several GB.
+MACOS_GITLINKS = ("vendor/runtimes/macos", TRANSLATOR_GITLINK)
 
 
 def load_lock(repo: Path) -> dict[str, Any]:
@@ -31,7 +50,14 @@ def _verify_checkout(repo: Path, dependency: dict[str, Any]) -> None:
     path = repo / dependency["path"]
     if not (path / ".git").exists():
         raise BuildError(f"missing pinned source {dependency['name']}: {path}")
-    commit = subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD^{commit}"], text=True).strip()
+    head = subprocess.run(["git", "-C", str(path), "rev-parse", "HEAD^{commit}"],
+                          capture_output=True, text=True)
+    if head.returncode != 0:
+        raise BuildError(
+            f"{dependency['name']} checkout at {path} is incomplete (for example after an "
+            "interrupted bootstrap). Move that folder aside and run "
+            "./scripts/build-user-ipa.sh bootstrap again; nothing was changed.")
+    commit = head.stdout.strip()
     tree = subprocess.check_output(["git", "-C", str(path), "rev-parse", "HEAD^{tree}"], text=True).strip()
     if commit != dependency["commit"] or tree != dependency["tree"]:
         raise BuildError(f"{dependency['name']} does not match dependencies.lock.json")
@@ -40,7 +66,11 @@ def _verify_checkout(repo: Path, dependency: dict[str, Any]) -> None:
 
 
 def _prepare_runtime_sources(repo: Path, dependency: dict[str, Any], install: bool) -> None:
-    for relative in dependency["platformPaths"].values():
+    _prepare_gitlinks(repo, list(dependency["platformPaths"].values()), install)
+
+
+def _prepare_gitlinks(repo: Path, relatives: list[str], install: bool) -> None:
+    for relative in relatives:
         path = repo / relative
         tracked = subprocess.check_output([
             "git", "-C", str(repo), "ls-files", "--stage", "-z", "--", relative,
@@ -84,16 +114,41 @@ def _download(url: str, expected_sha256: str, output: Path) -> None:
             partial.unlink()
 
 
-def prepare_dependencies(repo: Path, profile: Profile, install: bool) -> list[str]:
-    missing_commands = [command for command in REQUIRED_COMMANDS if shutil.which(command) is None]
+def _has_command(command: str) -> bool:
+    if command == "dotnet":
+        from .pipeline import find_dotnet
+        try:
+            find_dotnet()
+            return True
+        except BuildError:
+            return False
+    return shutil.which(command) is not None
+
+
+def prepare_dependencies(repo: Path, profile: Profile, install: bool, target: str = "ios") -> list[str]:
+    commands = REQUIRED_COMMANDS[target]
+    if target == "ios-pack" and platform.system() != "Darwin":
+        # Off a Mac, PadMint's LLVM and open-source iOS headers take Xcode's place.
+        commands = tuple(command for command in commands if command != "xcrun")
+    missing_commands = [command for command in commands if not _has_command(command)]
     if missing_commands:
         raise BuildError(f"missing required commands: {', '.join(missing_commands)}")
     lock = load_lock(repo)
     dependencies = _dependency_map(lock)
-    runtime = dependencies.get("KartPad WiiCompiled runtime fork")
-    if runtime is not None:
-        _prepare_runtime_sources(repo, runtime, install)
-    required = profile.data["sourceDependencies"]
+    if target in PACK_GITLINKS:
+        _prepare_gitlinks(repo, list(PACK_GITLINKS[target]), install)
+        required = list(ANDROID_PACK_SOURCES)
+    elif target == "macos":
+        _prepare_gitlinks(repo, list(MACOS_GITLINKS), install)
+        required = list(ANDROID_PACK_SOURCES)
+    else:
+        runtime = dependencies.get("KartPad WiiCompiled runtime fork")
+        if runtime is not None:
+            _prepare_runtime_sources(repo, runtime, install)
+            # The translate stage (scripts/stage-maintained-translator.py) reads
+            # this gitlink, so a clean Mac or IPA build needs it like the packs do.
+            _prepare_gitlinks(repo, [TRANSLATOR_GITLINK], install)
+        required = profile.data["sourceDependencies"]
     for name in required:
         if name not in dependencies:
             raise BuildError(f"profile names an unknown dependency: {name}")
@@ -109,12 +164,25 @@ def prepare_dependencies(repo: Path, profile: Profile, install: bool) -> list[st
             run(["git", "-C", str(path), "remote", "set-url", "--push", "origin", "DISABLED"])
         _verify_checkout(repo, dependency)
 
+    if target in PACK_GITLINKS:
+        from .retro_rewind import prepare_inputs
+
+        inputs = prepare_inputs(profile, repo / "private/builder", install)
+        return required + [f"Retro Rewind {inputs.version}", "Retro-WFC production payload"]
     dawn = dependencies["Dawn prebuilt"]
     dawn_output = repo / "build/dependency-cache" / f"dawn-ios-arm64-{dawn['version']}.tar.gz"
-    if not dawn_output.is_file() or hashlib.sha256(dawn_output.read_bytes()).hexdigest() != dawn["iosArm64Sha256"]:
+    if target != "macos" and (not dawn_output.is_file() or
+                              hashlib.sha256(dawn_output.read_bytes()).hexdigest() != dawn["iosArm64Sha256"]):
         if not install:
             raise BuildError("missing pinned physical-iOS Dawn archive; run ./scripts/build-user-ipa.sh bootstrap")
         _download(dawn["iosArm64Url"], dawn["iosArm64Sha256"], dawn_output)
+    # The Mac app build (scripts/prepare-g7-game-runtime.sh) reads this archive
+    # but nothing fetched it, so fresh clones could not build the Mac app.
+    mac_output = repo / "build/dependency-cache" / f"dawn-darwin-arm64-{dawn['version']}.tar.gz"
+    if install and (not mac_output.is_file()
+                    or hashlib.sha256(mac_output.read_bytes()).hexdigest() != dawn["darwinArm64Sha256"]):
+        mac_url = f"{dawn['repository']}/releases/download/{dawn['version']}/{dawn['darwinArm64Artifact']}"
+        _download(mac_url, dawn["darwinArm64Sha256"], mac_output)
     if "retroRewind" in profile.data:
         from .retro_rewind import prepare_inputs
 

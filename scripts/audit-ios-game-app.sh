@@ -24,6 +24,25 @@ binary="${app}/KartPad"
 test -d "${app}"
 test -x "${binary}"
 test -f "${plist}"
+# Stable builds must never inherit the runtime's diagnostic-candidate default.
+# Diagnostic builds require the same explicit opt-in as the build wrapper.
+python3 - "${plist}" "${KARTPAD_DIAGNOSTIC_CANDIDATE:-NO}" <<'PYDIAGNOSTICS'
+import plistlib, sys
+with open(sys.argv[1], "rb") as handle:
+    value = plistlib.load(handle).get("KartPadDiagnosticsCandidate", False)
+expected = sys.argv[2]
+if expected not in ("YES", "NO"):
+    raise SystemExit("ERROR: KARTPAD_DIAGNOSTIC_CANDIDATE must be YES or NO")
+if value in (False, "NO", "0", "false"):
+    actual = "NO"
+elif value in (True, "YES", "1", "true"):
+    actual = "YES"
+else:
+    raise SystemExit("ERROR: unrecognized KartPadDiagnosticsCandidate value")
+if actual != expected:
+    raise SystemExit("ERROR: diagnostic-candidate mode does not match the requested build; "
+                     "stable apps must disable forced validation and function timing")
+PYDIAGNOSTICS
 test -f "${app}/PrivacyInfo.xcprivacy"
 test -f "${app}/Assets.car"
 test -f "${app}/initial_pipeline_cache.db"
@@ -148,6 +167,10 @@ done
 if [[ "${region}" == J ]]; then
   if ! rg -a -F -q '1b9621ef7c5d97dada103e50e5389730e67f3c2545dda592edd4b5843655af91' "${binary}"; then
     echo "Japanese app is missing the exact RMCJ01 DOL validation hash" >&2
+    exit 69
+  fi
+  if ! rg -a -F -q '88539012d357a1420724e51dc7e351192ce696da4b0045994895518a3fad6fae' "${binary}"; then
+    echo "Japanese app is missing the exact RMCJ01 REL validation hash" >&2
     exit 69
   fi
   if rg -a -F -q 'KartPad currently supports RMCP01' "${binary}"; then

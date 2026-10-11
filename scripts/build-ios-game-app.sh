@@ -2,6 +2,12 @@
 set -euo pipefail
 
 repo_root="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)"
+# Diagnostic instrumentation is opt-in, including when rebuilding an old Xcode tree.
+export KARTPAD_DIAGNOSTIC_CANDIDATE="${KARTPAD_DIAGNOSTIC_CANDIDATE:-NO}"
+case "${KARTPAD_DIAGNOSTIC_CANDIDATE}" in
+  YES|NO) ;;
+  *) echo "ERROR: KARTPAD_DIAGNOSTIC_CANDIDATE must be YES or NO" >&2; exit 64 ;;
+esac
 absolute_from_repo() {
   case "$1" in
     /*) printf '%s\n' "$1" ;;
@@ -95,7 +101,8 @@ python3 "${repo_root}/scripts/write-build-provenance.py" --repo "${repo_root}" \
   --runtime "${runtime_source}" --translation "${translation_root}" \
   --output "${xcode_build}/kartpad-build.json"
 cmake --build "${xcode_build}" --config Release --target "${product_target}" -- \
-  -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO
+  -sdk iphonesimulator CODE_SIGNING_ALLOWED=NO \
+  KARTPAD_DIAGNOSTIC_CANDIDATE="${KARTPAD_DIAGNOSTIC_CANDIDATE}"
 
 app="${xcode_build}/Release-iphonesimulator/KartPad.app"
 cp "${xcode_build}/kartpad-build.json" "${app}/kartpad-build.json"

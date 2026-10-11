@@ -1,0 +1,46 @@
+{
+  "date": "2026-09-20",
+  "scope": "ROM-free actual maintained Metal renderer; Dawn validation enabled; deterministic compiler gate only in test executable",
+  "cases": [
+    {
+      "name": "old-copy",
+      "exit_code": 4,
+      "summary": [
+        "FAIL: Consecutive real GXCopyTex retained missing shader draws"
+      ]
+    },
+    {
+      "name": "old-capacity",
+      "exit_code": 4,
+      "summary": [
+        "FAIL: Capacity prefix lost shader draws before real GXCopyTex"
+      ]
+    },
+    {
+      "name": "fixed-copy",
+      "exit_code": 0,
+      "summary": [
+        "Consecutive real GXCopyTex preserved all pixels with skip enabled and blocked cold shader"
+      ]
+    },
+    {
+      "name": "fixed-capacity",
+      "exit_code": 0,
+      "summary": [
+        "Real GXCopyTex preserved capacity prefixes with skip enabled and blocked cold shader"
+      ]
+    },
+    {
+      "name": "fixed-full",
+      "exit_code": 0,
+      "summary": [
+        "Actual Aurora GX FIFO split=3 preserved direct vertices, indices and uniforms",
+        "Actual Aurora raw bridge capacity split preserved direct quad pixels",
+        "Actual Aurora automatic offscreen/readback splits=24 preserved all pixels",
+        "Actual Aurora clear/resolve/snapshot/downsample/readback batches passed"
+      ]
+    }
+  ],
+  "application_gate_hook": false,
+  "physical_original_frames_trace": "Not available; original screenshots and unchanged code134 warmed menu comparison retained separately."
+}

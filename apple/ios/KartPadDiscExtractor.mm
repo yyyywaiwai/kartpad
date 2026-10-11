@@ -1,17 +1,24 @@
 #import "KartPadDiscExtractor.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstring>
 #include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
 
+#include "Common/CommonTypes.h"
 #include "DiscIO/DiscExtractor.h"
 #include "DiscIO/Filesystem.h"
 #include "DiscIO/Volume.h"
 
 namespace fs = std::filesystem;
+
+namespace IOS::ES {
+void KartPadSetUserCommonKey(const std::array<u8, 16>& key);
+}
 
 namespace {
 
@@ -19,6 +26,30 @@ NSError *KartPadExtractionError(NSInteger code, NSString *message) {
   return [NSError errorWithDomain:@"dev.kartpad.disc-extraction"
                              code:code
                          userInfo:@{NSLocalizedDescriptionKey : message}];
+}
+
+// KartPad does not include console keys. Reading an encrypted Wii disc image
+// needs the user's own 16-byte Wii common key, saved as common-key.bin in
+// On My iPhone/iPad > KartPad. Importing already-extracted game files does not.
+BOOL KartPadLoadUserCommonKey(NSError **error) {
+  NSString *documents = NSSearchPathForDirectoriesInDomains(
+      NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+  NSString *path = [documents stringByAppendingPathComponent:@"common-key.bin"];
+  NSData *data = [NSData dataWithContentsOfFile:path];
+  if (data.length != 16) {
+    if (error != nullptr) {
+      *error = KartPadExtractionError(
+          7, @"Disc images need the common key from your own Wii (common-key.bin, "
+             @"saved in On My iPhone/iPad > KartPad). Without one, use Dolphin's "
+             @"Extract Entire Disc on a computer and import that folder instead; "
+             @"it needs no key.");
+    }
+    return NO;
+  }
+  std::array<u8, 16> key{};
+  std::memcpy(key.data(), data.bytes, key.size());
+  IOS::ES::KartPadSetUserCommonKey(key);
+  return YES;
 }
 
 void KartPadReportExtractionProgress(KartPadDiscExtractionProgress progress,
@@ -38,6 +69,9 @@ void KartPadReportExtractionProgress(KartPadDiscExtractionProgress progress,
                    progress:(KartPadDiscExtractionProgress)progress
                       error:(NSError **)error {
   KartPadReportExtractionProgress(progress, @"Opening disc image", 0.0);
+  if (!KartPadLoadUserCommonKey(error)) {
+    return NO;
+  }
   std::unique_ptr<DiscIO::Volume> volume =
       DiscIO::CreateVolume(imagePath.fileSystemRepresentation);
   if (!volume) {
@@ -51,7 +85,9 @@ void KartPadReportExtractionProgress(KartPadDiscExtractionProgress progress,
   const DiscIO::FileSystem *filesystem = volume->GetFileSystem(partition);
   if (!filesystem || !filesystem->IsValid()) {
     if (error != nullptr) {
-      *error = KartPadExtractionError(2, @"Dolphin could not read the game filesystem.");
+      *error = KartPadExtractionError(
+          2, @"Dolphin could not read the game filesystem. Check that common-key.bin "
+             @"is the correct Wii common key.");
     }
     return NO;
   }

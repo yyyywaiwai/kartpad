@@ -46,11 +46,61 @@ private fun testExportedMiiImport(fixtures: File) {
     }
 }
 
+private fun testConsoleIdentityRecovery(fixtures: File) {
+    val root = createTempDir(prefix = "kartpad-console-recovery-")
+    try {
+        val app = File(root, "KartPad").apply { mkdirs() }
+        File(app, "NAND").mkdirs()
+        File(app, "NAND/.mkw_recompiled_managed_nand").writeText("version=1\n")
+        val legacy = File(app, "ConsoleIdentity.txt").apply { writeText("serial=123456789\n") }
+        val encoder = KartPadIdentityStorage::class.java.getDeclaredMethod("nativeConsoleSettings", String::class.java).apply { isAccessible = true }
+        fun encode(s: String) = encoder.invoke(KartPadIdentityStorage, s) as ByteArray
+        val wrong = encode("987654321")
+        val right = encode("123456789")
+        val settings = File(app, "NAND/title/00000001/00000002/data/setting.txt").apply { parentFile.mkdirs(); writeBytes(wrong) }
+        val save = File(app, KartPadIdentityStorage.paths.getValue("original")).apply { parentFile.mkdirs() }
+        // No native edit is requested: arbitrary full-length save bytes must survive exactly.
+        val progress = ByteArray(KartPadSaveStorage.SAVE_BYTES) { (it % 251).toByte() }
+        save.writeBytes(progress)
+        KartPadIdentityStorage.stageConsoleRecovery(root)
+        check(settings.readBytes().contentEquals(wrong))
+        AtomicFile.silentFailSuffix = "/original.before"
+        check(KartPadIdentityStorage.applyConsoleRecovery(root) != null) { "console/backup: failed backup reported success" }
+        check(settings.readBytes().contentEquals(wrong) && save.readBytes().contentEquals(progress))
+        check(File(app, "PendingConsoleIdentityRecovery.json").isFile)
+        AtomicFile.silentFailSuffix = "/verified.json"
+        check(KartPadIdentityStorage.applyConsoleRecovery(root) != null) { "console/completion: failed marker reported success" }
+        check(settings.readBytes().contentEquals(right) && save.readBytes().contentEquals(progress))
+        check(File(app, "PendingConsoleIdentityRecovery.json").isFile)
+        AtomicFile.silentFailSuffix = null
+        check(KartPadIdentityStorage.applyConsoleRecovery(root) == null)
+        check(settings.readBytes().contentEquals(right))
+        check(save.readBytes().contentEquals(progress))
+        check(legacy.readText() == "serial=123456789\n")
+        val backup = File(app, "IdentityBackups").listFiles()!!.single()
+        check(File(backup, "settings.before").readBytes().contentEquals(wrong))
+        check(File(backup, "original.before").readBytes().contentEquals(progress))
+        check(File(backup, "verified.json").isFile)
+        check(KartPadIdentityStorage.applyConsoleRecovery(root) == null)
+        check(runCatching { KartPadIdentityStorage.stageConsoleRecovery(root) }.isFailure)
+        settings.writeBytes(wrong)
+        KartPadIdentityStorage.stageConsoleRecovery(root)
+        settings.writeBytes(encode("222222222"))
+        check(KartPadIdentityStorage.applyConsoleRecovery(root) != null)
+        check(settings.readBytes().contentEquals(encode("222222222")))
+        settings.writeBytes(wrong.copyOf().apply { this[200] = 1 })
+        check(runCatching { KartPadIdentityStorage.stageConsoleRecovery(root) }.isFailure)
+        println("Console recovery passed: registered serial, backup, exact save preservation, idempotence and changed-settings rejection")
+    } finally { AtomicFile.silentFailSuffix = null; root.deleteRecursively() }
+}
+
 fun main(args: Array<String>) {
     testRatingCompanion()
     testRatingStorage()
     System.load(args[0])
+    testConsoleIdentityRecovery(File(args[1]))
     val fixtures = File(args[1])
+    testIdentityMiiPublication(fixtures)
     testExportedMiiImport(fixtures)
     testSaveProfiles(fixtures)
     val root = Files.createTempDirectory("kartpad-identity-test-").toFile()

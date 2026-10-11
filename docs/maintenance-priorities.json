@@ -29,35 +29,34 @@
         128,
         131,
         207,
-        215,
         216,
         236
       ],
-      "state": "awaiting-reporter",
-      "next_action": "Classify one actual OS/process exit per separate launch/cup/race case. #215 and #236 already confirm Android-home exit; do not re-ask that destination. Home exit alone does not distinguish native fault, Java exception or OS termination. Use the existing ApplicationExitInfo/report path; keep #208 canonical and avoid a speculative shared renderer fix.",
+      "state": "ready-local",
+      "next_action": "Use the 1 October focused review and current 0.7.3 source to classify retained exact-session import/start, cup-end and race exits. #216 A9+ now loads both Original and Retro; missing bodies, lag and the older Tab A remain separate. #235 is closed from the same reporter reaching races; performance remains #313. #215 is already closed after the reporter disabled Renderer Validation and resumed racing; do not repeat startup requests or keep it in the active crash queue. Similar exits require separate evidence.",
       "acceptance": "Each classified failure passes its affected import/start, cup-awards or race boundary on the exact target. Similar exits are not assumed to share a cause.",
       "dependency": {
-        "owner": "the named reporters in each linked issue",
-        "needs": "Already requested process-exit classification and exact profile/transition; preserve separate subcases."
+        "owner": "KartPad engineering",
+        "needs": "Internal analysis of retained exact-build crash and ongoing owner-session evidence; no reporter input required for the Pixel subcase."
       },
-      "checkpoint": "docs/MAINTENANCE-BOARD.md",
-      "priority_reason": "Classified crashes block stable play; distinct exits require separate evidence."
+      "checkpoint": "docs/FOCUSED-REVIEW-2026-10-01.md",
+      "priority_reason": "Unclassified crashes remain actionable; published fixes require per-failure evidence, not another broad release loop."
     },
     {
       "id": "ios27-startup",
-      "priority": 1,
+      "priority": 3,
       "issues": [
         196
       ],
-      "state": "awaiting-reporter",
-      "next_action": "The new #196 microstackshot matches build39 and symbolizes through func_8000A3F8 to FatalMissingGuestTarget. Obtain only the missing target address/Caller LR from an existing fatal text log, as requested. Disk-write Action none is not a termination cause. Build42 is a reporting aid, not a confirmed crash correction; source ancestry does not prove regenerated translation. Independently, anonymous guest RAM is merged and local build43 is audited; it removes temporary-file backing but does not fix the missing target. Signed-device launch/race/relaunch and complete source delivery remain before publishing that candidate.",
+      "state": "ready-local",
+      "next_action": "The #196 reporter confirms Original works without stutters and Retro races smoothly by the second lap on 0.5.3. The old build60 startup investigation is superseded. Retain first-lap Retro warmup and endless online searching as separate open scopes; review current warmup/network code and existing evidence. The owner already requested one report after extended searching; do not repeat the request or assume a cause.",
       "dependency": {
-        "owner": "issue196 reporter",
-        "needs": "Existing fatal text record containing missing_target/not translated and Caller LR; no repeated crashes or generic analytics request."
+        "owner": "KartPad engineering",
+        "needs": "Internal review of remaining warmup and matchmaking scopes using retained evidence; the existing specific online-report request remains pending."
       },
-      "acceptance": "The same corrected candidate preserves existing data and passes both Original and Retro launch, race and relaunch on the matching iPhone 17 Pro Max/iOS 27 target. Package/reporter/release acceptance remain separate.",
-      "checkpoint": "docs/artifacts/2026-09-13/platform-candidate-handoff.md",
-      "priority_reason": "A game that cannot launch cannot meet offline or online acceptance."
+      "acceptance": "Preserve working launch and saves. Measure first-lap warmup separately from later laps; online acceptance needs matching, race, results and reconnect on the affected connection, not just launch.",
+      "checkpoint": "docs/FOCUSED-REVIEW-2026-10-01.md",
+      "priority_reason": "Startup is confirmed working; remaining warmup and online symptoms follow unresolved launch blockers."
     },
     {
       "id": "android-online",
@@ -66,7 +65,7 @@
         206
       ],
       "state": "awaiting-reporter",
-      "next_action": "#277 is closed as duplicate of #206: same reporter/SM-S921W, now code80, quick connection but mobile-data matchmaking fails while Wi-Fi works. Keep its new build evidence in #206. Do not claim code90 fixes networking or repeat known device/connection questions.",
+      "next_action": "Retain SM-S921W mobile-data peer search failure 86420 and reporter-observed Wi-Fi/VPN workarounds. No confirmed carrier cause or app-side correction; do not repeat generic logs or claim CPU work fixes cellular matchmaking.",
       "dependency": {
         "owner": "#206 reporter",
         "needs": "The already requested Wi-Fi endurance confirmation beyond the prior four/five-race window; no reinstall, data clear or generic log request"
@@ -77,7 +76,7 @@
     },
     {
       "id": "adreno-geometry",
-      "priority": 3,
+      "priority": 1,
       "issues": [
         102,
         104,
@@ -87,15 +86,15 @@
         193,
         211
       ],
-      "state": "awaiting-reporter",
-      "next_action": "Code91 supplies the reviewed actual-shader original/literal/original comparison for the two #193 pipelines, with durable restart-only selection, equal merge guard and bounded pipeline logs. Code91 is published; use the existing #193 three-phase handoff and await same-scene results. Keep code85 negative results; code90 was not a graphics fix. Do not repeat generic settings sweeps or claim a fix before matching target logs and affected-device comparison.",
+      "state": "ready-local",
+      "next_action": "New #104 release retest is negative: S24 Ultra/Adreno750, Original 0.5.0/code135, 1x/Normal, Vulkan ready and empty shader queues in sampled frames. Reproduce the actual corrupt character draw internally and test one discriminating correction. No repeated mode sweep or log request. #211 now independently confirms persistent character rendering failure on S24 Ultra while characters appear on the reporter's Galaxy A32; do not ask for another ISO or mode sweep.",
       "dependency": {
-        "owner": "renderer worker and affected-device tester",
-        "needs": "Code91 same-character original/compatibility/original comparison with matching KartPadPNMTX draw_binding evidence on an affected device. Host shader validation and package audit are complete."
+        "owner": "KartPad engineering",
+        "needs": "Internal diagnosis from retained evidence; reporter outreach is on hold."
       },
       "acceptance": "A correlated actual bad draw discriminates the hypothesis; a subsequent narrow correction removes the reported corruption on the affected GPU with a matched baseline and no relevant regression.",
-      "checkpoint": "docs/artifacts/2026-09-14/issue193-targeted-pnmtx-candidate.md",
-      "priority_reason": "Multiple independent reports show real-game corruption; complete a controlled affected-draw experiment."
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md",
+      "priority_reason": "Affected hardware explicitly rejects the released build for character geometry; thumbnail acceptance cannot substitute for this result."
     },
     {
       "id": "warmed-performance",
@@ -108,16 +107,17 @@
         195,
         204,
         207,
-        135
+        135,
+        275
       ],
       "state": "ready-local",
-      "next_action": "Private code84 is packaged, non-debuggable and shell-profileable, with public83 native payload and verified symbols. Arrange the existing accepted private handoff after checking recipient version/signer; derive a Debug-signed twin before using the owner Pixel last verified on private82. Then capture one bounded warmed driven CPU sample to classify guest, GX CPU and waits. Do not rebuild native code or repeat answered settings/log/willingness requests.",
+      "next_action": "Use retained warm CPU-heavy #198/#275 captures and scene context to attribute main-thread guest/GX/wait time. #198 September20 reply is waiting, not a passing result. No new benchmark or generic shader-prewarm promise; require matched warmed improvement before calling performance fixed.",
       "acceptance": "A matched warmed affected-device comparison shows a useful frame-time improvement with guest semantics and stability preserved. No FPS claim from a host microbenchmark.",
-      "checkpoint": "docs/MAINTENANCE-BOARD.md",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md",
       "priority_reason": "Owner explicitly prioritizes slowdowns. Sustained low FPS after shader queues empty is the strongest measured opportunity; a local diagnostic can progress now.",
       "dependency": {
-        "owner": "performance worker and release operator",
-        "needs": "Community-signed code84 audit passed. Concrete private delivery and affected-device capture remain; owner Pixel needs a compatible signing twin. Neither install nor capture has occurred."
+        "owner": "KartPad engineering",
+        "needs": "Internal diagnosis from retained evidence; reporter outreach is on hold."
       }
     },
     {
@@ -139,9 +139,9 @@
         197
       ],
       "state": "ready-local",
-      "next_action": "Use the documented held-versus-released focus-loss and detach matrix to distinguish touch acceleration lock from stale SDL cached A. Shared held-A suppression is established at source level, but the reported cause is not reproduced. Prepare a discriminator with ordinary press/release and true detach controls; preserve valid held input on resume. The fresh offline touch-only reporter question is already outstanding; do not repeat it or change live device state without ownership.",
+      "next_action": "Code135 input-assignment fixes and auto-accelerate opt-out are public. Keep ipega default-mode A/B mapping and online menu behavior distinct. Trace raw press/release and touch/controller handoff using existing report; only request genuinely missing controller details.",
       "acceptance": "A source-level discriminator either demonstrates stale input across handoff or rejects that hypothesis and records the next narrow path. Default-mode A/B mapping, auto-acceleration and affected moto g200 hardware acceptance remain separate; #184 remapping is not acceptance for #197.",
-      "checkpoint": "docs/ANDROID-INPUT-197.md",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md",
       "priority_reason": "Both touch and controller fail after controller use; shared input state can be inspected while the requested reporter comparison is pending."
     },
     {
@@ -173,11 +173,141 @@
       "acceptance": "The exact profiler source, settings, symbols, compatible signing/build recipe and capture instructions are reviewed and retained; any produced candidate is audited and immutable. Private transfer authorization and the actual reporter capture remain on warmed-performance; no measured improvement is claimed.",
       "checkpoint": "docs/artifacts/2026-09-13/maintenance-ready-actions.md",
       "priority_reason": "The reporter is already willing and signing capability exists; local preparation should not wait for the external transfer/capture gate."
+    },
+    {
+      "id": "android-vulkan-loader",
+      "priority": 1,
+      "issues": [
+        216,
+        301,
+        303
+      ],
+      "state": "awaiting-reporter",
+      "next_action": "The optional debug-utils correction is published in v0.5.0/code135. #216 A9+ now installs after a fresh download and loads Original; geometry/performance remain open and Retro is untested. #301 startup also works but retains rendering/idle-freeze symptoms. Await #303 exact-device startup acceptance without a duplicate request. Preserve original TabA as a separate unresolved case.",
+      "acceptance": "The exact affected driver initializes the hardware backend and reaches gameplay on an identified compatible artifact, with mandatory loader failures still rejected and existing data preserved.",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md",
+      "priority_reason": "Three separately recorded device cases identify the same actionable loader mechanism; this subset is no longer waiting for generic logs.",
+      "dependency": {
+        "owner": "#303 reporter; KartPad engineering for remaining distinct symptoms",
+        "needs": "Existing exact-device #303 launch result; #216 A9+ Original startup is reporter-confirmed and does not need another generic launch request."
+      }
+    },
+    {
+      "id": "android-powervr-capability",
+      "priority": 1,
+      "issues": [
+        304
+      ],
+      "state": "ready-local",
+      "next_action": "The 1 October review caught and corrected Dawn reifying the admitted 14-variable ImgTec Vulkan device to 16. Native device/pipeline and production-shader checks pass; the corrected archive and actual empty APK pass content/state audits. The release-style empty app imports RVZ-exported data and plays a race segment on an owned emulator. The hosted dependency candidate passes anonymous size/hash/manifest checks and the normal consumer with an empty Dawn cache. Existing runtime already returns graphics startup failure with the first adapter error. Actual Moto G54 driver acceptance remains open; no repeated reporter requests.",
+      "acceptance": "A supported bounded path initializes and renders correctly on the reported PowerVR driver; unsupported limits return a clear recoverable launcher result without aborting. Adapter admission alone is not gameplay acceptance.",
+      "checkpoint": "docs/artifacts/2026-10-01/powervr-device-limits.md",
+      "priority_reason": "New classified repeatable startup blocker; distinct from optional debug-utils loading and the depth experiment."
+    },
+    {
+      "id": "retro-wfc-payload-pin",
+      "priority": 2,
+      "issues": [
+        302
+      ],
+      "state": "ready-local",
+      "next_action": "Reported pin mismatch is corrected in released source a2f41d5 and live endpoint still matches on September20. Input, translation, native build and packages were separately verified. Complete any full self-build launcher acceptance in an isolated configuration before claiming that entire workflow; do not replace pins again without changed upstream evidence.",
+      "acceptance": "Reviewed payload identity and production signature are pinned, a clean self-build and relevant runtime checks pass, and unrelated or changed downloads are still rejected.",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md",
+      "priority_reason": "Missed public follow-up and stale packaging task corrected; full launcher acceptance is a separate remaining gate."
+    },
+    {
+      "id": "android-shake-trick-parity",
+      "priority": 2,
+      "issues": [
+        162,
+        273
+      ],
+      "state": "ready-local",
+      "next_action": "Add optional Android shake-to-trick parity: Apple already has shakeTricksEnabled/consumeShakeTrick, Android motion class only publishes steering. Bound threshold/re-arm and one-shot D-pad-up input; preserve settings and clear on pause/disconnect. Closed #162 requested this; do not claim it fixes unidentified #273.",
+      "acceptance": "Production sensor/input tests prove one trick per shake, no false repeat or stuck D-pad input, persistence and pause/resume clearing; a bounded physical motion check follows.",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md"
+    },
+    {
+      "id": "retro-ghost-transfer",
+      "priority": 2,
+      "issues": [
+        295
+      ],
+      "state": "ready-local",
+      "next_action": "Reporter confirmed Original ghost export works on September20. Pinned 6.12.8 configs and retained Pulsar source identify the shared CRC/variant/mode NAND collection, including Wii courses in Retro. Implement explicit destination selection and one unique staged RKG without touching either RKSYS profile or leaderboard. Respect the 12-character filename and native list-capacity limits, bind pending imports to config identity, and verify actual native discovery/replay. Preserve Original transfer; no repeat reporter request. See the focused-loop design contract.",
+      "acceptance": "Retro ghosts are discovered for the correct profile/license/course and round-trip without replacing personal bests or losing save data; Original export remains working.",
+      "checkpoint": "docs/artifacts/2026-09-21/open-issue-inventory.md"
+    },
+    {
+      "id": "mac-classic-controller",
+      "priority": 2,
+      "issues": [
+        306,
+        5
+      ],
+      "state": "ready-local",
+      "next_action": "Trace SDL Wii Classic extension input into Mac button capture/mapping and lifecycle. Separate raw missing D-pad input from mapping and delay; Android assignment corrections do not prove this path.",
+      "acceptance": "Production event tests discriminate the fault; matching physical Wiimote/Classic Pro supports D-pad, remapping, normal latency and reconnect without stuck controls.",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md"
+    },
+    {
+      "id": "android-handheld-insets",
+      "priority": 3,
+      "issues": [
+        119,
+        202
+      ],
+      "state": "ready-local",
+      "next_action": "Check existing immersive/surface handling across launch, menu and Home/resume, keeping temporary startup border separate from persistent status/navigation insets on AYN.",
+      "acceptance": "Bounded emulator surface/inset regression and affected-handheld confirmation show correct game area with gesture and three-button navigation.",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md"
+    },
+    {
+      "id": "shipped-small-enhancements",
+      "priority": 4,
+      "issues": [
+        305,
+        297,
+        299
+      ],
+      "state": "accepted",
+      "next_action": "Auto-accelerate opt-out, shared D-pad/trigger bindings, L1 item preset and coordinated release assets are implemented and published. Observe specific failure reports without treating open request status as absent implementation.",
+      "acceptance": "Source/package/UI checks and release records bind these capabilities; individual hardware defects remain open separately.",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md"
+    },
+    {
+      "id": "save-identity-migration",
+      "priority": 4,
+      "issues": [
+        203,
+        234
+      ],
+      "state": "deferred",
+      "next_action": "Scope complete private save/Mii/identity/country backup and atomic restore with preview/rollback. Current raw-save/rating import is not a full migration; preserve existing profiles and never rotate serial identity to bypass service rejection.",
+      "acceptance": "Round-trip migration preserves identity, saves, Miis and country state; failed/cancelled imports leave existing data unchanged.",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md"
+    },
+    {
+      "id": "larger-feature-requests",
+      "priority": 5,
+      "issues": [
+        90,
+        91,
+        100,
+        199,
+        203,
+        300
+      ],
+      "state": "deferred",
+      "next_action": "Keep separate scopes for Wiimmfi, DSU, reliable external display, USA RMCE01 translation, offline cheats and older Apple OS support. These are not settings-only changes; use the request-by-request audit before selecting a bounded implementation.",
+      "acceptance": "Each selected capability has its own code/data boundary and hardware/runtime acceptance; no broad completion claim.",
+      "checkpoint": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md"
     }
   ],
   "priority_review": {
-    "date": "2026-09-13",
-    "reason": "Separate locally executable investigation/preparation from reporter, transfer and hardware gates. The active issue-248 investigator retains ownership. Android code80 materials are prepared; publication must be verified separately. No new device or gameplay acceptance is asserted.",
-    "evidence": "docs/artifacts/2026-09-13/maintenance-ready-actions.md"
+    "date": "2026-09-20",
+    "reason": "Reconcile actual v0.5.0 publication and new S24 failure; preserve unresolved CPU work, record missed payload follow-up, and track concrete motion/ghost/controller gaps separately from larger compatibility requests.",
+    "evidence": "docs/artifacts/2026-09-20/post-release-issues-and-enhancements.md"
   }
 }

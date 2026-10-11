@@ -9,15 +9,34 @@ version_code_override="${KARTPAD_ANDROID_VERSION_CODE:-}"
 version_name_override="${KARTPAD_ANDROID_VERSION_NAME:-}"
 package_format="${KARTPAD_ANDROID_PACKAGE_FORMAT:-apk}"
 profileable="${KARTPAD_ANDROID_PROFILEABLE:-0}"
+native_tls="${KARTPAD_ANDROID_NATIVE_TLS_EXPERIMENT:-0}"
+frame_capture="${KARTPAD_ANDROID_FRAME_CAPTURE:-0}"
+case "$native_tls" in
+  0|1) ;;
+  *) echo "ERROR: KARTPAD_ANDROID_NATIVE_TLS_EXPERIMENT must be 0 or 1" >&2; exit 64 ;;
+esac
+if [[ "$native_tls" == 1 && "$version_name_override" != *-native-tls* ]]; then
+  echo "ERROR: native TLS experiments require an explicit version name containing -native-tls" >&2
+  exit 64
+fi
+case "$frame_capture" in
+  0|1) ;;
+  *) echo "ERROR: KARTPAD_ANDROID_FRAME_CAPTURE must be 0 or 1" >&2; exit 64 ;;
+esac
+if [[ "$frame_capture" == 1 && ( "$package_format" != apk-release || "$version_name_override" != *-capture ) ]]; then
+  echo "ERROR: frame capture requires apk-release and an explicit version name ending in -capture" >&2
+  exit 64
+fi
 case "$profileable" in
   0|1) ;;
   *) echo "ERROR: KARTPAD_ANDROID_PROFILEABLE must be 0 or 1" >&2; exit 64 ;;
 esac
 case "$package_format" in
   apk) package_task=assembleDebug; package_kind=APK ;;
+  apk-release) package_task=assembleRelease; package_kind="private release APK" ;;
   aab) package_task=bundleRelease; package_kind="unsigned AAB" ;;
   *)
-    echo "ERROR: KARTPAD_ANDROID_PACKAGE_FORMAT must be apk or aab" >&2
+    echo "ERROR: KARTPAD_ANDROID_PACKAGE_FORMAT must be apk, apk-release or aab" >&2
     exit 64
     ;;
 esac
@@ -98,6 +117,11 @@ if [[ ! -f "$discio_jni_root/arm64-v8a/libkartpad_discio.so" ]]; then
       "$discio_jni_root"
   fi
 fi
+if ! grep -a -F -q 'ISO, WBFS or RVZ image' "$discio_jni_root/arm64-v8a/libkartpad_discio.so"; then
+  echo "ERROR: $discio_jni_root/arm64-v8a/libkartpad_discio.so predates RVZ import." >&2
+  echo "Rebuild it with scripts/build-android-discio-probe.sh into a fresh stage directory." >&2
+  exit 1
+fi
 
 export JAVA_HOME="$repo_root/.android-bootstrap/jdk-$KARTPAD_ANDROID_JDK_VERSION/Contents/Home"
 export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-${ANDROID_HOME:-$HOME/Library/Android/sdk}}"
@@ -113,9 +137,20 @@ gradle_args=(
   -PkartpadAndroidNativeTarget="$native_target"
   -PkartpadDiscIoJniRoot="$discio_jni_root"
 )
+if [[ "$package_format" == apk-release ]]; then
+  gradle_args+=("-PkartpadDiagnosticRelease=true")
+fi
 if [[ "$profileable" == 1 ]]; then
   gradle_args+=("-PkartpadProfileable=true")
-  echo "Local profiling enabled; keep performance captures private. Debugging remains disabled in release builds."
+  echo "Local profiling enabled; keep performance captures private."
+fi
+if [[ "$native_tls" == 1 ]]; then
+  gradle_args+=("-PkartpadNativeTlsExperiment=true")
+  echo "Private native TLS experiment: Android API29 minimum; not compatible with Android 9."
+fi
+if [[ "$frame_capture" == 1 ]]; then
+  gradle_args+=("-PkartpadFrameCapture=true")
+  echo "Private RenderDoc capture enabled; optimized native runtime, debuggable package."
 fi
 if [[ -n "$version_code_override" ]]; then
   gradle_args+=("-PkartpadVersionCode=$version_code_override")
@@ -129,6 +164,8 @@ fi
 
 if [[ "$package_format" == apk ]]; then
   package_path="$host_root/android/app/build/outputs/apk/debug/app-debug.apk"
+elif [[ "$package_format" == apk-release ]]; then
+  package_path="$host_root/android/app/build/outputs/apk/release/app-release.apk"
 else
   package_path="$host_root/android/app/build/outputs/bundle/release/app-release.aab"
 fi

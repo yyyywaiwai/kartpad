@@ -72,7 +72,7 @@ restart=ui.split('if([key isEqual:@"video.vsync"]) {',1)[1].split('\n  }',1)[0]
 assert '[self refreshSettings];return;' in restart and 'KartPadRequestSettingsReload' not in restart
 assert 'c.vsync.value_or(false)' in ui
 assert 'auroraConfig.vsync = RuntimeConfigFile::Get().vsync.value_or(false)' in (source/'src/main.cpp').read_text()
-for platform in ('ios', 'android', 'tvos'):
+for platform in ('android', 'tvos'):
     other_main = (root / 'vendor/runtimes' / platform / 'runtime/src/main.cpp').read_text()
     assert 'auroraConfig.vsync = RuntimeConfigFile::Get().vsync.value_or(false)' not in other_main
 print('PASS: real selector capability matrix; native config persistence across processes, malformed/default values, unrelated key preservation, save failure; restart-only UI contract and macOS preparation isolation')

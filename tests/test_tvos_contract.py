@@ -1,5 +1,6 @@
 import json
 import plistlib
+import re
 import struct
 from runtime_sources import runtime_source
 import unittest
@@ -105,7 +106,7 @@ class TvOSContractTests(unittest.TestCase):
         profile = json.loads(
             (ROOT / "builder/profiles/mkwii-rmcp01-rev0.json").read_text()
         )
-        self.assertEqual(profile["retroRewind"]["version"], "6.12.8")
+        self.assertEqual(profile["retroRewind"]["version"], "6.13.1")
         host = (ROOT / "apple/tvos/KartPadTVRuntimeHost.mm").read_text()
         self.assertIn("installArchiveAtURL", host)
         self.assertIn("officialArchiveURL", host)
@@ -170,9 +171,17 @@ class TvOSContractTests(unittest.TestCase):
         ios_release = (ROOT / "scripts/ios_release.py").read_text()
         for script in (ios_package, ios_audit):
             self.assertIn("from ios_release import", script)
-        self.assertIn('RELEASE_TAG = "v0.4.17-ios.1"', ios_release)
-        self.assertIn('APP_VERSION = "0.4.17"', ios_release)
-        self.assertIn('APP_BUILD = "39"', ios_release)
+        # The iOS identity comes from the checked-in build record of the
+        # current release, not from constants pinned in this test.
+        record_path = re.search(r'"(docs/releases/v[^"]+-ios-build\.json)"', ios_release)
+        self.assertIsNotNone(record_path, "ios_release.py must read a docs/releases/*-ios-build.json record")
+        record = json.loads((ROOT / record_path.group(1)).read_text())
+        for constant, key in (("RELEASE_TAG", "releaseTag"), ("APP_VERSION", "appVersion"),
+                              ("APP_BUILD", "appBuild"), ("EXECUTABLE_SHA256", "executableSHA256")):
+            self.assertIn(f'{constant} = RECORD["{key}"]', ios_release)
+        self.assertTrue(record["releaseTag"].startswith(f"v{record['appVersion']}"), record["releaseTag"])
+        self.assertRegex(record["appBuild"], r"^\d+$")
+        self.assertRegex(record["executableSHA256"], r"^[0-9a-f]{64}$")
         for script in (tvos_package, tvos_audit):
             self.assertIn('RELEASE_TAG = "v0.4.11-tvos.1"', script)
             self.assertIn('APP_VERSION = "0.4.11"', script)

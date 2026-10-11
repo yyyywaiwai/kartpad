@@ -1,8 +1,11 @@
+#include <algorithm>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "DiscIO/DiscExtractor.h"
 #include "DiscIO/Filesystem.h"
@@ -30,6 +33,64 @@ void* allocate(std::size_t size)
 int main(int argc, char** argv)
 {
 #if defined(__ANDROID__)
+  if (argc == 3 && std::string(argv[1]) == "--descriptor-self-test")
+  {
+    // Synthetic data only: exercise the production picker-descriptor factory
+    // with actual Dolphin compression/decompression, without a game or save.
+    const std::filesystem::path root(argv[2]);
+    std::filesystem::create_directories(root);
+    const auto raw = (root / "synthetic.iso").string();
+    std::vector<u8> expected(2 * 1024 * 1024);
+    for (size_t i = 0; i < expected.size(); ++i)
+      expected[i] = static_cast<u8>((i * 17 + i / 251) & 255);
+    const std::string id = "TSTP01";
+    std::copy(id.begin(), id.end(), expected.begin());
+    // GameCube disc magic; no filesystem or Nintendo content is included.
+    expected[0x18] = expected[0x19] = expected[0x1a] = expected[0x1b] = 0;
+    expected[0x1c] = 0xc2; expected[0x1d] = 0x33;
+    expected[0x1e] = 0x9f; expected[0x1f] = 0x3d;
+    {
+      std::ofstream out(raw, std::ios::binary);
+      out.write(reinterpret_cast<const char*>(expected.data()), expected.size());
+      if (!out) return 70;
+    }
+    auto check = [&](const std::string& path) {
+      const int fd = open(path.c_str(), O_RDONLY);
+      if (fd < 0) return false;
+      lseek(fd, 17, SEEK_SET);
+      auto volume = KartPadOpenDiscDescriptor(fd);
+      std::vector<u8> actual(expected.size());
+      const bool valid = volume && volume->GetGameID() == id &&
+          volume->Read(0, actual.size(), actual.data(), DiscIO::PARTITION_NONE) &&
+          actual == expected && lseek(fd, 0, SEEK_CUR) == 17;
+      volume.reset();
+      unsigned char byte = 0;
+      const bool retained = pread(fd, &byte, 1, 0) == 1;
+      close(fd);
+      return valid && retained;
+    };
+    if (!check(raw)) return 71;
+    for (const auto compression : {DiscIO::WIARVZCompressionType::None,
+                                   DiscIO::WIARVZCompressionType::Zstd})
+    {
+      const auto rvz = (root / (compression == DiscIO::WIARVZCompressionType::None
+                                   ? "uncompressed.rvz" : "compressed.rvz")).string();
+      auto source = DiscIO::CreateBlobReader(raw);
+      if (!source || !DiscIO::ConvertToWIAOrRVZ(source.get(), raw, rvz, true,
+              compression, 3, 128 * 1024, [](const std::string&, float) { return true; }) ||
+          !check(rvz)) return 72;
+      // A damaged compressed header must be rejected, not imported as raw ISO.
+      std::filesystem::resize_file(rvz, 16);
+      const int fd = open(rvz.c_str(), O_RDONLY);
+      const bool rejected = !KartPadOpenDiscDescriptor(fd);
+      close(fd);
+      if (!rejected) return 73;
+    }
+    if (KartPadOpenDiscDescriptor(-1)) return 74;
+    std::cout << "descriptor-self-test passed: ISO, RVZ none/zstd, byte equality, "
+                 "borrowed descriptor lifetime/offset, truncated RVZ rejection\n";
+    return 0;
+  }
   if (argc == 4 && std::string(argv[1]) == "--fd")
   {
     // Reserve sibling descriptor numbers to reproduce the old WBFS basename

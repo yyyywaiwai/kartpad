@@ -1,0 +1,22 @@
+{
+  "publicAPK": {
+    "file": "KartPad-0.5.1-code173-public-signer.apk",
+    "sha256": "9f3c9d15a03664f00d7a100ae886eb5fdc784b1452a9fa1fc9ead5b6b9004327",
+    "bytes": 169084491
+  },
+  "allNativeLibrariesMatchPrivate173": true,
+  "nativeLibraries": 4,
+  "certificateSHA256": "c1dbe0a0d72d830a5779476b346a750d0a37515adef992cad2f3863058f7f2f2",
+  "installedOnOwnerDevice": false,
+  "published": false,
+  "emulatorUpgrade": {
+    "public135To173InstallInPlace": true,
+    "sameAppUID": true,
+    "syntheticIdentitySaveAndPreferenceSentinelsUnchanged": true,
+    "sentinelFiles": 4,
+    "chooserObserved": true,
+    "emulatorOnly": true,
+    "gameplayTested": false
+  },
+  "independentDerivationsByteIdentical": true
+}

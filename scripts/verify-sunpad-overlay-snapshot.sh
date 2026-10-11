@@ -40,4 +40,4 @@ if [[ "${actual_commit}" != "${expected_commit}" ]]; then
 fi
 
 cmp "${reference}/LICENSE" "${repo_root}/LICENSES/GPL-3.0.txt"
-echo "SunPad overlay snapshot verified with pinned KartPad diagnostics at ${expected_commit}"
+echo "SunPad overlay baseline verified at ${expected_commit}, with three pinned KartPad adaptations"

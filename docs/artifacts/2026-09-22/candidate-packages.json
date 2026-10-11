@@ -1,0 +1,35 @@
+{
+  "packagingSourceCommit": "015c62c6c1ad41fa07e889d0dc442abee45269a4",
+  "artifacts": [
+    {
+      "file": "KartPad-0.5.1-upstream.1-ios-unsigned.ipa",
+      "sha256": "61e56b5ac628ea1a95c260205d2a366d549ca34cf8454617453ba3c8d21fa26f",
+      "bytes": 64832102
+    },
+    {
+      "file": "KartPad-0.5.1-upstream.1-tvos-unsigned.ipa",
+      "sha256": "2077b1aaaa72057909f350924ff06404eefbf4d36eef64bf43f16c05b38405b9",
+      "bytes": 64957130
+    },
+    {
+      "file": "KartPad-0.5.1-upstream.1-code171-private.apk",
+      "sha256": "bc82e18d27f2b35eca362e2c8ead12eccb6fd955ca3f2da22d9a031a23a3a125",
+      "bytes": 173732787
+    },
+    {
+      "file": "KartPad-0.5.1-upstream.1-code171-unsigned.aab",
+      "sha256": "3388675518e05e3200fea12c2695b8fa6e99944932a478da05ef5ced43e237b2",
+      "bytes": 133486198
+    },
+    {
+      "file": "KartPad-0.5.1-upstream.1-macos.zip",
+      "sha256": "3109bc78b2567d1940950f83502ba96acc446ff2988e6b35029e2919229b7838",
+      "bytes": 63137639
+    },
+    {
+      "file": "KartPad-upstream.1-source.tar.gz",
+      "sha256": "7eb7c2fde81e43481686b9ed2f22337d8753e9f681f4f7901d086733bf9751cc",
+      "bytes": 67400729
+    }
+  ]
+}

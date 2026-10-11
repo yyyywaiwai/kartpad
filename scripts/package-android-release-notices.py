@@ -12,25 +12,32 @@ import subprocess
 import tarfile
 import zipfile
 
-TAG = "v0.4.24-android.1"
-VERSION = "0.4.24-android.1"
-CODE = 117
+TAG = "v0.5.1"
+VERSION = "0.5.1"
+CODE = 229
 # Exact candidate; changing notes must not relabel its compiled source as HEAD.
-APPROVED_SOURCE = "e56531f8d98a765ff076274a204a7796221cd0df"
-APPROVED_APK = "c6a67c6478eb1b6bc7483e4b91e77def202b40a0973b17084974d0fac39baf2e"
-APPROVED_AAB = "9325cf48e6901ae5cee55f9af48d38ce1f5b8eeddac66606f7545e40cf96b7f8"
-APPROVED_SOURCE_ARCHIVE = "0d1d601eea44bb75db24a1ee0cdc765e4554b51e168ad46155ef1b8cd0a2056e"
+APPROVED_SOURCE = "de3a99c9054042f07e2840066b1bd06f4012659b"
+APPROVED_APK = "89859d4d08492013fa8a979f9732e8a2a33f883142812770e75f6b956fae4b19"
+APPROVED_AAB = "673df6a36bf0c63fb4ea443420837a7f05e2c96703ebe0b6e400ee5d632049dd"
+APPROVED_SOURCE_ARCHIVE = "9aa1d877cc072fee6302dfb235d9320f9c1ca5860ba8414a8262dd8a4e540e4c"
 APPROVED_NATIVE = {
     "lib/arm64-v8a/libSDL3.so": "d7a17c375adcb71818210581b885f59832d5f95b663aa7a7d493484a00a94753",
     "lib/arm64-v8a/libc++_shared.so": "c4c2fe5cbcb1fba0003a31fc7ab29a9bb12df6cc187ec45a806462540e83d93b",
     "lib/arm64-v8a/libkartpad_discio.so": "0e5bd27501b1aee71db63364f0673682e0cca3c0234d560d4c54ac87e01c0d0b",
-    "lib/arm64-v8a/libmain.so": "06feefa63ed3c507b751a8028884662a6fac1edcaa8a88d78fa9dadf9410b565"
+    "lib/arm64-v8a/libmain.so": "8180940e3cf4188a7132e55263785d9843f97b00145df54917a4990b0631d9de"
 }
 REPO = Path(__file__).resolve().parents[1]
 
 
 def sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
+
+
+def source_matches_candidate(manifest: dict, apk_name: str, apk_bytes: int) -> bool:
+    expected = {"bytes": apk_bytes, "sha256": APPROVED_APK}
+    return (manifest.get("schemaVersion") == 2
+            and manifest.get("sourceRevision") == APPROVED_SOURCE
+            and manifest.get("candidateArtifacts", {}).get(apk_name) == expected)
 
 
 def main() -> None:
@@ -59,7 +66,7 @@ def main() -> None:
                                                or ".." in Path(member.name).parts for member in members):
             parser.error("unsafe or duplicate source archive member")
         source_manifest = json.load(source.extractfile("SOURCE-MANIFEST.json"))
-        if source_manifest["applicationSources"]["android"] != APPROVED_SOURCE or source_manifest["androidAPK_SHA256"] != APPROVED_APK:
+        if not source_matches_candidate(source_manifest, args.apk.name, args.apk.stat().st_size):
             parser.error("source delivery is not bound to the approved candidate")
         expected_files = source_manifest["files"]
         if set(names) != set(expected_files) | {"SOURCE-MANIFEST.json"}:
@@ -85,20 +92,20 @@ def main() -> None:
         "INSTALL_ANDROID.md": REPO / "docs/INSTALL_ANDROID.md",
         "BUILD_ANDROID.md": REPO / "android/README.md",
         "RELEASE_NOTES.md": REPO / f"docs/releases/{TAG}.md",
-        "SOURCE_DELIVERY.md": REPO / "docs/releases/v0.4.24-source.md",
+        "SOURCE_DELIVERY.md": REPO / "docs/releases/v0.5.1-source.md",
         "SOURCE_RECONSTRUCTION.md": REPO / "docs/artifacts/2026-09-13/android-source-reconstruction.md",
         "RIGHTS_AND_LICENSES.md": REPO / "RIGHTS_AND_LICENSES.md",
         "THIRD_PARTY_NOTICES.md": REPO / "THIRD_PARTY_NOTICES.md",
         "dependencies.lock.json": REPO / "dependencies.lock.json",
         "LICENSES/GPL-3.0.txt": REPO / "LICENSES/GPL-3.0.txt",
-        "ThirdPartyLicenses/Aurora-MIT.txt": REPO / "ref/upstream/Wiicompiled/aurora-main/LICENSE",
-        "ThirdPartyLicenses/WiiCompiled-GPL-3.0.txt": REPO / "ref/upstream/Wiicompiled/LICENSE",
+        "ThirdPartyLicenses/Aurora-MIT.txt": REPO / "vendor/runtimes/android/aurora-main/LICENSE",
+        "ThirdPartyLicenses/WiiCompiled-GPL-3.0.txt": REPO / "vendor/runtimes/android/LICENSE",
         "ThirdPartyLicenses/Dolphin-COPYING.txt": REPO / "ref/upstream/dolphin/COPYING",
         "ThirdPartyLicenses/Dolphin-Externals.md": REPO / "ref/upstream/dolphin/Externals/licenses.md",
         "ThirdPartyLicenses/Apache-2.0.txt": REPO / "ref/upstream/dolphin/Externals/Vulkan-Headers/LICENSES/Apache-2.0.txt",
         "ThirdPartyLicenses/Mbed-TLS.txt": REPO / ".android-bootstrap/dependencies/mbedtls-4.1.1/LICENSE",
         "ThirdPartyLicenses/Minizip-NG.txt": REPO / ".android-bootstrap/dependencies/minizip-ng-55db144e03027b43263e5ebcb599bf0878ba58de/LICENSE",
-        "ThirdPartyLicenses/Dawn-BSD.txt": REPO / ".android-bootstrap/dependencies/Dawn-13abc3bc-LICENSE.txt",
+        "ThirdPartyLicenses/Dawn-BSD.txt": REPO / ".android-bootstrap/dependencies/dawn-android-c6b4efde6de3/LICENSES/Dawn-LICENSE",
     }
     for label, filename in {
         "Abseil-Apache-2.0.txt": "abseil-cpp-src/LICENSE",
@@ -145,7 +152,9 @@ def main() -> None:
                        "tools/android63-base-common-shards.json",
                        "tests/test_android_public_release_contract.py",
                        "scripts/audit-android-bundle.sh", "tests/test_android_bundle_audit_contract.py",
-                       "tests/test_android_update_in_place_contract.py")
+                       "tests/test_android_update_in_place_contract.py",
+                       "scripts/package-public-macos.py", "scripts/audit-public-macos.py",
+                       "tests/test_macos_dual_mode_contract.py")
     if any(not name.startswith("docs/") and name not in packaging_files
            for name in changed):
         parser.error("packaging source differs from candidate beyond documentation/packager")
@@ -157,13 +166,13 @@ def main() -> None:
         "aabSHA256": sha(args.aab.read_bytes()), "aabBytes": args.aab.stat().st_size,
         "signingCertificateSHA256": args.certificate_sha256, "nativeLibraries": native,
         "containsTranslatedGameCode": True, "containsGameData": False,
-        "containsPrivateSigningMaterial": False, "maintainerAuthorizedFreeCommunityRelease": True,
+        "containsPrivateSigningMaterial": False, "publicationApproval": "pending explicit owner approval",
         "upstreamRightsConfirmed": False, "profileableByShell": False, "debuggable": False,
-        "physicalAcceptance": "The owner accepted the interface and game operation on Pixel 9 Pro XL using private code116. Public code117 rebuilds the accepted application/runtime source with profiling disabled and the established release signer. No measured general FPS improvement, broad GPU acceptance or crash resolution is claimed.",
+        "physicalAcceptance": "Owner played private code227 on a Pixel 9 Pro XL: offline play passed and Retro online joined. Private code228 and public code229 have not been played on a physical Android device, and the deferred network receive has not been exercised online. Disposable emulator: public code135 updated in place to code229 kept all 2044 staged game files, first-install time and data inodes; Ready to play was shown and touch input reached the New Licence screen. No race was played on code229.",
         "sourceArchive": {"filename": args.source_archive.name, "bytes": args.source_archive.stat().st_size,
                           "sha256": sha(args.source_archive.read_bytes()),
                           "reconstruction": "Exact current Git snapshots, prepared Android runtime and pinned dependency source archives are supplied. Private translated game functions are regenerated from user-supplied inputs using delivered emitters and recipes. No new independent second-host or bit-identical rebuild claim."},
-        "releaseTwin": "Private hardware code116 retains its development signer. Public code117 uses the established public signer; no incompatible in-place update was attempted.",
+        "releaseTwin": "Private code227 and code228 use a development signer. Public code229 uses the established public signer. No owner device was modified during release preparation.",
         "noticesSHA256": {n: sha(b) for n, b in sorted(data.items())},
     }
     data["PROVENANCE.json"] = (json.dumps(provenance, indent=2, sort_keys=True) + "\n").encode()

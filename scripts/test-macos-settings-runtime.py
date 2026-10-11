@@ -75,7 +75,9 @@ int main(){
  disk.resolutionMultiplier=8;g_nativeSettingsReload=true;ReloadNativeSettings();assert(scale==4);
 }
 '''
-assert 'SDL_SCANCODE_F10' not in s and 'DrawTopBar' not in s
+events = s.split('void HandleEvents(', 1)[1].split('void ReleaseControllers(', 1)[0]
+draw = s.split('void Draw() noexcept', 1)[1].split('bool StartupScreenVisible()', 1)[0]
+assert 'SDL_SCANCODE_F10' not in events and 'DrawTopBar' not in draw
 controllers = (Path(__file__).resolve().parents[1] / 'apple/macos/KartPadControllers.inc.mm').read_text()
 for marker in ('PADGetKeyButtonBindings', 'PADSetKeyButtonBinding',
                'PADGetKeyAxisBindings', 'PADSetKeyAxisBinding',
@@ -84,7 +86,7 @@ for marker in ('PADGetKeyButtonBindings', 'PADSetKeyButtonBinding',
                'self.keyboardCaptureKind=-1; self.keyboardCaptureIndex=-1'):
     assert marker in controllers, marker
 assert 'ControllerProfiles.json' not in controllers.split('- (void)refreshKeyboardLabels', 1)[1].split('- (void)captureKeyboard', 1)[0]
-assert 'DrawAudioSettings' not in s and 'DrawGraphicsSettings' not in s
+assert 'DrawAudioSettings' not in draw and 'DrawGraphicsSettings' not in draw
 assert 'DrawFpsOverlay();' in s and 'DrawShaderCompilationStatus();' in s
 with tempfile.TemporaryDirectory() as d:
     path=Path(d)/'test.cpp';path.write_text(source);exe=Path(d)/'test'

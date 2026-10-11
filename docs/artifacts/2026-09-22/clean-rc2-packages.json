@@ -1,0 +1,30 @@
+{
+  "source": "f8e295a2fce61a1649768840f6f051e564f8e5f3",
+  "artifacts": {
+    "KartPad-v0.5.1-rc.2-android-arm64.apk": {
+      "bytes": 169084491,
+      "sha256": "10c1682f3b5904a4788bdbabb4e0eb0ef53dafa53a5ece1f4e68cf337070bff2"
+    },
+    "KartPad-v0.5.1-rc.2-ios-unsigned.ipa": {
+      "bytes": 64832738,
+      "sha256": "24f7a0229dbc660edea13769db0353cc262a0e541a94d121a98497476d20905b"
+    },
+    "KartPad-v0.5.1-rc.2-macos-arm64.zip": {
+      "bytes": 63188015,
+      "sha256": "415bf791b54bf4e4d6d72a079f49abb250ef3c2d7e7719c402433952c53aff2b"
+    },
+    "KartPad-v0.5.1-rc.2-notices.zip": {
+      "bytes": 58883,
+      "sha256": "f1036248bc83e3bd5725a440ffb5f2fc8c1420abae98d9162533175fcf968114"
+    },
+    "KartPad-v0.5.1-rc.2-source.tar.gz": {
+      "bytes": 362751961,
+      "sha256": "0c478e25d2e3e0b2ca91b163ee4c069e8cc6a19d8ef38737415d1537b36f0ffd"
+    }
+  },
+  "sourceFingerprint": {
+    "files": 7353,
+    "sha256": "fefb1a82a2ea247a5c898ef5cf76c2603bfb9a7be27567215321a802cf104c3c"
+  },
+  "sourceMembersVerified": 84
+}

@@ -67,14 +67,22 @@ class KartPadOverlayView(context: Context) : View(context) {
     private var rightX = 0f
     private var rightY = 0f
     private var motionSteeringX = 0f
+    private var shakeTrickHeld = false
+    private val releaseShakeTrick = Runnable {
+        shakeTrickHeld = false
+        publishState(connected = !hiddenForController)
+        if (BuildConfig.DEBUG) android.util.Log.d("KartPadMotion", "shake released buttons=$lastPublishedButtons")
+    }
     private var controllerConnected = false
     private var gasHoldGeneration = 0
+    private var autoAccelerate = KartPadTouchSettings.autoAccelerate(context)
     private var gasLocked = false
     private var leftStickAnchor: PointF? = null
     private val floatingStickDrawingFrame = RectF()
     private var debugVirtualKeyHapticCount = 0
     private var lastPublishedButtons = 0
     private var accessibilityButtons = 0
+    private var controllerKeyButtons = 0
     private val accessibilityPulseGenerations = mutableMapOf<String, Int>()
     private var accessibilityFocusId = View.NO_ID
     private var accessibilityHoverId = View.NO_ID
@@ -238,12 +246,16 @@ class KartPadOverlayView(context: Context) : View(context) {
     }
 
     fun clearTouchInput() {
+        mainHandler.removeCallbacks(releaseShakeTrick)
+        shakeTrickHeld = false
+        motionSteeringX = 0f
         pointerOwners.clear()
         leftX = 0f
         leftY = 0f
         rightX = 0f
         rightY = 0f
         accessibilityButtons = 0
+        controllerKeyButtons = 0
         accessibilityPulseGenerations.clear()
         gasLocked = false
         leftStickAnchor = null
@@ -649,6 +661,16 @@ class KartPadOverlayView(context: Context) : View(context) {
         onSuccess: (String) -> Unit,
         onFailure: (Throwable) -> Unit,
     ) {
+        val savedAutoAccelerate = KartPadTouchSettings.autoAccelerate(context)
+        fun restoreOption() {
+            clearTouchInput()
+            KartPadTouchSettings.setAutoAccelerate(context, savedAutoAccelerate)
+            reloadPresentationSettings()
+        }
+        fun fail(error: Throwable) { restoreOption(); onFailure(error) }
+        fun succeed(summary: String) { restoreOption(); onSuccess(summary) }
+        KartPadTouchSettings.setAutoAccelerate(context, true)
+        reloadPresentationSettings()
         runCatching {
             check(isLaidOut && width > 0 && height > 0) { "touch overlay is not laid out" }
             clearTouchInput()
@@ -669,7 +691,7 @@ class KartPadOverlayView(context: Context) : View(context) {
                     ) { "gas lock activated before one second" }
                 }.onFailure {
                     clearTouchInput()
-                    onFailure(it)
+                    fail(it)
                     return@postDelayed
                 }
                 mainHandler.postDelayed({
@@ -708,13 +730,60 @@ class KartPadOverlayView(context: Context) : View(context) {
                             "unlock unexpectedly changed haptic count=$debugVirtualKeyHapticCount"
                         }
                         "delay=${elapsed}ms cyan=true haptics=1 release=locked tap=neutral"
-                    }.onSuccess(onSuccess).onFailure {
+                    }.onSuccess { summary ->
+                        runDebugAutoAccelerateOffFixture(
+                            onSuccess = { succeed("$summary off=held-release persisted=true stale-timer=cancelled accessibility=disabled") },
+                            onFailure = ::fail,
+                        )
+                    }.onFailure {
                         clearTouchInput()
-                        onFailure(it)
+                        fail(it)
                     }
                 }, 200L)
             }, 900L)
-        }.onFailure(onFailure)
+        }.onFailure(::fail)
+    }
+
+    private fun runDebugAutoAccelerateOffFixture(
+        onSuccess: () -> Unit,
+        onFailure: (Throwable) -> Unit,
+    ) {
+        clearTouchInput()
+        KartPadTouchSettings.setAutoAccelerate(context, false)
+        reloadPresentationSettings()
+        val a = controls.first { it.id == "A" }
+        val down = SystemClock.uptimeMillis()
+        dispatchSingleTouch(a, MotionEvent.ACTION_DOWN, down, down)
+        mainHandler.postDelayed({
+            runCatching {
+                check(!gasLocked && lastPublishedButtons == BUTTON_A)
+                check(!KartPadTouchSettings.autoAccelerate(context))
+                val aId = controls.indexOf(a)
+                val provider = accessibilityNodeProvider!!
+                check(provider.createAccessibilityNodeInfo(aId)!!.actionList.none { it.id == ACTION_TOGGLE_GAS_LOCK })
+                check(!provider.performAction(aId, ACTION_TOGGLE_GAS_LOCK, null))
+                dispatchSingleTouch(a, MotionEvent.ACTION_UP, down, SystemClock.uptimeMillis())
+                check(lastPublishedButtons == 0)
+                KartPadTouchSettings.setAutoAccelerate(context, true)
+                reloadPresentationSettings()
+                val pendingDown = SystemClock.uptimeMillis()
+                dispatchSingleTouch(a, MotionEvent.ACTION_DOWN, pendingDown, pendingDown)
+                KartPadTouchSettings.setAutoAccelerate(context, false)
+                reloadPresentationSettings()
+                check(lastPublishedButtons == BUTTON_A && !gasLocked)
+                KartPadTouchSettings.setAutoAccelerate(context, true)
+                reloadPresentationSettings()
+                pendingDown
+            }.onSuccess { pendingDown ->
+                mainHandler.postDelayed({
+                    runCatching {
+                        check(!gasLocked && lastPublishedButtons == BUTTON_A)
+                        dispatchSingleTouch(a, MotionEvent.ACTION_UP, pendingDown, SystemClock.uptimeMillis())
+                        check(lastPublishedButtons == 0)
+                    }.onSuccess { onSuccess() }.onFailure(onFailure)
+                }, GAS_LOCK_DELAY_MS + 100L)
+            }.onFailure(onFailure)
+        }, GAS_LOCK_DELAY_MS + 100L)
     }
 
     fun setMotionSteering(value: Float) {
@@ -722,9 +791,23 @@ class KartPadOverlayView(context: Context) : View(context) {
         publishState(connected = true)
     }
 
+    fun triggerShakeTrick() {
+        if (controllerConnected || editingLayout || !hasWindowFocus() ||
+            !KartPadTouchSettings.shakeTricksEnabled(context)) return
+        shakeTrickHeld = true
+        mainHandler.removeCallbacks(releaseShakeTrick)
+        publishState(connected = true)
+        if (BuildConfig.DEBUG) android.util.Log.d("KartPadMotion", "shake pressed buttons=$lastPublishedButtons")
+        mainHandler.postDelayed(releaseShakeTrick, 100L)
+    }
+
     fun setControllerConnected(connected: Boolean) {
         controllerConnected = connected
-        if (connected) motionSteeringX = 0f
+        if (connected) {
+            motionSteeringX = 0f
+            shakeTrickHeld = false
+            mainHandler.removeCallbacks(releaseShakeTrick)
+        }
         publishState(connected = true)
     }
 
@@ -743,6 +826,14 @@ class KartPadOverlayView(context: Context) : View(context) {
     }
 
     fun reloadPresentationSettings() {
+        autoAccelerate = KartPadTouchSettings.autoAccelerate(context)
+        if (!autoAccelerate) {
+            // Cancel the delayed latch, but preserve genuine pointer/button holds.
+            gasHoldGeneration += 1
+            gasLocked = false
+            updateGasAccessibility()
+            publishState(connected = !hiddenForController)
+        }
         controlOpacity = KartPadTouchSettings.opacity(context)
         controlSizeScale = KartPadTouchSettings.size(context)
         modernCStickHorizontal = KartPadTouchSettings.modernCStickHorizontal(context)
@@ -1141,8 +1232,16 @@ class KartPadOverlayView(context: Context) : View(context) {
         }
     }
 
+    /** Buttons from a controller SDL does not read (see KartPadControllerKeys). */
+    fun setControllerKeyButtons(buttons: Int) {
+        if (controllerKeyButtons == buttons) return
+        controllerKeyButtons = buttons
+        publishState(connected = !hiddenForController || buttons != 0)
+    }
+
     private fun publishState(connected: Boolean) {
-        var buttons = (if (gasLocked) BUTTON_A else 0) or accessibilityButtons
+        var buttons = (if (gasLocked) BUTTON_A else 0) or accessibilityButtons or controllerKeyButtons
+        if (shakeTrickHeld) buttons = buttons or BUTTON_UP
         pointerOwners.values.forEach { owner ->
             buttons = buttons or (controls.firstOrNull { it.id == owner }?.mask ?: 0)
         }
@@ -1161,9 +1260,10 @@ class KartPadOverlayView(context: Context) : View(context) {
             updateGasAccessibility()
             return
         }
+        if (!autoAccelerate) return
         val generation = gasHoldGeneration
         mainHandler.postDelayed({
-            if (generation != gasHoldGeneration ||
+            if (!autoAccelerate || generation != gasHoldGeneration ||
                 !pointerOwners.containsValue("A")) return@postDelayed
             gasLocked = true
             updateGasAccessibility()
@@ -1275,6 +1375,7 @@ class KartPadOverlayView(context: Context) : View(context) {
     }
 
     private fun toggleAccessibilityGasLock() {
+        if (!autoAccelerate) return
         gasHoldGeneration += 1
         gasLocked = !gasLocked
         updateGasAccessibility()
@@ -1369,7 +1470,7 @@ class KartPadOverlayView(context: Context) : View(context) {
                         ACTION_STICK_RIGHT, "Move right",
                     ))
                 }
-                if (control.id == "A") {
+                if (control.id == "A" && autoAccelerate) {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
                         stateDescription = if (gasLocked) "Acceleration locked" else "Unlocked"
                     }
@@ -1428,7 +1529,7 @@ class KartPadOverlayView(context: Context) : View(context) {
                     )
                     true
                 }
-                ACTION_TOGGLE_GAS_LOCK -> if (control.id == "A") {
+                ACTION_TOGGLE_GAS_LOCK -> if (control.id == "A" && autoAccelerate) {
                     toggleAccessibilityGasLock()
                     true
                 } else false

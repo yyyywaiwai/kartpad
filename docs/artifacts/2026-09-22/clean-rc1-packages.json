@@ -1,0 +1,34 @@
+{
+  "source": "2886684b7ec994e685dc0bc9f097dbbdc953551e",
+  "artifacts": {
+    "KartPad-v0.5.1-rc.1-android-arm64.apk": {
+      "bytes": 169084491,
+      "sha256": "5243b399b6b348fe6f9abe39bf0a0d7248966accb26f4269ea2181149ef677dc"
+    },
+    "KartPad-v0.5.1-rc.1-ios-unsigned.ipa": {
+      "bytes": 64833135,
+      "sha256": "2f0af7d222dc4e23a2178deae93341e16bd43f0f6312890148d3602fcea4fedb"
+    },
+    "KartPad-v0.5.1-rc.1-macos-arm64.zip": {
+      "bytes": 63187785,
+      "sha256": "53f07b6df0430f3efd31cd6c1ac8948ba83519abab68ec1ff6aa1fd1a8246380"
+    }
+  },
+  "sourceDelivery": {
+    "bytes": 362740111,
+    "sha256": "fcf62bf619b6a06ab4b1c100b0eada89cbea7e335b120859225fa15379120e7f",
+    "members": 85,
+    "source": "2886684b7ec994e685dc0bc9f097dbbdc953551e",
+    "status": "candidate_not_release_approval"
+  },
+  "nativeEquivalence": {
+    "android174NativeEquals173": {
+      "lib/arm64-v8a/libSDL3.so": true,
+      "lib/arm64-v8a/libc++_shared.so": true,
+      "lib/arm64-v8a/libkartpad_discio.so": true,
+      "lib/arm64-v8a/libmain.so": true
+    },
+    "ios63ExecutableEquals62": true
+  },
+  "status": "local RC only; pending behavior investigation and device/online acceptance"
+}

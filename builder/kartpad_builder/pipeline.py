@@ -1,16 +1,20 @@
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
+import re
 import shutil
 import subprocess
+import sys
+import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 from .errors import BuildError
-from .packaging import audit_app, package_unsigned_ipa
+from .packaging import audit_app, load_version, package_unsigned_ipa
 from .profiles import Profile, canonical_json, sha256_file
 from .retro_rewind import RetroRewindInputs, prepare_inputs
 
@@ -18,11 +22,47 @@ from .retro_rewind import RetroRewindInputs, prepare_inputs
 PIPELINE_VERSION = 1
 
 
-def source_fingerprint(repo: Path) -> str:
+class ProgressLog:
+    """Newline-delimited JSON stage events that frontends such as PadMint read.
+
+    Written to `<work-root>/logs/progress.jsonl`. Events describe stages only;
+    compiler output stays in the ordinary build log.
+    """
+
+    def __init__(self, path: Path | None) -> None:
+        self.path = path
+        self.started = time.monotonic()
+
+    def emit(self, event: str, stage: str, **fields: Any) -> None:
+        if self.path is None:
+            return
+        self.path.parent.mkdir(parents=True, exist_ok=True)
+        record = {"schema_version": 1, "event": event, "stage": stage,
+                  "elapsed_seconds": round(time.monotonic() - self.started, 2), **fields}
+        with self.path.open("a") as stream:
+            stream.write(json.dumps(record) + "\n")
+
+    @contextlib.contextmanager
+    def stage(self, name: str):
+        self.emit("stage_started", name)
+        begun = time.monotonic()
+        try:
+            yield
+        except BaseException as error:
+            self.emit("stage_failed", name, stage_elapsed_seconds=round(time.monotonic() - begun, 2),
+                      error=type(error).__name__)
+            raise
+        self.emit("stage_completed", name, stage_elapsed_seconds=round(time.monotonic() - begun, 2))
+
+
+def source_fingerprint(repo: Path, required: tuple[str, ...] | None = None) -> str:
     # Git's parent diff only records a submodule's "dirty" flag. Hash each
     # initialized source repository so two different local edits cannot reuse
     # the same build cache.
-    def fingerprint(root: Path) -> bytes:
+    # With `required`, top-level submodules outside that list may be left
+    # uninitialized (their pinned commit is still hashed): an Android game pack
+    # never reads the iOS, macOS or tvOS runtimes.
+    def fingerprint(root: Path, required: tuple[str, ...] | None = None) -> bytes:
         tracked = subprocess.check_output(["git", "-C", str(root), "ls-files", "-s", "-z"])
         diff = subprocess.check_output([
             "git", "-C", str(root), "diff", "--binary", "--no-ext-diff",
@@ -40,11 +80,13 @@ def source_fingerprint(repo: Path) -> str:
                 continue
             child = root / os.fsdecode(name)
             if not (child / ".git").exists():
+                if required is not None and os.fsdecode(name) not in required:
+                    continue
                 raise BuildError(f"Missing initialized source submodule: {child}; run git submodule update --init --recursive")
             digest.update(name + b"\0" + fingerprint(child))
         return digest.digest()
 
-    return fingerprint(repo).hex()
+    return fingerprint(repo, required).hex()
 
 
 def cache_key(profile: Profile, image_sha256: str, source_sha256: str) -> str:
@@ -75,6 +117,39 @@ def run(command: list[str], *, env: dict[str, str] | None = None) -> None:
 
 def _hex(value: int | str) -> str:
     return value if isinstance(value, str) else f"0x{value:08X}"
+
+
+def _script(path: Path) -> list[str]:
+    """Run repository Python helpers with this interpreter (no shebangs on Windows)."""
+    return [sys.executable, str(path)] if path.suffix == ".py" else [str(path)]
+
+
+def find_dotnet() -> str:
+    for candidate in (
+        os.environ.get("KARTPAD_DOTNET"),
+        os.environ.get("DOTNET_ROOT") and str(Path(os.environ["DOTNET_ROOT"]) / ("dotnet.exe" if os.name == "nt" else "dotnet")),
+        "/opt/homebrew/opt/dotnet@8/bin/dotnet",
+        shutil.which("dotnet"),
+    ):
+        if candidate and Path(candidate).is_file():
+            return candidate
+    raise BuildError("missing .NET 8 SDK (dotnet)")
+
+
+def prepare_translator(repo: Path) -> Path:
+    """Stage the pinned translator source and build it; returns Translator.Cli.dll."""
+    stage = repo / "build/wiicompiled-fpscr"
+    run(_script(repo / "scripts/stage-maintained-translator.py") + [str(stage)])
+    project = stage / "translator/src/Translator.Cli/Translator.Cli.csproj"
+    run([find_dotnet(), "build", str(project), "-c", "Release"])
+    return project.parent / "bin/Release/net8.0/Translator.Cli.dll"
+
+
+def _add_underscore_aliases(blob: Path, prefix: str) -> None:
+    """Give each data blob symbol a leading-underscore alias for Mach-O consumers."""
+    pattern = re.compile(r"^\.globl (" + prefix + r"[^\n]+)\n\1:", re.M)
+    text = blob.read_text()
+    blob.write_text(pattern.sub(r".globl \1\n.globl _\1\n\1:\n_\1:", text))
 
 
 def write_translator_manifest(
@@ -187,7 +262,10 @@ def extract(profile: Profile, image: Path, output: Path) -> None:
     if not executable:
         raise BuildError(f"missing {extractor['command']} {extractor['version']}")
     version = subprocess.check_output([executable, "--version"], text=True).strip()
-    if version != f"{extractor['command']} {extractor['version']}":
+    # "nodtool 2.0.0-alpha.9" on macOS; "nodtool.EXE 2.0.0-alpha.9 <commit>" on Windows.
+    words = version.split()
+    name = words[0].lower().removesuffix(".exe") if words else ""
+    if name != extractor["command"] or len(words) < 2 or words[1] != extractor["version"]:
         raise BuildError(f"expected {extractor['command']} {extractor['version']}, found {version}")
     output.parent.mkdir(parents=True, exist_ok=True)
     stage = output.with_name(output.name + f".partial.{os.getpid()}")
@@ -234,39 +312,38 @@ def translate(
             or "set(MKW_HAVE_RETRO_REWIND_SHARDS ON)" not in graph
         ):
             raise BuildError("cached translation failed profile validation")
-        guard = repo / "scripts/inject-retro-rel-report-guard.py"
-        run([str(guard), "--verify", str(output / "functions" / "func_8000A440.cpp")])
-        run([str(guard), "--verify-shards", str(output / "build_shards")])
+        guard = _script(repo / "scripts/inject-retro-rel-report-guard.py")
+        run(guard + ["--verify", str(output / "functions" / "func_8000A440.cpp")])
+        run(guard + ["--verify-shards", str(output / "build_shards")])
         print(f"Reused validated translation: {output}")
         return
-    run([str(repo / "scripts/prepare-patched-translator.sh")])
+    translator = prepare_translator(repo)
     output.mkdir(parents=True, exist_ok=True)
     mod_output = output.parent / "mod"
     manifest = output / "kartpad-builder-profile.yml"
     write_translator_manifest(profile, repo, extraction, output, manifest, retro, mod_output)
-    translator = repo / "build/wiicompiled-fpscr/translator/src/Translator.Cli/bin/Release/net8.0/Translator.Cli.dll"
-    dotnet = shutil.which("dotnet") or "/opt/homebrew/opt/dotnet@8/bin/dotnet"
+    dotnet = find_dotnet()
     config = profile.data["translation"]
     metadata = output / "base_translation_output.json"
     entry = _hex(config["entryPoints"][0])
     run([dotnet, str(translator), "translate-recursive", entry, "--project", str(manifest), "--profile", "retro-rewind", "--threads", str(jobs), "--prune-stale", "--output-metadata", str(metadata)])
     for injector in config["injectors"]:
-        run([str(repo / injector["script"]), str(output / "functions" / injector["function"])])
+        run(_script(repo / injector["script"]) + [str(output / "functions" / injector["function"])])
     base_manifest = output / "base/base_manifest.json"
     run([dotnet, str(translator), "emit-base-manifest", "--project", str(manifest), "--profile", "retro-rewind", "--out", str(base_manifest.parent), "--functions-dir", str(output / "functions"), "--translation-output-metadata", str(metadata), "--region", profile.data["game"]["region"]])
     run([dotnet, str(translator), "translate-mod", "--project", str(manifest), "--profile", "retro-rewind", "--base-manifest", str(base_manifest), "--base-translation-output-metadata", str(metadata), "--code-pul", str(retro.code_pul), "--mod-root", str(retro.root), "--mod-name", "Retro Rewind", "--region", profile.data["game"]["region"], "--out", str(mod_output), "--prefer-cached-inputs", "--emit-cpp", "--threads", str(jobs), "--retro-wfc-payload", str(retro.payload)])
     run([dotnet, str(translator), "generate-data-init", "--project", str(manifest), "--profile", "retro-rewind"])
     blob = output / "data_sections_init_blobs.S"
     if ".globl _kData_" not in blob.read_text():
-        run(["perl", "-0pi", "-e", r"s/^\.globl (kData_[^\n]+)\n\1:/.globl $1\n.globl _$1\n$1:\n_$1:/mg", str(blob)])
+        _add_underscore_aliases(blob, "kData_")
     mod_blob = mod_output / "cpp/mod_data_patches_blobs.S"
     if mod_blob.is_file() and ".globl _k" not in mod_blob.read_text():
-        run(["perl", "-0pi", "-e", r"s/^\.globl (k[^\n]+)\n\1:/.globl $1\n.globl _$1\n$1:\n_$1:/mg", str(mod_blob)])
+        _add_underscore_aliases(mod_blob, "k")
     run([dotnet, str(translator), "emit-build-shards", "--project", str(manifest), "--profile", "retro-rewind", "--base-metadata", str(metadata), "--base-functions-dir", str(output / "functions"), "--native-source-dir", str(repo / "build/wiicompiled-fpscr/runtime/src"), "--resolved-profile", str(mod_output / "resolved_dispatch_profile.json"), "--retro-cpp-dir", str(mod_output / "cpp"), "--out", str(output / "build_shards")])
-    guard = repo / "scripts/inject-retro-rel-report-guard.py"
-    run([str(guard), "--inject-shards", str(output / "build_shards")])
-    run([str(guard), "--verify", str(output / "functions" / "func_8000A440.cpp")])
-    run([str(guard), "--verify-shards", str(output / "build_shards")])
+    guard = _script(repo / "scripts/inject-retro-rel-report-guard.py")
+    run(guard + ["--inject-shards", str(output / "build_shards")])
+    run(guard + ["--verify", str(output / "functions" / "func_8000A440.cpp")])
+    run(guard + ["--verify-shards", str(output / "build_shards")])
     count = len(list((output / "functions").glob("func_*.cpp")))
     graph = shards.read_text()
     if (
@@ -303,15 +380,23 @@ def build(
     key = cache_key(profile, image_sha256, fingerprint)
     profile_root = work_root / profile.id
     workspace = profile_root / "builds" / key
-    extraction = extraction_override or profile_root / "inputs" / image_sha256 / "disc"
+    extraction = extraction_override or profile_root / "inputs" / image_sha256[:16] / "disc"
     if extraction_override is not None:
         _validate_extraction(profile, extraction_override)
     translation = translation_override or workspace / "translation"
-    retro = prepare_inputs(profile, work_root, install=False)
+    progress = ProgressLog(work_root / "logs/progress.jsonl")
+    with progress.stage("preflight"):
+        # Bootstrap downloads pinned inputs to the checkout's shared cache; builds in
+        # any --work-root read them from there rather than expecting a second copy.
+        retro = prepare_inputs(profile, repo / "private/builder", install=False)
     if app_override is None:
-        extract(profile, image, extraction)
+        with progress.stage("extract"):
+            extract(profile, image, extraction)
         if translation_override is None:
-            translate(profile, repo, extraction, translation, jobs, retro)
+            with progress.stage("translate"):
+                translate(profile, repo, extraction, translation, jobs, retro)
+        else:
+            progress.emit("stage_skipped", "translate", reason="translation override supplied")
         runtime_source = workspace / "ios-runtime-source"
         xcode_build = workspace / "ios-device-xcode"
         discio_key = dependency_cache_key(
@@ -325,34 +410,48 @@ def build(
         )
         discio_source = repo / f"build/builder-dependencies/discio-iphoneos-{discio_key}-source"
         discio_build = repo / f"build/builder-dependencies/discio-iphoneos-{discio_key}-build"
-        if not (discio_build / "Source/Core/DiscIO/libdiscio.a").is_file():
-            run([str(repo / "scripts/build-ios-discio-probe.sh"), str(repo / "ref/upstream/dolphin"), str(discio_source), str(discio_build), "iphoneos"])
-        if not runtime_source.exists():
-            runtime_stage = runtime_source.with_name(runtime_source.name + ".partial")
-            if runtime_stage.exists():
-                shutil.rmtree(runtime_stage)
-            env = os.environ.copy()
-            env["KARTPAD_PREPARE_ONLY"] = "1"
-            env["KARTPAD_DISCIO_SOURCE_DIR"] = str(discio_source)
-            env["KARTPAD_DISCIO_BUILD_DIR"] = str(discio_build)
-            try:
-                run([str(repo / "scripts/prepare-ios-game-runtime.sh"), str(translation), str(runtime_stage), str(workspace / "runtime-build"), "dual"], env=env)
-                runtime_stage.rename(runtime_source)
-            except Exception:
+        with progress.stage("dependencies"):
+            if not (discio_build / "Source/Core/DiscIO/libdiscio.a").is_file():
+                run([str(repo / "scripts/build-ios-discio-probe.sh"), str(repo / "ref/upstream/dolphin"), str(discio_source), str(discio_build), "iphoneos"])
+        with progress.stage("generate"):
+            if not runtime_source.exists():
+                runtime_stage = runtime_source.with_name(runtime_source.name + ".partial")
                 if runtime_stage.exists():
                     shutil.rmtree(runtime_stage)
-                raise
-        env = os.environ.copy()
-        env["KARTPAD_DISCIO_SOURCE_DIR"] = str(discio_source)
-        env["KARTPAD_DISCIO_BUILD_DIR"] = str(discio_build)
-        run([str(repo / "scripts/build-ios-device-game-app.sh"), str(runtime_source), str(xcode_build), str(translation), "dual"], env=env)
+                env = os.environ.copy()
+                env["KARTPAD_PREPARE_ONLY"] = "1"
+                env["KARTPAD_DISCIO_SOURCE_DIR"] = str(discio_source)
+                env["KARTPAD_DISCIO_BUILD_DIR"] = str(discio_build)
+                try:
+                    run([str(repo / "scripts/prepare-ios-game-runtime.sh"), str(translation), str(runtime_stage), str(workspace / "runtime-build"), "dual"], env=env)
+                    runtime_stage.rename(runtime_source)
+                except Exception:
+                    if runtime_stage.exists():
+                        shutil.rmtree(runtime_stage)
+                    raise
+        with progress.stage("compile"):
+            env = os.environ.copy()
+            env["KARTPAD_DISCIO_SOURCE_DIR"] = str(discio_source)
+            env["KARTPAD_DISCIO_BUILD_DIR"] = str(discio_build)
+            run([str(repo / "scripts/build-ios-device-game-app.sh"), str(runtime_source), str(xcode_build), str(translation), "dual"], env=env)
         app = xcode_build / "Release-iphoneos/KartPad.app"
     else:
+        for skipped in ("extract", "translate", "dependencies", "generate", "compile"):
+            progress.emit("stage_skipped", skipped, reason="prebuilt app override supplied")
         app = app_override
+    with progress.stage("package"):
+        return _package(repo, profile, image_sha256, output, fingerprint, key, app, workspace)
+
+
+def _package(repo: Path, profile: Profile, image_sha256: str, output: Path, fingerprint: str,
+             key: str, app: Path, workspace: Path) -> BuildResult:
     audit_app(app, (str(repo), str(Path.home()), str(workspace)))
+    version = load_version(repo)
     provenance = {
         "schemaVersion": 1,
         "builderVersion": "0.2.0-preview.3",
+        "appVersion": version["version"],
+        "appBuild": version["build"],
         "pipelineVersion": PIPELINE_VERSION,
         "profileId": profile.id,
         "profileSHA256": profile.profile_sha256,
@@ -367,5 +466,5 @@ def build(
         name: repo / name
         for name in ("LICENSE", "RIGHTS_AND_LICENSES.md", "THIRD_PARTY_NOTICES.md")
     }
-    digest = package_unsigned_ipa(app, output, provenance, license_entries)
+    digest = package_unsigned_ipa(app, output, provenance, license_entries, version)
     return BuildResult(ipa=output, ipa_sha256=digest, app=app, cache_key=key)

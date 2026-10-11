@@ -80,6 +80,13 @@ ln -sfn "${translation_root}" "${generated_link}"
 plutil -lint "${repo_root}/apple/tvos/RuntimeInfo.plist" \
   "${repo_root}/apple/ios/PrivacyInfo.xcprivacy" >/dev/null
 path_map_flags="-ffile-prefix-map=${repo_root}=KartPad -fmacro-prefix-map=${repo_root}=KartPad"
+version_cmake_args=()
+if [[ -n "${KARTPAD_TVOS_MARKETING_VERSION:-}" ]]; then
+  version_cmake_args+=("-DKARTPAD_TVOS_MARKETING_VERSION=${KARTPAD_TVOS_MARKETING_VERSION}")
+fi
+if [[ -n "${KARTPAD_TVOS_BUILD_NUMBER:-}" ]]; then
+  version_cmake_args+=("-DKARTPAD_TVOS_BUILD_NUMBER=${KARTPAD_TVOS_BUILD_NUMBER}")
+fi
 cmake -S "${runtime_source}" -B "${xcode_build}" -G Xcode \
   -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_CONFIGURATION_TYPES=Release \
@@ -100,6 +107,7 @@ cmake -S "${runtime_source}" -B "${xcode_build}" -G Xcode \
   -DMKW_KARTPAD_RUNTIME_INCLUDE="${repo_root}/runtime/include" \
   -DMKW_KARTPAD_REPO_ROOT="${repo_root}" \
   -DMKW_KARTPAD_MINIZIP_SOURCE_DIR="${minizip_source}" \
+  "${version_cmake_args[@]}" \
   -DMKW_TRANSLATED_COMPILE_JOBS=2
 if [[ "${sdk}" = "appletvos" ]]; then
   project="${xcode_build}/mkw_recompiled.xcodeproj/project.pbxproj"

@@ -1,0 +1,23 @@
+{
+  "version": "0.5.0",
+  "build": 58,
+  "source": "e8f23632f3e3a1890bde40a105f809cd7e5c3e04",
+  "iosDsymUuid": "9581C914-86C1-3B04-A5D9-2591F917B9F8",
+  "artifact": {
+    "name": "KartPad-v0.5.0-build58-local-unsigned.ipa",
+    "bytes": 41755217,
+    "sha256": "c459798f4f21a21c6ee1f4301ee566d050724a32cb0d80b9e71d53aa594573e2"
+  },
+  "fixes": [
+    "Select framebuffer blit pipeline by destination RGBA/BGRA format",
+    "Cap Apple speculative prewarm at 128 recipes and one background compiler; wake demand promotions"
+  ],
+  "validation": {
+    "build": "Physical iPhoneOS Release build and package audit passed; dSYM UUID matched; signed device copy verified",
+    "renderer": "Old validation-enabled Metal probe reproduces exact iPad attachment-format abort; corrected probe passes independent pixels, scaled and offscreen readbacks, capacity splits, interpolation and frame-worker execution",
+    "startup": "Seeded bundled 1199-row database with empty local Dawn cache completed bounded prewarm and GPU checks on Mac; not physical-iPad cold-cache acceptance",
+    "regression": "All four production SQLite/admission/worker harnesses pass ASan/UBSan; all three CI checks pass on compiled source",
+    "deployment": "Installed in place on owner iPad after explicit confirmation; 30 freshly backed-up save/settings files read back identical; original WBFS and extracted data remain; normal launch and live process confirmed"
+  },
+  "acceptance": "Replacement installed for owner testing. Physical gameplay and iPad cold-cache acceptance pending. No public release. Android code133 and Mac build57 binaries predate this correction; their maintained source fixes are pushed, replacement app packages still required."
+}

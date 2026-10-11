@@ -1,20 +1,23 @@
 {
   "schemaVersion": 1,
-  "generatedAt": "2026-09-06",
+  "generatedAt": "2026-09-22",
   "dependencies": [
     {
       "name": "WiiCompiled",
       "repository": "https://github.com/patchzyy/Wiicompiled.git",
-      "commit": "1912292c804ff9b1b79938de89369ec4496f9fff",
-      "tree": "34f9deda094915e12f47316059911b28c6812964",
+      "commit": "bd219e38a3e9a1a5047ce41d8cd01210bef3af43",
+      "tree": "540262a66e7dbe8459063d5f092deb7b192f7b02",
       "path": "ref/upstream/Wiicompiled",
       "license": "GPL-3.0-only; upstream README specifies version 3",
       "role": "Primary static translator and runtime baseline",
       "pushDisabled": true,
       "maintainedSource": {
         "path": "vendor/wiicompiled",
-        "method": "git-subtree-squash",
-        "upstreamBase": "1912292c804ff9b1b79938de89369ec4496f9fff",
+        "method": "git-submodule",
+        "repository": "https://github.com/chrissotraidis/wiicompiled.git",
+        "branch": "kartpad-translator",
+        "commit": "937c334d4ebec0466198a1bc56c1334a838bc654",
+        "upstreamBase": "bd219e38a3e9a1a5047ce41d8cd01210bef3af43",
         "activeConsumers": [
           "translator"
         ],
@@ -119,13 +122,15 @@
       "iosSimulatorArm64Artifact": "dawn-ios-simulator-arm64.tar.gz",
       "iosSimulatorArm64Sha256": "feb5c4e07da90c47d2f279bf83c43bc67db01dac1138cb9af8ea9b5b50c67fbf",
       "androidArm64Artifact": "dawn-android-aarch64.tar.gz",
-      "androidArm64Url": "https://github.com/encounter/dawn-build/releases/download/v20260603.191052/dawn-android-aarch64.tar.gz",
-      "androidArm64Bytes": 11645719,
-      "androidArm64Sha256": "27d910dee1201fd1e5b6ac567f0ba2306ebf2135e9f40b6929976c365d38b09b",
-      "androidMetadataSanitization": "Replace the pinned Linux NDK API-28 liblog.so absolute path in DawnTargets.cmake with Android's logical log library; reject remaining /usr/local/lib/android/sdk paths.",
-      "androidSanitizedDawnTargetsSha256": "950622eccd03a73154849a5f682347b1f69b5cb5847cc00857eb12459fee4591",
+      "androidArm64Url": "https://github.com/chrissotraidis/wiicompiled/releases/download/dawn-android-20261001.2/dawn-android-aarch64.tar.gz",
+      "androidArm64Bytes": 10790325,
+      "androidArm64Sha256": "804d37929accae440a4a92e10aede9752ea223e4e5bb3227a4d73f308ef24e87",
+      "androidMetadataSanitization": "The maintained Android archive already links logical log and contains no builder paths. Verify extracted files against the locked archive without modifying them.",
+      "androidSanitizedDawnTargetsSha256": "f914f68fa00893267e91cd64a9d91a05f0882ea6880dc48f296ca6711b11e3db",
       "declaredAt": "ref/upstream/Wiicompiled/aurora-main/CMakeLists.txt",
-      "role": "Pinned WebGPU implementation used by vendored Aurora; macOS and iOS artifacts are hash-verified at configure time"
+      "role": "Pinned WebGPU implementation used by vendored Aurora; macOS and iOS artifacts are hash-verified at configure time",
+      "androidLibrarySha256": "752903e7fb24343db9cf09c70aaf63c2b861b5f85a77c29a2ab60e9556514286",
+      "androidDawnVersionIdentity": "5b8cc623f665a44645e77fa0a2a730c749333de4"
     },
     {
       "name": "SDL3 Android",

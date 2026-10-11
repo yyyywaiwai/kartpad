@@ -296,7 +296,9 @@ static NSString *KPProfileKey(SDL_Gamepad *pad) {
   if (old >= 0) PADClearPort(old);
   if (port >= 0) {
     Wup028Adapter::SetPortAssignment(port, -1);
-    RuntimeConfigFile::SetGameCubeAdapterPort(port, -1);
+    // Upstream now routes adapters through SDL's normal device assignment.
+    // Clear the retired legacy override for rollback compatibility.
+    RuntimeConfigFile::WriteSetting("controller", "adapter_port_" + std::to_string(port + 1), "0");
     for (unsigned i = 0; i < PADCount(); ++i)
       if (PADGetSDLGamepadForIndex(i) == pad) { PADSetPortForIndex(i, port); break; }
   }

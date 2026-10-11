@@ -35,15 +35,34 @@ class AndroidPublicReleaseTests(unittest.TestCase):
             "lib/arm64-v8a/libSDL3.so", "lib/arm64-v8a/libc++_shared.so",
         })
         self.assertEqual(native["lib/arm64-v8a/libmain.so"],
-                         "06feefa63ed3c507b751a8028884662a6fac1edcaa8a88d78fa9dadf9410b565")
+                         "8180940e3cf4188a7132e55263785d9843f97b00145df54917a4990b0631d9de")
         for digest in native.values():
             self.assertRegex(digest, r"^[0-9a-f]{64}$")
         self.assertIn("native != APPROVED_NATIVE", source)
 
+    def test_source_manifest_rejects_wrong_candidate(self):
+        import importlib.util
+        import copy
+        spec = importlib.util.spec_from_file_location("notices", REPO / "scripts/package-android-release-notices.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        name = "KartPad-v0.5.1-arm64.apk"
+        good = {"schemaVersion": 2, "sourceRevision": module.APPROVED_SOURCE,
+                "candidateArtifacts": {name: {"bytes": 169109067, "sha256": module.APPROVED_APK}}}
+        self.assertTrue(module.source_matches_candidate(good, name, 169109067))
+        for field, value in (("schemaVersion", 1), ("sourceRevision", "wrong"), ("candidateArtifacts", {})):
+            bad = copy.deepcopy(good); bad[field] = value
+            self.assertFalse(module.source_matches_candidate(bad, name, 169109067))
+        self.assertFalse(module.source_matches_candidate(good, name, 1))
+        bad = copy.deepcopy(good); bad["candidateArtifacts"][name]["sha256"] = "0" * 64
+        self.assertFalse(module.source_matches_candidate(bad, name, 169109067))
+
     def test_update_guide_preserves_private_previews(self):
         guide = (REPO / "docs/INSTALL_ANDROID.md").read_text()
-        for required in ("Do not uninstall", "does not back up Retro", "different local",
-                         "60 FPS", "APK", "SHA256SUMS"):
+        # Current guide (0.7.10): never uninstall to update, the same-signer rule
+        # for self-built copies, no blanket 60 FPS promise, and checksum checks.
+        for required in ("Never uninstall", "signed by the same key", "60 FPS", "APK",
+                         "SHA256SUMS"):
             self.assertIn(required, guide)
 
 

@@ -1,0 +1,45 @@
+{
+  "status": "release_on_hold_owner_reports_severe_ipad_menu_stutter",
+  "compiledSource": "353aea5eb61895350fe7186a7ba3a46b0e8177a3",
+  "androidRuntime": "c1c9cfffce278164fffe5aa913ce3e5bb7f90732",
+  "iosRuntime": "36e5f73646a3bf14fcf52e5575fd2cbce940641d",
+  "ipaPackagingSource": "161fa612803de82ac66b8ca01b17725f0ca940bf",
+  "androidNoticesPackagingSource": "a7fe3865092b26d78c62679cdb420407edeed3fe",
+  "androidVersionCode": 220,
+  "iosBuild": 73,
+  "iosDSYM_UUID": "B096BDE2-5B3A-3B09-8B3F-D89D7DF744C5",
+  "apkCertificateSHA256": "c1dbe0a0d72d830a5779476b346a750d0a37515adef992cad2f3863058f7f2f2",
+  "physicalGameplayGate": "owner waived; unverified, not passed",
+  "emulatorUpdate": {
+    "baselineVersionCode": 135,
+    "updatedVersionCode": 220,
+    "installResult": "Success",
+    "filesPreservedByteForByte": 2044,
+    "appIdAndInstallTimeAndDataInodesPreserved": true,
+    "readyToPlayUI": "not verified; mirror control unreliable",
+    "gameplay": "not verified",
+    "physicalDeviceTouched": false
+  },
+  "assets": {
+    "KartPad-v0.5.1-arm64.apk": {
+      "bytes": 169109067,
+      "sha256": "d2e4104dfd01cd64d8589601ae2983f353da9a24446c28645898c7f68a5af58c"
+    },
+    "KartPad-v0.5.1-ios-unsigned.ipa": {
+      "bytes": 64859506,
+      "sha256": "a824e463e529915e5626fb967f137e1b95b232937d670fe49400f1803607fce9"
+    },
+    "KartPad-v0.5.1-notices.zip": {
+      "bytes": 96745,
+      "sha256": "2b6b0c2209b11a49e2772683eed9f418576f9e59fe79291b33d815719aff787e"
+    },
+    "KartPad-v0.5.1-source.tar.gz": {
+      "bytes": 362906821,
+      "sha256": "26a41f8911b8cc945ef26b0b058a97430679a7978dc67fe17cada470dc714770"
+    },
+    "SHA256SUMS": {
+      "bytes": 377,
+      "sha256": "7a509ce7ebba7323920e260323dfe9010714810570b049b41dd42c148da22f49"
+    }
+  }
+}

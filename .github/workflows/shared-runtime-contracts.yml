@@ -1,0 +1,115 @@
+name: Shared runtime contracts
+on:
+  pull_request:
+    paths:
+      - 'vendor/runtimes/**'
+      - 'vendor/wiicompiled/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.GpuFifoBurst.cs'
+      - 'vendor/wiicompiled/translator/tests/Translator.Tests/GpuFifoBurstCodeGenTests.cs'
+      - 'tests/test_draw_merge_boundaries.py'
+      - 'tests/test_draw_topology.py'
+      - 'tests/test_graphics_startup_failure.py'
+      - 'tests/test_imgui_partial_shutdown.py'
+      - 'tests/test_staging_map_lifecycle.py'
+      - 'tests/test_staging_capacity.py'
+      - 'tests/test_android_controller_routing.py'
+      - 'scripts/test-android-gx-vertex-snapshot.py'
+      - 'scripts/test-android-keyboard-expiry.py'
+      - 'scripts/test-android-aram-window.py'
+      - 'scripts/test-android-event-service.py'
+      - 'scripts/test-network-send-error.py'
+      - 'scripts/test-ios-vsync.py'
+      - 'scripts/test-shared-runtime-parity.py'
+      - 'scripts/test-gx-fifo-burst.py'
+      - 'tests/test_efb_readback_lifecycle.py'
+      - 'tests/test_sleep_timer_reentry.py'
+      - 'prototypes/stabilization/test_pipeline_startup_budget.py'
+      - 'prototypes/stabilization/batch_reservation.hpp'
+      - 'prototypes/stabilization/test_batch_reservation.cpp'
+      - 'prototypes/stabilization/phone-preflight.py'
+      - 'prototypes/stabilization/test_phone_preflight.py'
+      - '.github/workflows/shared-runtime-contracts.yml'
+  push:
+    branches: [main]
+    paths:
+      - 'vendor/runtimes/**'
+      - 'vendor/wiicompiled/translator/src/Translator.Core/CodeGen/CxxLinearCodeGenerator.GpuFifoBurst.cs'
+      - 'vendor/wiicompiled/translator/tests/Translator.Tests/GpuFifoBurstCodeGenTests.cs'
+      - 'tests/test_draw_merge_boundaries.py'
+      - 'tests/test_draw_topology.py'
+      - 'tests/test_graphics_startup_failure.py'
+      - 'tests/test_imgui_partial_shutdown.py'
+      - 'tests/test_staging_map_lifecycle.py'
+      - 'tests/test_staging_capacity.py'
+      - 'tests/test_android_controller_routing.py'
+      - 'scripts/test-android-gx-vertex-snapshot.py'
+      - 'scripts/test-android-keyboard-expiry.py'
+      - 'scripts/test-android-aram-window.py'
+      - 'scripts/test-android-event-service.py'
+      - 'scripts/test-network-send-error.py'
+      - 'scripts/test-ios-vsync.py'
+      - 'scripts/test-shared-runtime-parity.py'
+      - 'scripts/test-gx-fifo-burst.py'
+      - 'tests/test_efb_readback_lifecycle.py'
+      - 'tests/test_sleep_timer_reentry.py'
+      - 'prototypes/stabilization/test_pipeline_startup_budget.py'
+      - 'prototypes/stabilization/batch_reservation.hpp'
+      - 'prototypes/stabilization/test_batch_reservation.cpp'
+      - 'prototypes/stabilization/phone-preflight.py'
+      - 'prototypes/stabilization/test_phone_preflight.py'
+      - '.github/workflows/shared-runtime-contracts.yml'
+permissions:
+  contents: read
+jobs:
+  boundaries:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Translator FIFO burst emission
+        run: dotnet test vendor/wiicompiled/translator/tests/Translator.Tests/Translator.Tests.csproj --filter FullyQualifiedName~GpuFifoBurstCodeGenTests
+      - name: Shared production-source regressions on all four pins
+        env:
+          CXX: clang++
+        run: |
+          python3 -B -m unittest discover -s tests -p test_draw_merge_boundaries.py -v
+          python3 -B -m unittest discover -s tests -p test_draw_topology.py -v
+          python3 -B -m unittest discover -s tests -p test_graphics_startup_failure.py -v
+          python3 -B -m unittest discover -s tests -p test_imgui_partial_shutdown.py -v
+          python3 -B -m unittest discover -s tests -p test_staging_map_lifecycle.py -v
+          python3 -B -m unittest discover -s tests -p test_staging_capacity.py -v
+          python3 -B -m unittest discover -s tests -p test_android_controller_routing.py -v
+          python3 -B -m unittest discover -s tests -p test_efb_readback_lifecycle.py -v
+          python3 -B -m unittest discover -s tests -p test_sleep_timer_reentry.py -v
+          for platform in android ios macos tvos; do
+            python3 -B prototypes/stabilization/test_pipeline_startup_budget.py --source "vendor/runtimes/$platform/aurora-main/lib/gfx/pipeline_cache.cpp"
+          done
+      - name: Android vertex snapshot restoration
+        run: python3 -B scripts/test-android-gx-vertex-snapshot.py
+      - name: Android keyboard expiry semantics
+        run: python3 -B scripts/test-android-keyboard-expiry.py
+      - name: Check Android AX sample window semantics
+        run: python3 -B scripts/test-android-aram-window.py
+      - name: Android scheduler event service
+        run: python3 -B scripts/test-android-event-service.py
+      - name: Preserve send errors across diagnostics
+        run: python3 -B scripts/test-network-send-error.py
+      - name: Shared runtime source parity
+        run: python3 -B scripts/test-shared-runtime-parity.py
+      - name: GX FIFO burst ordering
+        run: python3 -B scripts/test-gx-fifo-burst.py
+      - name: iOS native-rate present mode policy
+        run: python3 -B scripts/test-ios-vsync.py
+      - name: Experimental atomic draw reservations
+        run: |
+          clang++ -std=c++20 -Wall -Wextra -Werror -fsanitize=address,undefined prototypes/stabilization/test_batch_reservation.cpp -o /tmp/kartpad-batch-reservation
+          /tmp/kartpad-batch-reservation
+      - name: Read-only phone handoff decisions
+        run: python3 -B -m unittest discover -s prototypes/stabilization -p test_phone_preflight.py -v

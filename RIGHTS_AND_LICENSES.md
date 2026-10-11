@@ -115,14 +115,27 @@ and relationship to the covered work matter (GPLv3 section 2). This is not an
 exemption from GPL obligations for runtime code included in generated output
 or for a combined application where the GPL applies.
 
-Published Apple and Android artifacts contain ahead-of-time translated game logic. They
-omit disc images, extracted courses, textures, audio, saves, and private signing
-material. Users supply their own legally obtained matching game data: supported
-upstream artifacts use PAL `RMCP01` revision 0, while the fork's separate
-regional preview also supports Japan `RMCJ01` revision 0. The Retro Rewind asset
-pack is also omitted; the optional installer downloads and verifies the matching
-official pack when selected. Third-party mod content retains its own applicable
-rights and licenses.
+From 29 September to 3 October 2026, KartPad published only apps without game
+code, and players built the game part with PadMint. On 4 October 2026 the
+maintainer decided to publish ready-to-play builds again, starting with
+v0.7.9: the Android APK, the iPhone/iPad IPA and the Mac app contain KartPad's
+ahead-of-time translated game logic (the game pack). The decision rests on how
+community static recompilations are handled today, not on a rights clearance.
+From v0.7.14 on 5 October 2026, Android retains the ready-to-play APK, while
+iPhone, iPad and Mac use PadMint builds from the player's own disc. Releases
+include the game-code-free iOS app for PadMint, its recipe, source, notices and
+checksums; they no longer include ready-to-play Apple downloads. This changes
+distribution, not the license or rights boundaries described above.
+Neither the source nor the apps include disc images,
+extracted courses, textures, audio, saves, console keys, or private signing
+material.
+Users supply their own legally obtained supported PAL `RMCP01` revision 0
+game data (and, for in-app disc import on iPhone/iPad, their own Wii common
+key). The Retro Rewind asset pack is also omitted; the optional
+installer downloads and verifies the matching official pack when selected.
+Third-party mod content retains its own applicable rights and licenses.
+
+The fork also keeps separate private Japan `RMCJ01` revision 0 development builds; this does not change upstream distribution.
 
 The maintainer's free community-release decision is not clearance of Nintendo
 or other game-content rights. Questions about redistributing game-derived

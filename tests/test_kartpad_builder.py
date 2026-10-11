@@ -1,21 +1,27 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import re
 import plistlib
 import stat
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from unittest.mock import patch
 import zipfile
 from pathlib import Path
 
+from kartpad_builder import cli
 from kartpad_builder.packaging import PackageError, audit_app, package_unsigned_ipa
 from kartpad_builder.android_release_contract import render_android_release_contract
-from kartpad_builder.pipeline import build, cache_key, dependency_cache_key
+from kartpad_builder.pipeline import build, cache_key, dependency_cache_key, find_dotnet
 from kartpad_builder.profiles import Profile, ProfileError, load_profiles, select_profile, validate_profile
 from kartpad_builder.release_header import render_retro_rewind_header
 from kartpad_builder.retro_rewind import (
+    _download,
+    BuildError,
     extract_archive,
     validate_pack,
     validate_rwfc_payload,
@@ -24,6 +30,33 @@ from kartpad_builder.retro_rewind import (
 
 REPO = Path(__file__).resolve().parents[1]
 PROFILES = REPO / "builder/profiles"
+
+
+class InspectTests(unittest.TestCase):
+    def test_unextracted_rvz_does_not_claim_verified_content(self) -> None:
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "unverified.rvz"
+            image.write_bytes(b"not a real disc image")
+            output = io.StringIO()
+            with redirect_stdout(output):
+                result = cli.main(["inspect", str(image)])
+            self.assertEqual(result, 0)
+            report = json.loads(output.getvalue())
+            self.assertEqual(report["acceptance"], "requires extraction verification")
+            self.assertEqual(report["imageSHA256"], hashlib.sha256(image.read_bytes()).hexdigest())
+            self.assertEqual(list(Path(temp).iterdir()), [image])
+
+    def test_inspect_recognizes_a_pinned_image_hash(self) -> None:
+        profile = load_profiles(PROFILES)[0]
+        pinned_hash = profile.data["containers"]["acceptedImages"][0]["sha256"]
+        with tempfile.TemporaryDirectory() as temp:
+            image = Path(temp) / "pinned.wbfs"
+            image.write_bytes(b"hash supplied by fixture")
+            output = io.StringIO()
+            with patch.object(cli, "sha256_file", return_value=pinned_hash), redirect_stdout(output):
+                result = cli.main(["inspect", str(image)])
+            self.assertEqual(result, 0)
+            self.assertEqual(json.loads(output.getvalue())["acceptance"], "pinned image")
 
 
 class ProfileTests(unittest.TestCase):
@@ -50,6 +83,29 @@ class ProfileTests(unittest.TestCase):
     def test_unknown_image_fails_closed(self) -> None:
         with self.assertRaisesRegex(ProfileError, "no supported profile"):
             select_profile(load_profiles(PROFILES), "0" * 64)
+
+    def test_other_dumps_are_provisional_until_extraction_verifies(self) -> None:
+        profiles = load_profiles(PROFILES)
+        pal = next(p for p in profiles if p.id == "mkwii-rmcp01-rev0")
+        self.assertTrue(pal.accepts_verified_extraction)
+        self.assertIs(select_profile(profiles, "0" * 64, extension="rvz"), pal)
+        with self.assertRaisesRegex(ProfileError, "no supported profile"):
+            select_profile(profiles, "0" * 64, extension="zip")
+        data = json.loads((PROFILES / "mkwii-rmcp01-rev0.json").read_text())
+        data["containers"]["acceptVerifiedExtraction"] = False
+        strict = Profile(Path("strict.json"), data)
+        with self.assertRaisesRegex(ProfileError, "no supported profile"):
+            select_profile([strict], "0" * 64, extension="iso")
+        data["containers"]["acceptVerifiedExtraction"] = "yes"
+        with self.assertRaisesRegex(ProfileError, "true or false"):
+            validate_profile(data)
+
+    def test_bundled_dotnet_override(self) -> None:
+        dotnet = REPO / "build/toolchains/dotnet/dotnet"
+        if not dotnet.is_file():
+            self.skipTest("bundled .NET is not installed")
+        with patch.dict("os.environ", {"KARTPAD_DOTNET": str(dotnet)}):
+            self.assertEqual(find_dotnet(), str(dotnet))
 
     def test_cache_key_changes_for_each_input(self) -> None:
         profile = next(p for p in load_profiles(PROFILES) if p.id == "mkwii-rmcp01-rev0")
@@ -93,11 +149,10 @@ class ProfileTests(unittest.TestCase):
         self.assertIn(retro["archive"]["sha256"], header)
         self.assertIn(retro["codePul"]["sha256"], header)
         self.assertIn(retro["riivolutionXml"]["sha256"], header)
-        self.assertIn(
-            f'/zip/{retro["version"]}-',
-            retro["archive"]["url"],
-            "the visible version and immutable archive URL must advance together",
-        )
+        final_archive = retro.get("updateArchive", retro["archive"])
+        self.assertRegex(final_archive["url"], rf'/zip/{re.escape(retro["version"])}(?:-full)?\.zip$')
+        if "updateArchive" in retro:
+            self.assertIn(retro["updateArchive"]["sha256"], header)
 
     def test_android_release_contract_matches_profile(self) -> None:
         profile = next(
@@ -144,7 +199,7 @@ class ProfileTests(unittest.TestCase):
         self.assertIn('parser.add_argument("--json"', checker)
         self.assertIn("return 2 if update_required else 0", checker)
         self.assertIn('"--latest"', updater)
-        self.assertIn("-full.zip", updater)
+        self.assertIn('"RetroRewindInstall.txt"', updater)
 
     def test_newer_retro_rewind_message_explains_the_aot_boundary(self) -> None:
         source = (REPO / "apple/ios/KartPadRuntimeOverlayHost.mm").read_text()
@@ -173,10 +228,10 @@ class ProfileTests(unittest.TestCase):
 class RetroRewindTests(unittest.TestCase):
     def test_translator_accepts_current_kamek_v2_and_legacy_v3(self) -> None:
         source = (REPO / "vendor/wiicompiled/translator/src/Translator.Core/Parsing/Kamek/KamekChunk.cs").read_text()
-        self.assertIn("MagicV2 = 0x6B000002", source)
-        self.assertIn("MagicV3 = 0x6B000003", source)
-        self.assertIn("MagicV2 or MagicV3", source)
-        self.assertIn("magic1 == MagicV2 && encodedChunkSize == 0", source)
+        self.assertIn("Magic1V2 = 0x6B000002", source)
+        self.assertIn("Magic1 = 0x6B000003", source)
+        self.assertIn("Magic1V2 or Magic1", source)
+        self.assertIn("magic1 == Magic1V2", source)
 
     def make_archive(self, root: Path, unsafe: bool = False) -> tuple[Path, dict]:
         archive = root / "retro.zip"
@@ -227,6 +282,41 @@ class RetroRewindTests(unittest.TestCase):
             self.assertFalse((root / "apps").exists())
             self.assertFalse((root / "RetroRewind.wad").exists())
 
+    def test_base_and_update_are_validated_before_activation(self) -> None:
+        for failure in (None, "missing", "hash", "traversal", "duplicate", "version", "limit"):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as temp:
+                root = Path(temp)
+                archive, config = self.make_archive(root)
+                destination = root / "installed"
+                # A prior installation is never touched by a rejected staged update.
+                destination.mkdir()
+                (destination / "player-data").write_bytes(b"preserve")
+                update = root / "patch.zip"
+                with zipfile.ZipFile(update, "w") as bundle:
+                    bundle.writestr("RetroRewind6/version.txt", "6.12.4" if failure == "version" else "6.12.5")
+                    bundle.writestr("RetroRewind6/new-track", b"track")
+                    if failure == "traversal": bundle.writestr("../escape", b"bad")
+                    if failure == "duplicate": bundle.writestr("RetroRewind6/version.txt", "6.12.5")
+                config["version"] = "6.12.5"
+                config["updateArchive"] = dict(bytes=update.stat().st_size,
+                    sha256=hashlib.sha256(update.read_bytes()).hexdigest(), maximumExpandedBytes=1024)
+                if failure == "hash": config["updateArchive"]["sha256"] = "0" * 64
+                if failure == "limit": config["updateArchive"]["maximumExpandedBytes"] = 1
+                if failure:
+                    with self.assertRaises(Exception):
+                        extract_archive(archive, destination, config, None if failure == "missing" else update)
+                    self.assertEqual((destination / "player-data").read_bytes(), b"preserve")
+                    self.assertEqual(list(destination.iterdir()), [destination / "player-data"])
+                else:
+                    # Activate into a fresh destination; existing invalid caches must not be replaced.
+                    target = root / "accepted"
+                    extract_archive(archive, target, config, update)
+                    validate_pack(target, config)
+                    self.assertEqual((target / "new-track").read_bytes(), b"track")
+                    self.assertEqual((target / "Binaries/Code.pul").read_bytes(), b"code-pul-fixture")
+                self.assertFalse(list(root.glob("*.partial.*")))
+                self.assertFalse((root / "escape").exists())
+
     def test_archive_traversal_is_rejected_before_extraction(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -234,6 +324,41 @@ class RetroRewindTests(unittest.TestCase):
             with self.assertRaisesRegex(Exception, "unsafe path"):
                 extract_archive(archive, root / "RetroRewind6", config)
             self.assertFalse((root.parent / "escape").exists())
+
+    def test_pinned_download_preserves_cache_and_cleans_partial_on_rejection(self) -> None:
+        url = "http://example.invalid/payload"
+        accepted = b"new payload"
+        for case, body, returned_url, message in (
+            ("oversized", accepted + b"!", url, "larger than expected"),
+            ("short", accepted[:-1], url, "identity does not match"),
+            ("wrong hash", b"x" * len(accepted), url, "identity does not match"),
+            ("redirect", accepted, url + "/redirect", "redirected"),
+        ):
+            with self.subTest(case=case), tempfile.TemporaryDirectory() as temp:
+                output = Path(temp) / "payload.bin"
+                output.write_bytes(b"previous verified payload")
+                response = io.BytesIO(body)
+                response.geturl = lambda: returned_url
+                with patch("urllib.request.urlopen", return_value=response):
+                    with self.assertRaisesRegex(BuildError, "Retro-WFC payload.*" + message):
+                        _download(url, output, len(accepted), hashlib.sha256(accepted).hexdigest(),
+                                  label="Retro-WFC payload")
+                self.assertEqual(output.read_bytes(), b"previous verified payload")
+                self.assertEqual(list(Path(temp).iterdir()), [output])
+
+    def test_pinned_download_replaces_cache_only_after_identity_matches(self) -> None:
+        url = "http://example.invalid/payload"
+        accepted = b"new payload"
+        with tempfile.TemporaryDirectory() as temp:
+            output = Path(temp) / "payload.bin"
+            output.write_bytes(b"previous verified payload")
+            response = io.BytesIO(accepted)
+            response.geturl = lambda: url
+            with patch("urllib.request.urlopen", return_value=response):
+                _download(url, output, len(accepted), hashlib.sha256(accepted).hexdigest(),
+                          label="Retro-WFC payload")
+            self.assertEqual(output.read_bytes(), accepted)
+            self.assertEqual(list(Path(temp).iterdir()), [output])
 
     def test_current_production_payload_signature_and_tamper_detection(self) -> None:
         payload = REPO / "private/builder/retro-rewind-downloads/payload.RMCPD00.bin"
@@ -283,6 +408,24 @@ class PackagingTests(unittest.TestCase):
                 mode = archive.getinfo("Payload/KartPad.app/KartPad").external_attr >> 16
                 self.assertTrue(mode & stat.S_IXUSR)
 
+    def test_ipa_is_stamped_with_the_shared_version(self) -> None:
+        from kartpad_builder.packaging import load_version
+        version = load_version(REPO)
+        self.assertRegex(version["version"], r"^\d+\.\d+\.\d+$")
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            app = self.make_app(root)
+            output = root / "stamped.ipa"
+            package_unsigned_ipa(app, output, {"schemaVersion": 1}, None, version)
+            with zipfile.ZipFile(output) as archive:
+                plist = plistlib.loads(archive.read("Payload/KartPad.app/Info.plist"))
+            self.assertEqual(plist["CFBundleShortVersionString"], version["version"])
+            self.assertEqual(plist["CFBundleVersion"], str(version["build"]))
+            self.assertEqual(plist["CFBundleIdentifier"], "dev.kartpad.app")
+            # The source app is not modified.
+            with (app / "Info.plist").open("rb") as handle:
+                self.assertNotIn("CFBundleVersion", plistlib.load(handle))
+
     def test_additional_public_release_entries_are_deterministic(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -308,7 +451,7 @@ class PackagingTests(unittest.TestCase):
             root = Path(temp)
             app = self.make_app(root)
             # Reuse a synthetic app; this packaging check needs no game or network inputs.
-            with patch("kartpad_builder.pipeline.prepare_inputs"):
+            with patch("kartpad_builder.pipeline.prepare_inputs") as prepare:
                 result = build(
                     repo=REPO,
                     profile=next(
@@ -320,6 +463,7 @@ class PackagingTests(unittest.TestCase):
                     work_root=root / "work",
                     app_override=app,
                 )
+            self.assertEqual(prepare.call_args.args[1], REPO / "private/builder")
             with zipfile.ZipFile(result.ipa) as archive:
                 for name in ("LICENSE", "RIGHTS_AND_LICENSES.md", "THIRD_PARTY_NOTICES.md"):
                     self.assertEqual(archive.read(name), (REPO / name).read_bytes())
@@ -327,6 +471,14 @@ class PackagingTests(unittest.TestCase):
                 self.assertEqual(provenance["softwareLicense"], "GPL-3.0-only")
                 self.assertEqual(provenance["gameCodeRedistributionRights"], "not-cleared")
                 self.assertNotIn("redistributionAllowed", provenance)
+            events = [json.loads(line) for line in
+                      (root / "work/logs/progress.jsonl").read_text().splitlines()]
+            self.assertTrue(all(event["schema_version"] == 1 for event in events))
+            self.assertEqual([(event["event"], event["stage"]) for event in events], [
+                ("stage_started", "preflight"), ("stage_completed", "preflight"),
+                *[("stage_skipped", stage) for stage in
+                  ("extract", "translate", "dependencies", "generate", "compile")],
+                ("stage_started", "package"), ("stage_completed", "package")])
 
     def test_unsafe_additional_entry_is_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as temp:
@@ -355,6 +507,68 @@ class PackagingTests(unittest.TestCase):
             (app / "KartPad").write_bytes(b"prefix /Users/private/build suffix")
             with self.assertRaisesRegex(PackageError, "private build path"):
                 audit_app(app, ("/Users/private",))
+
+
+class BootstrapTests(unittest.TestCase):
+    def test_interrupted_clone_reports_a_recoverable_error(self) -> None:
+        import subprocess
+        from kartpad_builder.bootstrap import _verify_checkout
+        from kartpad_builder.errors import BuildError
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            subprocess.run(["git", "init", "-q", str(root / "ref/upstream/partial")], check=True)
+            dependency = {"name": "partial", "path": "ref/upstream/partial", "commit": "0" * 40, "tree": "0" * 40}
+            with self.assertRaisesRegex(BuildError, "incomplete .*bootstrap again"):
+                _verify_checkout(root, dependency)
+
+    def test_app_bootstrap_initializes_the_translator_gitlink(self) -> None:
+        # The Mac/IPA translate step stages vendor/wiicompiled; a clean
+        # PadMint checkout failed when bootstrap prepared only the runtimes.
+        from unittest.mock import patch
+        from kartpad_builder import bootstrap
+        profile = next(item for item in load_profiles(REPO / "builder/profiles") if item.id == "mkwii-rmcp01-rev0")
+        prepared = []
+
+        class Stop(Exception):
+            pass
+
+        def record(_repo, paths, _install):
+            prepared.extend(paths)
+            if "vendor/wiicompiled" in paths:
+                raise Stop
+
+        with patch.object(bootstrap, "_has_command", return_value=True), \
+                patch.object(bootstrap, "_prepare_gitlinks", side_effect=record):
+            with self.assertRaises(Stop):
+                bootstrap.prepare_dependencies(REPO, profile, install=False, target="ios")
+        self.assertIn("vendor/runtimes/macos", prepared)
+        self.assertIn("vendor/wiicompiled", prepared)
+
+    def test_mac_bootstrap_skips_reference_checkouts(self) -> None:
+        # PadMint's Mac recipe needs only the macOS runtime, the translator and
+        # its function map, the macOS Dawn archive and Retro Rewind; SunPad and
+        # Dolphin are GBs.
+        from unittest.mock import patch
+        from kartpad_builder import bootstrap
+        profile = next(item for item in load_profiles(REPO / "builder/profiles") if item.id == "mkwii-rmcp01-rev0")
+        prepared, verified = [], []
+
+        class Stop(Exception):
+            pass
+
+        def prepare_inputs(*_args):
+            raise Stop
+
+        with patch.object(bootstrap, "_has_command", return_value=True), \
+                patch.object(bootstrap, "_prepare_gitlinks", side_effect=lambda _r, paths, _i: prepared.extend(paths)), \
+                patch.object(bootstrap, "_verify_checkout", side_effect=lambda _r, dep: verified.append(dep["name"])), \
+                patch.object(bootstrap, "_download") as download, \
+                patch("kartpad_builder.retro_rewind.prepare_inputs", side_effect=prepare_inputs):
+            with self.assertRaises(Stop):
+                bootstrap.prepare_dependencies(REPO, profile, install=True, target="macos")
+        self.assertEqual(prepared, ["vendor/runtimes/macos", "vendor/wiicompiled"])
+        self.assertEqual(verified, ["WiiCompiled"])
+        self.assertTrue(all("darwin" in call.args[2].name for call in download.call_args_list))
 
 
 if __name__ == "__main__":

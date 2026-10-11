@@ -1,0 +1,118 @@
+{
+  "version": "0.5.0",
+  "release_url": "https://github.com/chrissotraidis/kartpad/releases/tag/v0.5.0",
+  "published_at": "2026-09-20T03:07:26Z",
+  "latest_stable_verified": true,
+  "release_commit": "677c675d788222e18946a9f7629fc8919253dc05",
+  "compilation_commit": "a2f41d5515c688973e47573ae65504e891e222f1",
+  "packaging_commit": "7502b1fa5690020dc6c17512d0199395da06f9db",
+  "merged_pr": 307,
+  "validation": "All three PR checks passed. All six GitHub assets downloaded and independently hashed; all public asset URLs return HTTP 200 without authentication. Original app entries, modes and symlinks preserved.",
+  "artifacts": {
+    "KartPad-v0.5.0-android-arm64.apk": {
+      "bytes": 111773259,
+      "sha256": "63526e4d5ae6c7ec209276ce49e9332af861dfb4a06617b7431843cf9432da37"
+    },
+    "KartPad-v0.5.0-ios-unsigned.ipa": {
+      "bytes": 41995797,
+      "sha256": "7c64144ea996f438aab853e700c8ffa3b8b9db205fdb8033714b07ca6186cadf"
+    },
+    "KartPad-v0.5.0-source.tar.gz": {
+      "bytes": 361516349,
+      "sha256": "70f1672b99d40114807fa36eb7c12f4d161b1d5a65c13636cf2451f7291a3457"
+    },
+    "KartPad-v0.5.0-notices.zip": {
+      "bytes": 240406,
+      "sha256": "9f348d95c25b2d4f96cbcffdc50c526b0b813ec17be09d87749ff435b9dedfbc"
+    },
+    "KartPad-v0.5.0-macos-arm64.zip": {
+      "bytes": 41882700,
+      "sha256": "9f92e43cc3e5d15e9dcdea8c00c37150b00d0286e7445d0929ebaa9e435f5cea"
+    },
+    "SHA256SUMS.txt": {
+      "bytes": 482,
+      "sha256": "c2bf3a321764fa828413bedc5a7598c392f38f67577939f69860d0472dff0501"
+    }
+  },
+  "ios_ipados": {
+    "build": 59,
+    "installed_on_owner_ipad": true,
+    "backup_files_verified_unchanged_after_install": 30,
+    "wbfs_preserved": true,
+    "normal_launch_observed": true,
+    "physical_build59_gameplay_claim": false
+  },
+  "android": {
+    "code": 135,
+    "owner_device_installed": true,
+    "owner_confirmed_thumbnail_correction": true
+  },
+  "macos": {
+    "build": 59,
+    "packaged_and_audited": true,
+    "owner_existing_app_replaced": false
+  },
+  "issue_outreach": {
+    "310": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/310#issuecomment-5747229261",
+      "created_at": "2026-09-20T03:07:52Z"
+    },
+    "309": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/309#issuecomment-5747229495",
+      "created_at": "2026-09-20T03:07:54Z"
+    },
+    "308": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/308#issuecomment-5747229660",
+      "created_at": "2026-09-20T03:07:56Z"
+    },
+    "197": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/197#issuecomment-5747229809",
+      "created_at": "2026-09-20T03:07:58Z"
+    },
+    "306": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/306#issuecomment-5747229930",
+      "created_at": "2026-09-20T03:08:00Z"
+    },
+    "305": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/305#issuecomment-5747230083",
+      "created_at": "2026-09-20T03:08:02Z"
+    },
+    "295": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/295#issuecomment-5747230221",
+      "created_at": "2026-09-20T03:08:04Z"
+    },
+    "304": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/304#issuecomment-5747230372",
+      "created_at": "2026-09-20T03:08:06Z"
+    },
+    "275": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/275#issuecomment-5747230521",
+      "created_at": "2026-09-20T03:08:08Z"
+    },
+    "198": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/198#issuecomment-5747230661",
+      "created_at": "2026-09-20T03:08:10Z"
+    },
+    "299": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/299#issuecomment-5747230800",
+      "created_at": "2026-09-20T03:08:12Z"
+    },
+    "301": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/301#issuecomment-5747230948",
+      "created_at": "2026-09-20T03:08:14Z"
+    },
+    "303": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/303#issuecomment-5747231135",
+      "created_at": "2026-09-20T03:08:16Z"
+    },
+    "216": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/216#issuecomment-5747231272",
+      "created_at": "2026-09-20T03:08:18Z"
+    },
+    "205": {
+      "url": "https://github.com/chrissotraidis/kartpad/issues/205#issuecomment-5747231415",
+      "created_at": "2026-09-20T03:08:20Z"
+    }
+  },
+  "issue_closures": []
+}

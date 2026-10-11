@@ -34,6 +34,8 @@ std::vector<Outcome> outcomes;
 int calls, waits, waitedMs, lastError, addressWrites, readyAfter;
 bool realIO = false;
 struct WiiSocket { int native = -1; int type = SOCK_STREAM; bool nonblocking = false; };
+void TraceWfcTcp(const char*, unsigned, WiiSocket*, const char*, int, int) {}
+constexpr unsigned fd = 0;
 struct Output { unsigned address, size; };
 int NativeLastError() { return realIO ? errno : lastError; }
 bool IsWouldBlockError(int e) { return e == EAGAIN || e == EWOULDBLOCK; }

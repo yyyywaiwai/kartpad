@@ -1,5 +1,6 @@
 #include "kartpad/android/gamepad_contract.h"
 #include "kartpad/android/controller_mapping.hpp"
+#include "kartpad/input/auto_accelerate.h"
 
 #include <cmath>
 #include <cstdint>
@@ -148,5 +149,54 @@ int main() {
   if (passed) {
     std::cout << "Android SDL gamepad contract passed\n";
   }
+  {
+    // Sideways Joy-Con: upright stick and buttons rotate to the rail-up grip.
+    RawGamepadState upright{};
+    upright.connected = true;
+    upright.left_y = 30000;  // Toward the lower end of an upright left Joy-Con.
+    upright.buttons = kGamepadDpadLeft | kGamepadBack;
+    const auto leftJoyCon = RotateSidewaysJoyCon(upright, kNintendoVendorId, kJoyConLeftProductId);
+    passed &= Require(leftJoyCon.left_x == 30000 && leftJoyCon.left_y == 0,
+                      "left Joy-Con lower end steers right");
+    passed &= Require(leftJoyCon.buttons == (kGamepadSouth | kGamepadStart),
+                      "left Joy-Con thumb button accelerates and Minus pauses");
+    upright.left_y = -32768;
+    upright.buttons = kGamepadEast;
+    const auto rightJoyCon = RotateSidewaysJoyCon(upright, kNintendoVendorId, kJoyConRightProductId);
+    passed &= Require(rightJoyCon.left_x == 32767 && rightJoyCon.buttons == kGamepadSouth,
+                      "right Joy-Con top steers right and A accelerates");
+    const auto pair = RotateSidewaysJoyCon(upright, kNintendoVendorId, 0x2008);
+    passed &= Require(pair.left_y == -32768 && pair.buttons == kGamepadEast,
+                      "other controllers are unchanged");
+  }
+  {
+    kartpad::input::AutoAccelerateLatch latch;
+    passed &= Require(!latch.Apply(true, 0, false) || !latch.locked(),
+                      "disabled auto-accelerate never locks");
+    passed &= Require(!latch.Apply(false, 5000, false),
+                      "disabled auto-accelerate follows release");
+    latch.Apply(true, 1000, true);
+    passed &= Require(!latch.locked() && latch.Apply(true, 1999, true) && !latch.locked(),
+                      "auto-accelerate waits one second");
+    passed &= Require(latch.Apply(true, 2000, true) && latch.locked(),
+                      "one-second hold locks accelerate");
+    passed &= Require(latch.Apply(false, 2100, true),
+                      "locked accelerate survives release");
+    passed &= Require(latch.Apply(true, 3000, true) && !latch.locked(),
+                      "next press unlocks while held");
+    passed &= Require(latch.Apply(true, 9000, true) && !latch.locked(),
+                      "unlocking press cannot relock");
+    passed &= Require(!latch.Apply(false, 9100, true),
+                      "release after unlock stops accelerate");
+    latch.Apply(true, 10000, true);
+    latch.Apply(false, 10500, true);
+    passed &= Require(!latch.Apply(false, 12000, true) && !latch.locked(),
+                      "short press does not lock");
+    latch.Apply(true, 13000, true);
+    latch.Apply(true, 14000, true);
+    passed &= Require(!latch.Apply(false, 14100, false),
+                      "disabling clears a lock");
+  }
+
   return passed ? 0 : 1;
 }

@@ -1,0 +1,33 @@
+{
+  "version": "0.5.0",
+  "android": {
+    "code": 134,
+    "publicApk": "KartPad-v0.5.0-code134-public-candidate.apk",
+    "sha256": "31c5827775048db8027b031d04e8093f945066b3383aa569c3c3b624a1d6aacc",
+    "source": "3dfcf79ff78d21371946729304ab645416b0c4f5",
+    "nativeBuildId": "e45f5d0a371fdac08295170799631d916bb846ac",
+    "installedOnOwnerPixel": true,
+    "installedCopyMatchesLocalApk": true,
+    "localAndPublicApplicationPayloadsMatch": true,
+    "ownerGameplayAcceptance": "pending"
+  },
+  "ios_ipados": {
+    "build": 58,
+    "unsignedIpa": "KartPad-v0.5.0-build58-local-unsigned.ipa",
+    "sha256": "c459798f4f21a21c6ee1f4301ee566d050724a32cb0d80b9e71d53aa594573e2",
+    "source": "e8f23632f3e3a1890bde40a105f809cd7e5c3e04",
+    "dsymUuid": "9581C914-86C1-3B04-A5D9-2591F917B9F8",
+    "installedOnOwnerIpad": true,
+    "ownerReport": "Retro Rewind launches; second license reaches versus worldwide; first license serial mismatch and menu performance remain unresolved"
+  },
+  "macos": {
+    "build": 58,
+    "zip": "KartPad-v0.5.0-build58-local-macos-arm64.zip",
+    "sha256": "a4e3e6bce1e7407cdb7f396cf8e9e007cfc1f66271ef13acdcd92484d7eebbcc",
+    "source": "3dfcf79ff78d21371946729304ab645416b0c4f5",
+    "archiveEntriesVerified": 33,
+    "ownerGameplayAcceptance": "pending; app packaged but existing owner session not replaced"
+  },
+  "releaseStatus": "Not published. Candidate APK/IPA/Mac ZIP built and audited. Owner Android sanity check is next. Coordinated source/notices and final publication metadata need refresh before release.",
+  "sourceNote": "iOS build58 retains its original e8f2363 build receipt; Android134 and Mac58 use 3dfcf79. Only documentation differs between these parent revisions; runtime pins containing the two crash fixes match."
+}

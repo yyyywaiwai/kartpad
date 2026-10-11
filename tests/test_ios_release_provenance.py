@@ -23,39 +23,31 @@ class SourceEquivalenceTests(unittest.TestCase):
                 path = repo / name
                 path.parent.mkdir(parents=True, exist_ok=True)
                 path.write_text("accepted")
-            inputs = {name: hashlib.sha256(b"accepted").hexdigest() for name in names}
-            runtime_file = repo / "vendor/runtimes/ios/runtime/src/settings_overlay.cpp"
-            runtime_file.parent.mkdir(parents=True)
-            runtime_file.write_text("accepted")
-            original_fps = release.FPS_RUNTIME_SHA256
-            release.FPS_RUNTIME_SHA256 = hashlib.sha256(b"accepted").hexdigest()
-            original = release.REFRESHED_INPUTS_SHA256
-            release.REFRESHED_INPUTS_SHA256 = hashlib.sha256(json.dumps(inputs, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+            original = release.COMPILED_SOURCE
             try:
                 (repo / "README.md").write_text("release notes")
                 git("add", "."); git("commit", "-m", "baseline")
+                release.COMPILED_SOURCE = git("rev-parse", "HEAD")
+                (repo / "docs").mkdir()
+                (repo / "docs/release.md").write_text("notes")
+                git("add", "."); git("commit", "-m", "documentation")
                 release.verify_source_equivalence(repo, "HEAD")
                 for name in names:
                     with self.subTest(name=name):
                         (repo / name).write_text("changed")
                         git("add", "."); git("commit", "-m", "changed input")
-                        with self.assertRaisesRegex(ValueError, "production inputs differ"):
+                        with self.assertRaisesRegex(ValueError, "changes inputs"):
                             release.verify_source_equivalence(repo, "HEAD")
                         (repo / name).write_text("accepted")
                         git("add", "."); git("commit", "-m", "restore")
-                runtime_file.write_text("changed")
-                with self.assertRaisesRegex(ValueError, "FPS runtime source differs"):
-                    release.verify_source_equivalence(repo, "HEAD")
             finally:
-                release.FPS_RUNTIME_SHA256 = original_fps
-                release.REFRESHED_INPUTS_SHA256 = original
+                release.COMPILED_SOURCE = original
 
-    def test_tampered_composition_rejected(self):
+    def test_tampered_full_manifest_rejected(self):
         with tempfile.TemporaryDirectory() as temp:
             app = Path(temp)
             (app / "kartpad-build.json").write_text("{}")
-            (app / "kartpad-ui-composition.json").write_text("{}")
-            with self.assertRaisesRegex(ValueError, "incremental compilation manifest"):
+            with self.assertRaisesRegex(ValueError, "exact clean audited full build"):
                 release.accepted_build(app)
 
 

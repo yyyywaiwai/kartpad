@@ -10,6 +10,7 @@
 #include "DiscIO/FileBlob.h"
 #include "DiscIO/Volume.h"
 #include "DiscIO/WbfsBlob.h"
+#include "DiscIO/WIABlob.h"
 
 // A picker grants one image, not access to filename-derived siblings. In
 // particular, WbfsFileReader must never treat /proc/self/fd/123 as a basename
@@ -25,6 +26,10 @@ inline std::unique_ptr<DiscIO::Volume> KartPadOpenDiscDescriptor(int fd) {
   std::unique_ptr<DiscIO::BlobReader> reader;
   if (magic == std::array<unsigned char, 4>{'W', 'B', 'F', 'S'}) {
     reader = DiscIO::WbfsFileReader::Create(std::move(file), "");
+  } else if (magic == std::array<unsigned char, 4>{'R', 'V', 'Z', 1}) {
+    // Use the granted descriptor directly, including when the provider has no
+    // filesystem path. RVZ's copy reader duplicates this handle too.
+    reader = DiscIO::RVZFileReader::Create(std::move(file), "");
   } else {
     reader = DiscIO::PlainFileReader::Create(std::move(file));
   }

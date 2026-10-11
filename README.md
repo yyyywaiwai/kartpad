@@ -19,8 +19,9 @@ The projects are independently maintained.
   <img alt="Ahead-of-time static recompilation" src="https://img.shields.io/badge/PowerPC-static%20recompilation-FF9F0A">
   <img alt="macOS development target" src="https://img.shields.io/badge/macOS%20target-14%2B-0A84FF">
   <img alt="iPhone and iPad" src="https://img.shields.io/badge/platform-iPhone%20%2F%20iPad-0A84FF">
-  <img alt="Retro Rewind supported" src="https://img.shields.io/badge/Retro%20Rewind-6.12.8-FF375F">
+  <img alt="Retro Rewind supported" src="https://img.shields.io/badge/Retro%20Rewind-6.13.1-FF375F">
   <img alt="Game data not included" src="https://img.shields.io/badge/game%20data-not%20included-FF453A">
+  <a href="https://github.com/chrissotraidis/padmint"><img alt="Build KartPad with PadMint (optional)" src="https://img.shields.io/badge/PadMint-optional%20build-3EB489"></a>
   <a href="https://discord.gg/xwHfUD2bxW"><img alt="Join the KartPad Discord" src="https://img.shields.io/badge/Discord-Join%20the%20community-5865F2?logo=discord&amp;logoColor=white"></a>
 </p>
 
@@ -28,14 +29,7 @@ The projects are independently maintained.
 
 > [!IMPORTANT]
 > **Bring your own game data.** KartPad requires a legally obtained supported
-> PAL `RMCP01` revision 0 Mario Kart Wii image. Downloads contain translated
-> game logic, but no disc image, extracted game assets, Retro Rewind pack or
-> saves. Apple IPAs require local re-signing; tvOS remains experimental.
->
-> **Update before online play.** The downloads below include the console-serial
-> correction for [#94](https://github.com/chrissotraidis/kartpad/issues/94).
-> Older affected builds should stay offline. Updating preserves identities and
-> saves; existing server-side identity history or bans require service-admin review.
+> PAL `RMCP01` revision 0 Mario Kart Wii image. tvOS remains experimental.
 >
 > **AI disclosure:** KartPad uses substantial AI assistance for code, tests,
 > documentation, debugging and maintenance. Some support replies and maintenance
@@ -43,16 +37,129 @@ The projects are independently maintained.
 > Build, test and device records describe what was checked. This disclosure
 > concerns KartPad's workflow, not the authorship of its upstream projects.
 
-## Downloads
+## Get KartPad
 
-| Platform | Download | Setup |
-| --- | --- | --- |
-| Android ARM64 | [0.4.24 Android 1 · code 117](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.24-android.1) | [Android 9+ with Vulkan](docs/INSTALL_ANDROID.md) |
-| iPhone / iPad | [0.4.24 · build 49](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.24-ios.1) | [iOS/iPadOS 16+; re-sign the IPA](docs/INSTALL_IPA.md) |
-| Apple Silicon Mac | [0.4.22 · build 43](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.22-macos.1) | [macOS 14+](docs/INSTALL_MACOS.md) |
-| Apple TV experimental preview | [0.4.11 · build 9](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.11-tvos.1) | [tvOS 17+; re-sign the IPA](docs/INSTALL_TVOS.md) |
+KartPad is free. On Android, download it from the
+[releases page](https://github.com/chrissotraidis/kartpad/releases/latest). On
+iPhone, iPad and Mac, [PadMint](https://github.com/chrissotraidis/padmint)
+builds it on your own computer from your own disc. Either way, you add your own
+Mario Kart Wii game data the first time you open it. The Android download
+includes KartPad's translated game code but no game files: no disc image, no
+courses, music or textures, and no console keys. You supply those from your
+own disc.
 
-**0.4.24 aligns the mobile settings menus**, adds Original Time Trial ghost import/export, expands controller mappings and FPS counter sizing, and improves problem reports. It retains yesterday's racing launcher, HD icon, dark/light mode, preferred-game selector and license/Mii repairs. See the [mobile settings guide](docs/SETTINGS.md). Android performance remains an active area of work; this release does not establish a general FPS improvement.
+| You want KartPad on | Get it | Then |
+|---|---|---|
+| **Android** | `KartPad-v…-android.apk` from the releases page | [Android](#android) |
+| **iPhone or iPad** | Build it with [PadMint](https://github.com/chrissotraidis/padmint) | [iPhone and iPad](#iphone-and-ipad) |
+| **Mac** (Apple Silicon) | Build it with [PadMint](https://github.com/chrissotraidis/padmint) | [Mac](#mac) |
+
+**You need** your own Mario Kart Wii: PAL (Europe) **RMCP01** revision 0 (other
+regions are not supported), and:
+
+- **Android:** an ARM64 phone or tablet with Vulkan and Android 9 or newer,
+  with about 6 GB free.
+- **iPhone and iPad:** iOS or iPadOS 16 or newer, and Sideloadly, AltStore or
+  SideStore with your own Apple ID, plus a computer to run PadMint: Windows,
+  Linux or an Apple Silicon Mac. Intel Macs can build it from KartPad 0.8.0
+  with PadMint 0.4.14.
+- **Mac:** an Apple Silicon Mac with macOS 14 or newer, to run PadMint and play.
+
+### Your game data
+
+KartPad needs your game's files once. Either:
+
+- **An extracted folder (easiest).** In [Dolphin](https://dolphin-emu.org),
+  right-click Mario Kart Wii → **Properties → Filesystem**, right-click the
+  disc, choose **Extract Entire Disc** and keep the `DATA` folder it makes
+  (KartPad doesn't need `UPDATE` or `CHANNEL`).
+  [PadMint](https://github.com/chrissotraidis/padmint) also saves one, named
+  `KartPad game data`, when it builds KartPad.
+- **Your disc image.** KartPad can import an ISO or WBFS directly (Android also
+  accepts RVZ). This needs your own Wii's 16-byte common key saved as
+  `common-key.bin`, for example from a BootMii NAND backup of your console.
+  KartPad does not include it and we cannot provide it.
+
+### Android
+
+1. Install `KartPad-v…-android.apk`. It updates an older KartPad and keeps your
+   saves; don't uninstall first.
+2. Copy your game data folder to the phone. It's about 2,000 files and all of
+   them must arrive: a USB cable is most reliable, or zip the folder, send the
+   zip any way you like and extract it with **Files by Google**. KartPad can't
+   pick a folder inside Google Drive.
+3. Open KartPad and tap **Import Game** on the Mario Kart Wii card. At
+   **Game Data & Saves**, tap **Import from Extracted Game Data Folder…**, pick
+   the folder, tap **Use this folder** and **Allow**, then **Done**. If you
+   played before, your game data is already there: tap **Play Game**.
+4. For Retro Rewind, tap **Set Up Game** on its card and KartPad downloads the
+   official pack.
+
+Coming from a PadMint game pack? Install the new APK over it. KartPad no longer
+needs the pack and frees the space it took.
+
+From 0.7.14, KartPad updates itself: when **Update available** shows on the
+game chooser, tap it and **Update Now**. The first time, Android asks you to
+allow KartPad to install apps.
+
+### iPhone and iPad
+
+1. In [PadMint](https://github.com/chrissotraidis/padmint), choose **KartPad**,
+   your disc image and **iPhone/iPad**. Install the IPA it makes with
+   Sideloadly, AltStore or SideStore. To keep your saves, install it over your
+   KartPad with the same tool and Apple ID. PadMint also makes your
+   `KartPad game data` folder.
+2. First time only: get your game data folder onto the device (AirDrop from a
+   Mac, a zip you unzip in the Files app, iCloud Drive once it has fully
+   downloaded, or a USB drive). In KartPad, tap
+   **Import Game** on the Mario Kart Wii card, then **Import from Extracted
+   Folder…**, and pick the folder in the Files window that opens.
+
+See [iPhone/iPad setup](docs/INSTALL_IPA.md) for more.
+
+### Mac
+
+1. In [PadMint](https://github.com/chrissotraidis/padmint), choose **KartPad**,
+   your disc image and **Mac**, then move the **KartPad** app it makes to
+   Applications.
+2. If macOS says it can't check the app, choose **Done**, then
+   **System Settings → Privacy & Security → Open Anyway**.
+3. Import your game data folder when KartPad asks for it.
+
+See [Install on Mac](docs/INSTALL_MACOS.md) for more.
+
+### PadMint
+
+[PadMint](https://github.com/chrissotraidis/padmint) builds KartPad from your
+own disc on your own computer: choose **KartPad**, your disc image and where
+you'll play, and it makes your copy and your `KartPad game data` folder. From
+0.7.14 it's how iPhone, iPad and Mac get KartPad, and it still works for
+Android.
+
+### Which file is which
+
+| File on the release page | What it is |
+|---|---|
+| `KartPad-v…-android.apk` | **Android: install this.** Ready to play with your game data |
+| `KartPad-v…-ios-for-padmint.ipa` | The iPhone app without game code. PadMint uses it; don't install it by itself |
+| `KartPad-v…-padmint.json`, `SHA256SUMS` | Used by PadMint and for checking downloads |
+| `KartPad-v…-source.tar.gz`, `KartPad-v…-notices.zip` | Source code and license notices |
+
+0.7.9 to 0.7.13 also had ready-to-play iPhone/iPad and Mac downloads. They stay
+on those release pages but won't get updates; build newer versions with PadMint.
+
+### Updating KartPad
+
+- **Android:** from 0.7.14, KartPad updates itself (**Update available →
+  Update Now**). You can also install the new APK over your current KartPad.
+- **iPhone, iPad and Mac:** build the new version with PadMint and install it
+  over your current KartPad. From 0.8.0, KartPad tells you when a new version
+  is out: **Update available** on the iPhone/iPad game chooser, or
+  **Help → Check for Updates…** on Mac.
+
+Your saves and game data stay.
+
+### Source maintenance
 
 **0.4.22 moved KartPad to maintained WiiCompiled source** with pinned platform
 branches, preserving the existing game behavior and repository history. Source
@@ -63,23 +170,16 @@ mismatch reproduced on both builds and remains unresolved. Completed online
 races/reconnect and broader hardware coverage are not new claims.
 See the [migration validation](docs/source-maintenance/VALIDATION.md).
 
-Download the checksums and accompanying notices with each package. The releases
-also include the [source bundle and rebuild instructions](docs/artifacts/2026-09-13/android-source-delivery.md). **Update in
-place using the same signing identity; do not uninstall or clear app data.**
-Private Android previews use a different signer and need a backed-up migration.
-
 ## Playing
 
 **Need help or found a bug?** [Where to report and follow up](docs/REPORTING.md).
-[Reporting test builds for Android and iPhone/iPad](docs/REPORTING.md#reporting-test-builds)
-are available separately from the stable downloads.
 Suspected runtime bugs can go [directly to WiiCompiled](https://github.com/patchzyy/Wiicompiled/issues/new/choose); identify your KartPad build.
 Use KartPad for app/platform problems or when the cause is unclear.
 
 [Frequently asked questions](#frequently-asked-questions) · [Controls](docs/MULTIPLAYER.md) · [Save transfer and troubleshooting](docs/SUPPORT.md)
 
 - Choose **Mario Kart Wii** or **Retro Rewind** when KartPad opens. Retro
-  Rewind 6.12.8 content installs separately; KartPad requires a matching native
+  Rewind 6.13.1 content installs separately; KartPad requires a matching native
   profile when the mod updates. Follow your platform's setup guide above.
 - Touch controls, motion steering and controllers are available on mobile;
   Mac also supports keyboard input. Touch layouts can be moved, resized and
@@ -108,34 +208,82 @@ known issues. Android's suggested starting point is **1x Native**. Sustained
 <details>
 <summary>Can I download an IPA or playable app?</summary>
 
-Yes—use the [platform downloads above](#downloads). The current public iPhone/iPad build is **0.4.24 build 49**; Mac and Apple TV have separate packages. Apple IPAs need re-signing. Every package requires your own supported game data. A [Personal IPA Builder](docs/BUILDER.md) is also available.
+On Android, yes: the APK on the releases page is ready to play, and you add
+your own game data the first time. On iPhone, iPad and Mac, build KartPad with
+PadMint from your own disc (from 0.7.14; 0.7.9 to 0.7.13 had ready-to-play
+downloads that won't get updates). See [Get KartPad](#get-kartpad).
+
+</details>
+
+<details>
+<summary>KartPad asks me for a "Wii common key". What is that?</summary>
+
+You chose **Import or Reimport Wii Disc Image…**. Reading a disc image needs a
+key from your own Wii, which most people don't have and KartPad can't provide.
+Go back and choose **Import from Extracted Game Data Folder…** (iPhone/iPad:
+**Import from Extracted Folder…**) with a folder from Dolphin instead. It needs
+no key. See [Your game data](#your-game-data).
+
+</details>
+
+<details>
+<summary>Dolphin made DATA, UPDATE and CHANNEL folders. Which one do I use?</summary>
+
+`DATA`. You can also pick the folder that contains all three; KartPad finds
+`DATA` inside it.
+
+</details>
+
+<details>
+<summary>It says "Ready to play" but the game goes black or crashes on start</summary>
+
+Usually some game files didn't copy, often from a cloud drive that hadn't
+finished downloading. KartPad 0.7.10 and newer check every file and tell you
+which are missing. Copy the folder again (a USB cable, or one zip file) and
+import it again. See [Android](docs/INSTALL_ANDROID.md#3-copy-it-to-the-phone)
+or [iPhone/iPad](docs/INSTALL_IPA.md#3-copy-it-to-the-device).
+
+</details>
+
+<details>
+<summary>PadForge says "KartPad cannot be built for android yet"</summary>
+
+PadForge is PadMint's old name. From KartPad 0.7.1, only PadMint can read
+KartPad's build recipe. Download
+[PadMint](https://github.com/chrissotraidis/padmint/releases/latest) and run it
+instead: it moves your PadForge folder over and reuses the tools it already
+downloaded.
 
 </details>
 
 <details>
 <summary>Are Android and Apple TV supported?</summary>
 
-Android has a playable ARM64/Vulkan APK for Android 9+, plus an explicitly unstable preview. Device-specific graphics corruption, freezes and slowdowns remain unresolved; a successful Pixel run does not certify other phones. Apple TV is an **experimental** tvOS 17+ preview with separate controller and hardware acceptance. See [Android setup](docs/INSTALL_ANDROID.md) and [Apple TV setup](docs/INSTALL_TVOS.md).
+Android targets ARM64/Vulkan on Android 9+. Device-specific graphics corruption, freezes and slowdowns remain unresolved; a successful Pixel run does not certify other phones. Apple TV is an **experimental** tvOS 17+ preview with separate controller and hardware acceptance. See [Android setup](docs/INSTALL_ANDROID.md) and [Apple TV setup](docs/INSTALL_TVOS.md).
 
 </details>
 
 <details>
 <summary>Does online multiplayer work?</summary>
 
-The tested iPad migration build reached Retro WFC with a new license. An existing
-license's serial mismatch reproduced on both old and new builds. Earlier Android
-tests reached Retro WFC and the worldwide lobby, but this release does not claim
-a newly verified complete online race/reconnect sequence or compatibility on
-every device. Native room hosting and Original Wiimmfi compatibility remain
+Retro WFC works with Retro Rewind 6.13.1. KartPad 0.8.0 signed in on a Pixel 9
+Pro XL. On the Android emulator, 0.7.15 signed in, joined a worldwide room and
+raced against other players; the room disconnected twice during a race, and
+each time the app returned to the menu and could sign in again. It isn't verified on every device
+or network. Native room hosting and Original Wiimmfi compatibility remain
 unfinished. See [online status](docs/ONLINE.md) and
 [friend-room guidance](docs/MULTIPLAYER.md#private-friend-rooms).
+
+If finding a room fails on mobile data but works on Wi-Fi, your carrier is
+blocking the direct player-to-player connections the game uses. Use Wi-Fi or a
+VPN ([#405](https://github.com/chrissotraidis/kartpad/issues/405)).
 
 </details>
 
 <details>
 <summary>Does KartPad support Retro Rewind, and what if it updates?</summary>
 
-Yes, with the separately installed **6.12.8** content and matching compiled profile. A newer Retro pack can require a new KartPad build; replacing files alone does not update translated game code. Apple checks the version before launch; Android checks the official version during installation and validates installed content at launch. Follow your [platform setup guide](#downloads) if a compatibility update is requested.
+Yes, with the separately installed **6.13.1** content and matching compiled profile. Almost every Retro Rewind update changes the mod's game code (`Code.pul`): 22 of its last 24 updates did. KartPad compiles that code into the app ahead of time, so a Retro Rewind update needs a new KartPad build; replacing files alone does not update the compiled game code. On Android the new build arrives through **Update available → Update Now**. On iPhone, iPad and Mac, build it with PadMint and install it over your current KartPad; iOS doesn't let a sideloaded app compile new code on the device. Apple checks the version before launch; Android checks the official version during installation and validates installed content at launch.
 
 </details>
 
@@ -177,7 +325,7 @@ Experimentally, on **macOS only**, using the direct Bluetooth pairing flow. It s
 <details>
 <summary>How much storage does KartPad use?</summary>
 
-Package size varies by platform and version; the iPhone/iPad IPA download is about **45 MB**. Extracted base-game data is roughly **2.5 GiB**, and Retro content, the original image and temporary installation files require more. Android setup recommends at least **6 GiB free**. Check the platform guide and leave room for updates; the IPA download size is not the installed-data footprint.
+Package size varies by platform and version; the iPhone/iPad app is about **65 MB**. Extracted base-game data is roughly **2.5 GiB**, and Retro content, the original image and temporary installation files require more. Android setup recommends at least **6 GiB free**. Check the platform guide and leave room for updates; the app size is not the installed-data footprint.
 
 </details>
 
@@ -212,7 +360,7 @@ No. PowerPC code is translated ahead of time and compiled into the app. The iPho
 <details>
 <summary>Why is it slow or freezing, and are distorted graphics fixed?</summary>
 
-First-use shader/pipeline compilation can cause stalls, and heat or higher render resolution can worsen performance. **Not every freeze is shader compilation.** Android has separate unresolved character corruption, online-menu stalls and cup-transition crashes. Start at **1x Native**, but do not treat a settings change or passing renderer probe as a confirmed fix. Use [known issues](docs/KNOWN-ISSUES.md) and [diagnostic guidance](docs/SUPPORT.md) to match your symptoms; the preview adds useful changes and logs, not a blanket stability guarantee.
+The first time a menu or course appears, KartPad prepares its graphics, which causes short pauses; heat and higher render resolutions make things slower. Start at **1×**. Broken characters on Android depend on the GPU: Snapdragon 8 Elite (Adreno 8xx) is fixed by **Automatic** in 0.7.10, while older Adreno and PowerVR GPUs are still open. [Known issues](docs/KNOWN-ISSUES.md) lists what's open for each device family.
 
 </details>
 
@@ -267,6 +415,15 @@ saves, account identifiers or signing material. Choose the relevant tracker in t
 Japanese work uses `scripts/build-rmcj01-macos.sh`, `scripts/translate-rmcj01-retro.sh`,
 and `scripts/build-rmcj01-ios.sh`. These are region-specific builds, not a universal
 binary. See [RMCJ01 port status](docs/RMCJ01.md).
+## Community and support
+
+[Join the Discord](https://discord.gg/xwHfUD2bxW) for help and news. It is one
+community for KartPad and its sibling projects, such as BlueWake, MeleePad and
+SunPad: ask about setup, installing, and building with PadMint, share how it
+runs on your device, and hear about new releases first.
+
+Found a bug? [Open an issue](https://github.com/chrissotraidis/kartpad/issues)
+with your device, its OS version, and the steps that led to it.
 
 ## Credits and license
 

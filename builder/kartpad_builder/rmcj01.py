@@ -227,6 +227,7 @@ def prepare(repo: Path, data: Path, output: Path, runtime: Path) -> None:
             continue
         source = rewrite(path.read_text(), str(path.relative_to(host)))
         source = source.replace("80d18895b39c63bd80f457398bfcbb91b7d16ac116a41a88967e954080155b05", profile.data["extraction"]["executables"]["dol"]["sha256"])
+        source = source.replace("16d9d146112541fefea701ecb5bc1a496f9d50e4a752fbb5b6778e7c6399f67d", profile.data["extraction"]["executables"]["rel"]["sha256"])
         source = source.replace("(PAL)", "(Japan)")
         path.write_text(source)
     for name in ("inject-g10-rkg-fixture-hook.py", "inject-online-rkg-selection-hooks.py", "inject-g10-camera-lifecycle-guard.py"):

@@ -10,9 +10,32 @@ val minizipAndroidRoot = providers.environmentVariable("MINIZIP_ANDROID_ROOT")
 val mbedtlsAndroidRoot = providers.environmentVariable("MBEDTLS_ANDROID_ROOT")
 val gameRuntimeSource = providers.gradleProperty("kartpadGameRuntimeSource").orNull
 val translatedShardManifest = providers.gradleProperty("kartpadTranslatedShardManifest").orNull
+// Publishable app: the runtime without game code; the player's game pack is loaded at startup.
+val gamePackApp = providers.gradleProperty("kartpadGamePackApp").map { it.toBoolean() }.getOrElse(false)
+// The pack interface this app accepts (scripts/build-android-app.sh computes it
+// with kartpad_builder.pack_fingerprint from the staged runtime).
+val packFingerprint = providers.gradleProperty("kartpadPackFingerprint").orNull
+require(!gamePackApp || packFingerprint?.matches(Regex("[0-9a-f]{64}")) == true) {
+    "kartpadGamePackApp needs kartpadPackFingerprint (64 lowercase hex digits)"
+}
+// Ready-to-play app: a folder with arm64-v8a/libkartpad_game.so, the game pack built
+// in. Android installs it with the app's other native libraries; nothing to import.
+val bundledGamePack = providers.gradleProperty("kartpadBundledGamePack").orNull
+require(bundledGamePack == null || gamePackApp) { "kartpadBundledGamePack needs kartpadGamePackApp" }
 val androidNativeTarget = providers.gradleProperty("kartpadAndroidNativeTarget").orNull
 val discIoJniRoot = providers.gradleProperty("kartpadDiscIoJniRoot").orNull
+val kartpadDiagnosticRelease = providers.gradleProperty("kartpadDiagnosticRelease")
+    .map { it.toBooleanStrict() }
+    .getOrElse(false)
 val kartpadProfileable = providers.gradleProperty("kartpadProfileable")
+    .map { it.toBooleanStrict() }
+    .getOrElse(false)
+// ELF TLS requires Android 10. Keep Android 9 support in ordinary builds.
+val kartpadNativeTlsExperiment = providers.gradleProperty("kartpadNativeTlsExperiment")
+    .map { it.toBooleanStrict() }
+    .getOrElse(false)
+// Private RenderDoc handoff: opt in without switching to an unoptimized Debug runtime.
+val kartpadFrameCapture = providers.gradleProperty("kartpadFrameCapture")
     .map { it.toBooleanStrict() }
     .getOrElse(false)
 val kartpadBuildAssets = layout.buildDirectory.dir("generated/assets/kartpadBuild")
@@ -32,16 +55,21 @@ val prepareKartpadBuildProvenance by tasks.registering(Exec::class) {
 val kartpadIconResources = layout.buildDirectory.dir("generated/res/kartpadIcon")
 val prepareKartpadIcon by tasks.registering(Copy::class) {
     from(rootProject.file("../apple/ios/Assets.xcassets/AppIcon.appiconset/KartPadIcon-1024.png")) { rename { "kartpad_app_icon.png" } }
+    from(rootProject.file("../apple/ios/Assets.xcassets/AppIcon-Circuit.appiconset/KartPadIcon-Circuit-1024.png")) { rename { "kartpad_app_icon_circuit.png" } }
+    from(rootProject.file("../apple/ios/Assets.xcassets/AppIcon-Mono.appiconset/KartPadIcon-Mono-1024.png")) { rename { "kartpad_app_icon_mono.png" } }
     from(rootProject.file("../apple/ios/Assets.xcassets/KartPadLogo.imageset/KartPadIcon-1024.png")) { rename { "kartpad_racing_mark.png" } }
     from(rootProject.file("../apple/ios/Assets.xcassets/KartPadChecker.imageset/checker.png")) { rename { "kartpad_checker.png" } }
     into(kartpadIconResources.map { it.dir("drawable-nodpi") })
 }
+// One KartPad version for every platform (repository root version.json).
+val kartpadRelease = groovy.json.JsonSlurper()
+    .parse(rootProject.file("../version.json")) as Map<*, *>
 val kartpadVersionCode = providers.gradleProperty("kartpadVersionCode")
     .map { value ->
         value.toIntOrNull()?.takeIf { it > 0 }
             ?: error("kartpadVersionCode must be a positive integer")
     }
-    .getOrElse(117)
+    .getOrElse((kartpadRelease["build"] as Number).toInt())
 val kartpadVersionName = providers.gradleProperty("kartpadVersionName")
     .map { value ->
         require(Regex("[0-9A-Za-z][0-9A-Za-z._-]{0,63}").matches(value)) {
@@ -49,7 +77,13 @@ val kartpadVersionName = providers.gradleProperty("kartpadVersionName")
         }
         value
     }
-    .getOrElse("0.4.24-android.1")
+    .getOrElse(kartpadRelease["version"] as String)
+require(!kartpadFrameCapture || kartpadVersionName.endsWith("-capture")) {
+    "Frame capture builds must have a version name ending in -capture"
+}
+require(!kartpadNativeTlsExperiment || kartpadVersionName.contains("-native-tls")) {
+    "Native TLS experiments must have -native-tls in the version name"
+}
 
 android {
     namespace = "dev.kartpad.android"
@@ -59,12 +93,16 @@ android {
 
     defaultConfig {
         applicationId = "dev.kartpad.android"
-        minSdk = 28
+        minSdk = if (kartpadNativeTlsExperiment) 29 else 28
         targetSdk = 36
         versionCode = kartpadVersionCode
         versionName = kartpadVersionName
         manifestPlaceholders["kartpadProfileable"] = kartpadProfileable.toString()
+        manifestPlaceholders["kartpadFrameCapture"] = kartpadFrameCapture.toString()
         buildConfigField("boolean", "GAME_RUNTIME", (gameRuntimeSource != null).toString())
+        buildConfigField("boolean", "GAME_PACK_APP", gamePackApp.toString())
+        buildConfigField("String", "PACK_FINGERPRINT", "\"${packFingerprint ?: ""}\"")
+        buildConfigField("boolean", "BUNDLED_GAME_PACK", (bundledGamePack != null).toString())
         buildConfigField("boolean", "DISC_IMAGE_IMPORT", (discIoJniRoot != null).toString())
 
         ndk {
@@ -78,7 +116,17 @@ android {
                     "-DMINIZIP_ANDROID_ROOT=${minizipAndroidRoot.get()}",
                     "-DMBEDTLS_ANDROID_ROOT=${mbedtlsAndroidRoot.get()}",
                 )
-                if (gameRuntimeSource != null || translatedShardManifest != null) {
+                if (gamePackApp) {
+                    require(gameRuntimeSource != null && translatedShardManifest == null) {
+                        "kartpadGamePackApp needs kartpadGameRuntimeSource and no translated manifest"
+                    }
+                    arguments += listOf(
+                        "-DKARTPAD_GAME_RUNTIME_SOURCE=$gameRuntimeSource",
+                        "-DMKW_GAME_PACK=APP",
+                        "-DKARTPAD_APP_VERSION=$kartpadVersionName",
+                        "-DKARTPAD_PACK_FINGERPRINT=$packFingerprint",
+                    )
+                } else if (gameRuntimeSource != null || translatedShardManifest != null) {
                     require(gameRuntimeSource != null && translatedShardManifest != null) {
                         "kartpadGameRuntimeSource and kartpadTranslatedShardManifest must be set together"
                     }
@@ -102,6 +150,22 @@ android {
         }
     }
 
+    buildTypes {
+        getByName("release") {
+            isDebuggable = kartpadFrameCapture
+            if (kartpadFrameCapture) {
+                externalNativeBuild.cmake.arguments += "-DCMAKE_BUILD_TYPE=RelWithDebInfo"
+            }
+            // Full DWARF remains available for private diagnostics and in the
+            // unstripped native build. Public bundles carry the symbol table.
+            ndk { debugSymbolLevel = if (kartpadDiagnosticRelease) "FULL" else "SYMBOL_TABLE" }
+            // Only the private owner-test candidate uses the existing local debug signer.
+            if (kartpadDiagnosticRelease) {
+                signingConfig = signingConfigs.getByName("debug")
+            }
+        }
+    }
+
     buildFeatures {
         prefab = true
         buildConfig = true
@@ -120,6 +184,11 @@ android {
             jniLibs.srcDir(file(discIoJniRoot))
         }
     }
+    if (bundledGamePack != null) {
+        sourceSets.named("main") {
+            jniLibs.srcDir(file(bundledGamePack))
+        }
+    }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -127,7 +196,10 @@ android {
     }
     packaging {
         jniLibs {
-            useLegacyPackaging = false
+            // A built-in game pack is loaded by path from the app's library folder,
+            // so Android must unpack the libraries there at install.
+            useLegacyPackaging = bundledGamePack != null
+            if (bundledGamePack != null) keepDebugSymbols += "**/libkartpad_game.so"
         }
     }
     lint {

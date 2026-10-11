@@ -118,6 +118,9 @@ class JapaneseProfileTests(unittest.TestCase):
         self.assertIn('${KARTPAD_IOS_AUDIT_REGION:-P}', script)
         self.assertIn(japan_profile().data["extraction"]["executables"]["dol"]["sha256"], script)
         self.assertIn("Japanese app retains the PAL importer contract", script)
+        self.assertIn(japan_profile().data["extraction"]["executables"]["rel"]["sha256"], script)
+        preparer = (REPO / "builder/kartpad_builder/rmcj01.py").read_text()
+        self.assertIn('executables"]["rel"]["sha256', preparer)
 
     def test_japanese_retro_link_view_matches_the_observed_branch_contract(self):
         # J Code.pul checks this actual branch before entering its title scene.

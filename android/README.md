@@ -1,11 +1,10 @@
 # KartPad Android
 
-Android is a supported community platform. The current release is
-[`v0.4.17-android.1`](https://github.com/chrissotraidis/kartpad/releases/tag/v0.4.17-android.1),
-with Retro Rewind 6.12.8, saved FPS counter sizes, a responsive touch editor and
-shoulder-to-D-pad remapping. Read
-[installation, update safety and known limits](../docs/INSTALL_ANDROID.md) and
-[exact release testing](../docs/releases/v0.4.17-android.1.md).
+Android is a supported community platform. Prebuilt APK downloads have been
+retired; the last published release was `v0.5.0 / code135` (no longer
+available). A build-it-yourself Android path is in progress.
+Read [installation, update safety and known limits](../docs/INSTALL_ANDROID.md)
+and the [current release notes](../docs/releases/v0.5.0.md).
 Sustained 60 FPS and complete device/controller coverage are not claimed.
 
 This public release/build lane is **RMCP01 (PAL)**. For a separate RMCJ01 Japan
@@ -14,8 +13,18 @@ and `scripts/build-rmcj01-android.sh`; do not pass Japanese data to the PAL buil
 The source archive and
 [reconstruction instructions](../docs/artifacts/2026-09-13/android-source-delivery.md)
 supply the dependency/runtime source and exact partition metadata for this build.
+The next source candidate adds RVZ import through Android's system picker.
+The public code135 APK accepts ISO/WBFS. Both paths require the supported
+RMCP01 revision0 image; RVZ reduces source-image size, not extracted installed
+data. Candidate evidence and limits are in the
+[overnight work report](../docs/artifacts/2026-09-21/README.md).
 
-## Build the full playable app on an Apple Silicon Mac
+## Historical full-app build recipe: v0.4.17-android.1
+
+The recipe below intentionally checks out the older release and its matching
+inputs. It is not a recipe for reproducing the current code135 APK. Its
+[source delivery and reconstruction record](../docs/artifacts/2026-09-13/android-source-delivery.md)
+supplies that version's dependency/runtime source and exact partition metadata.
 
 The current scripts target macOS ARM64, with Xcode command-line tools, Python 3,
 and the pinned Builder/Android dependencies. Linux/Windows host builds are not

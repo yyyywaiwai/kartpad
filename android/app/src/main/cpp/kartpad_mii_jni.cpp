@@ -201,3 +201,18 @@ Java_dev_kartpad_android_KartPadActivity_nativeRemoveMii(
   }
   return ToByteArray(env, database);
 }
+
+#include "nand_settings.h"
+extern "C" JNIEXPORT jbyteArray JNICALL
+Java_dev_kartpad_android_KartPadIdentityStorage_nativeConsoleSettings(JNIEnv* env, jobject, jstring value) {
+  const char* chars = env->GetStringUTFChars(value, nullptr);
+  if (!chars) return nullptr;
+  const std::string serial(chars);
+  env->ReleaseStringUTFChars(value, chars);
+  const auto bytes = RuntimeNandSettings::EncodeNew(serial);
+  if (!bytes) {
+    Throw(env, "java/lang/IllegalArgumentException", "Invalid previous console serial");
+    return nullptr;
+  }
+  return ToByteArray(env, std::vector<uint8_t>(bytes->begin(), bytes->end()));
+}

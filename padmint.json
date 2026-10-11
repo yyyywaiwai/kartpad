@@ -1,0 +1,286 @@
+{
+  "schema_version": 1,
+  "id": "kartpad",
+  "name": "KartPad",
+  "game": "Mario Kart Wii (Wii, RMCP01)",
+  "kind": "disc-translation",
+  "status": "experimental",
+  "inputs": [
+    {
+      "type": "wii-disc",
+      "formats": [
+        "iso",
+        "wbfs",
+        "rvz",
+        "wia",
+        "gcz",
+        "ciso"
+      ],
+      "game_ids": [
+        "RMCP01"
+      ],
+      "revisions": [
+        0
+      ],
+      "description": "Your own PAL RMCP01 revision 0 disc image. Any dump or container is accepted if extraction reproduces the profile's exact main.dol and StaticR.rel."
+    }
+  ],
+  "targets": {
+    "ios": {
+      "hosts": {
+        "macos-arm64": "experimental",
+        "macos-x86_64": "experimental",
+        "windows-arm64": "experimental",
+        "windows-x86_64": "experimental",
+        "linux-x86_64": "experimental",
+        "linux-arm64": "experimental"
+      },
+      "tools": [
+        "git",
+        "dotnet",
+        "cmake",
+        "ninja",
+        "nodtool",
+        "libcxx"
+      ],
+      "published_app": "KartPad-v{version}-ios-for-padmint.ipa",
+      "output": "ipa",
+      "check": "none",
+      "steps": [
+        {
+          "stage": "preflight",
+          "command": [
+            "{python}",
+            "-m",
+            "kartpad_builder.cli",
+            "bootstrap",
+            "--target",
+            "ios-pack"
+          ],
+          "env": {
+            "PYTHONPATH": "{repo}/builder"
+          }
+        },
+        {
+          "stage": "build",
+          "command": [
+            "{python}",
+            "-m",
+            "kartpad_builder.cli",
+            "build-pack",
+            "ios",
+            "{disc}",
+            "--app",
+            "{app}",
+            "--work-root",
+            "{work}",
+            "--output",
+            "{output}",
+            "--jobs",
+            "{jobs}",
+            "--game-data",
+            "{output}.data"
+          ],
+          "env": {
+            "PYTHONPATH": "{repo}/builder"
+          }
+        }
+      ]
+    },
+    "macos": {
+      "hosts": {
+        "macos-arm64": "experimental"
+      },
+      "tools": [
+        "dotnet",
+        "cmake",
+        "ninja",
+        "nodtool"
+      ],
+      "output": "zip",
+      "check": "none",
+      "steps": [
+        {
+          "stage": "preflight",
+          "command": [
+            "/bin/bash",
+            "{repo}/scripts/build-user-ipa.sh",
+            "bootstrap",
+            "--target",
+            "macos"
+          ]
+        },
+        {
+          "stage": "translate",
+          "command": [
+            "/bin/bash",
+            "{repo}/scripts/translate-retro-rewind.sh",
+            "--image",
+            "{disc}",
+            "--retro-root",
+            "{repo}/private/builder/retro-rewind-downloads/6.13.1-extracted/RetroRewind6",
+            "--payload",
+            "{repo}/private/builder/retro-rewind-downloads/payload.RMCPD00.bin"
+          ],
+          "env": {
+            "KARTPAD_TRANSLATION_JOBS": "{jobs}"
+          }
+        },
+        {
+          "stage": "compile",
+          "command": [
+            "/bin/bash",
+            "{repo}/scripts/build-macos-app.sh",
+            "{repo}/private/self-build/retro-rewind/translation",
+            "{work}/macos-source",
+            "{work}/macos-build",
+            "{work}/KartPad.app",
+            "dual"
+          ]
+        },
+        {
+          "stage": "package",
+          "command": [
+            "/usr/bin/ditto",
+            "-c",
+            "-k",
+            "--keepParent",
+            "{work}/KartPad.app",
+            "{output}"
+          ]
+        }
+      ]
+    },
+    "android": {
+      "hosts": {
+        "macos-arm64": "experimental",
+        "macos-x86_64": "experimental",
+        "windows-arm64": "experimental",
+        "windows-x86_64": "experimental",
+        "linux-x86_64": "experimental",
+        "linux-arm64": "experimental"
+      },
+      "tools": [
+        "git",
+        "dotnet",
+        "cmake",
+        "ninja",
+        "android-ndk",
+        "nodtool"
+      ],
+      "published_app": "KartPad-v{version}-android.apk",
+      "output": "so",
+      "check": "none",
+      "steps": [
+        {
+          "stage": "preflight",
+          "command": [
+            "{python}",
+            "-m",
+            "kartpad_builder.cli",
+            "bootstrap",
+            "--target",
+            "android-pack"
+          ],
+          "env": {
+            "PYTHONPATH": "{repo}/builder"
+          }
+        },
+        {
+          "stage": "build",
+          "command": [
+            "{python}",
+            "-m",
+            "kartpad_builder.cli",
+            "build-pack",
+            "android",
+            "{disc}",
+            "--app",
+            "{app}",
+            "--work-root",
+            "{work}",
+            "--output",
+            "{output}",
+            "--jobs",
+            "{jobs}",
+            "--game-data",
+            "{output}.data"
+          ],
+          "env": {
+            "PYTHONPATH": "{repo}/builder"
+          }
+        }
+      ]
+    }
+  },
+  "requirements": {
+    "disk_gb": 60,
+    "tools": [
+      {
+        "name": "git",
+        "version_args": [
+          "--version"
+        ]
+      },
+      {
+        "name": "cmake",
+        "version_args": [
+          "--version"
+        ]
+      },
+      {
+        "name": "ninja",
+        "version_args": [
+          "--version"
+        ]
+      },
+      {
+        "name": "python3",
+        "version_args": [
+          "--version"
+        ]
+      },
+      {
+        "name": "rg",
+        "version_args": [
+          "--version"
+        ]
+      },
+      {
+        "name": "dotnet",
+        "version_args": [
+          "--version"
+        ],
+        "min_version": "8"
+      },
+      {
+        "name": "xcodebuild",
+        "version_args": [
+          "-version"
+        ],
+        "player": true,
+        "hosts": [
+          "macos-arm64",
+          "macos-x86_64"
+        ],
+        "targets": [
+          "ios",
+          "macos"
+        ],
+        "note": "Install Xcode from the App Store, open it once, then run PadMint again"
+      }
+    ]
+  },
+  "stages": [
+    "preflight",
+    "extract",
+    "translate",
+    "compile",
+    "app",
+    "package"
+  ],
+  "publication": {
+    "public_binaries": false,
+    "reason": "PadMint outputs are personal builds. Maintainer releases provide an Android APK and game-code-free iOS inputs for PadMint, plus source and notices."
+  }
+}

@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
+release_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "${repo_root}/version.json" version)"
+release_build="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "${repo_root}/version.json" build)"
 # shellcheck source=android-toolchain-versions.sh
 source "$repo_root/scripts/android-toolchain-versions.sh"
 bundle="${1:-$repo_root/android/app/build/outputs/bundle/release/app-release.aab}"
@@ -27,7 +29,7 @@ done
 
 "$java" -jar "$bundletool" validate --bundle="$bundle" >/dev/null
 manifest="$($java -jar "$bundletool" dump manifest --bundle="$bundle")"
-expected_version_name="${KARTPAD_ANDROID_EXPECTED_VERSION_NAME:-0.4.12-android.2}"
+expected_version_name="${KARTPAD_ANDROID_EXPECTED_VERSION_NAME:-${release_version}}"
 if [[ -n "${KARTPAD_ANDROID_EXPECTED_VERSION_CODE:-}" ]]; then
   [[ "$manifest" == *"android:versionCode=\"$KARTPAD_ANDROID_EXPECTED_VERSION_CODE\""* ]] || {
     echo "ERROR: AAB version code does not match the requested code" >&2; exit 1;
@@ -36,13 +38,20 @@ fi
 if [[ "$manifest" == *'android:debuggable="true"'* ]]; then
   echo "ERROR: release AAB is debuggable" >&2; exit 1
 fi
-[[ "$manifest" == *'package="dev.kartpad.android"'* ]]
+[[ "$manifest" == *'package="dev.kartpad.android"'* ]] || { echo "audit-android-bundle.sh: check failed (line 41)" >&2; exit 1; }
 [[ "$manifest" == *"android:versionName=\"$expected_version_name\""* ]] || {
   echo "ERROR: AAB version name is not $expected_version_name" >&2
   exit 1
 }
-[[ "$manifest" == *'android:compileSdkVersion="36"'* ]]
-[[ "$manifest" == *'<uses-sdk android:minSdkVersion="28" android:targetSdkVersion="36"/>'* ]]
+[[ "$manifest" == *'android:compileSdkVersion="36"'* ]] || { echo "audit-android-bundle.sh: check failed (line 46)" >&2; exit 1; }
+expected_min_sdk="${KARTPAD_ANDROID_EXPECTED_MIN_SDK:-28}"
+case "$expected_min_sdk" in
+  28|29) ;;
+  *) echo "ERROR: expected Android minimum must be 28 or 29" >&2; exit 64 ;;
+esac
+[[ "$manifest" == *"<uses-sdk android:minSdkVersion=\"$expected_min_sdk\" android:targetSdkVersion=\"36\"/>"* ]] || {
+  echo "ERROR: bundle minimum SDK does not match $expected_min_sdk" >&2; exit 1;
+}
 permission_names="$(printf '%s\n' "$manifest" |
   sed -n 's/.*<uses-permission android:name="\([^"]*\)".*/\1/p' | sort)"
 expected_permission_names="$(printf '%s\n' \
@@ -52,6 +61,7 @@ expected_permission_names="$(printf '%s\n' \
   android.permission.INTERNET \
   android.permission.POST_NOTIFICATIONS \
   android.permission.RECEIVE_BOOT_COMPLETED \
+  android.permission.REQUEST_INSTALL_PACKAGES \
   android.permission.WAKE_LOCK \
   dev.kartpad.android.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION | sort)"
 [[ "$permission_names" == "$expected_permission_names" ]] || {
@@ -91,6 +101,11 @@ expected_native_members="$(printf '%s\n' \
   base/lib/arm64-v8a/libc++_shared.so \
   base/lib/arm64-v8a/libkartpad_discio.so \
   base/lib/arm64-v8a/libmain.so | sort)"
+# The ready-to-play app (KARTPAD_ANDROID_ALLOW_GAME_PACK=1) also carries the game pack:
+# KartPad's translated game code. Every other check still applies to it.
+if [[ "${KARTPAD_ANDROID_ALLOW_GAME_PACK:-0}" == 1 ]]; then
+  expected_native_members="$(printf '%s\n' "$expected_native_members" base/lib/arm64-v8a/libkartpad_game.so | sort)"
+fi
 [[ "$native_members" == "$expected_native_members" ]] || {
   echo "ERROR: AAB native-library set differs from the product allowlist" >&2
   exit 1
@@ -123,7 +138,9 @@ fi
 
 audit_root="$repo_root/.android-bootstrap/audit-aab"
 mkdir -p "$audit_root"
-for library in libSDL3.so libc++_shared.so libkartpad_discio.so libmain.so; do
+aab_libraries=(libSDL3.so libc++_shared.so libkartpad_discio.so libmain.so)
+[[ "${KARTPAD_ANDROID_ALLOW_GAME_PACK:-0}" != 1 ]] || aab_libraries+=(libkartpad_game.so)
+for library in "${aab_libraries[@]}"; do
   unzip -p "$bundle" "base/lib/arm64-v8a/$library" > "$audit_root/$library"
   if "$readelf" -l "$audit_root/$library" |
       awk '$1 == "LOAD" && $NF != "0x4000" { bad = 1 } END { exit bad ? 0 : 1 }'; then
@@ -142,7 +159,7 @@ expected_needed="$(printf '%s\n' \
   echo "ERROR: AAB libmain.so dependency set differs from the allowlist" >&2
   exit 1
 }
-[[ "$dynamic" == *"GNU_RELRO"* ]]
+[[ "$dynamic" == *"GNU_RELRO"* ]] || { echo "audit-android-bundle.sh: check failed (line 161)" >&2; exit 1; }
 printf '%s\n' "$dynamic" | grep -Eq 'GNU_STACK .* RW  0x0$' || {
   echo "ERROR: AAB libmain.so does not have a non-executable stack" >&2
   exit 1
@@ -170,8 +187,9 @@ if grep -Eq '/Users/|Mario Kart Wii\.(iso|wbfs)' "$audit_root/aab.strings"; then
   echo "ERROR: AAB contains a private path or game-data name" >&2
   exit 1
 fi
-# Parser literals belong only in the two TLS-bearing runtime libraries and their
-# optional debug-symbol copies. Prestripped JNI packaging omits symbol copies.
+# Parser literals belong only in the TLS-bearing runtime library and its
+# optional debug-symbol copy. The coreless disc-import library links no TLS
+# code, so it carries none. Prestripped JNI packaging omits symbol copies.
 python3 - "$bundle" <<'PY_AUDIT'
 import collections
 import re
@@ -181,8 +199,7 @@ import zipfile
 suffix = b"PRIVATE KEY-----"
 markers = [b"-----" + boundary + b" " + kind + suffix
            for boundary in (b"BEGIN", b"END") for kind in (b"", b"EC ", b"RSA ")]
-expected = {"base/lib/arm64-v8a/libmain.so": 2,
-            "base/lib/arm64-v8a/libkartpad_discio.so": 1}
+expected = {"base/lib/arm64-v8a/libmain.so": 2}
 for library, copies in list(expected.items()):
     name = library.rsplit("/", 1)[1]
     expected["BUNDLE-METADATA/com.android.tools.build.debugsymbols/arm64-v8a/" + name + ".sym"] = copies

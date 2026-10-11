@@ -1,0 +1,79 @@
+{
+  "version": "0.5.0",
+  "source": "a2f41d5515c688973e47573ae65504e891e222f1",
+  "artifacts": {
+    "KartPad-v0.5.0-code135-public-candidate.apk": {
+      "bytes": 111773259,
+      "sha256": "63526e4d5ae6c7ec209276ce49e9332af861dfb4a06617b7431843cf9432da37"
+    },
+    "KartPad-v0.5.0-build59-local-unsigned.ipa": {
+      "bytes": 41755413,
+      "sha256": "e266da6b8c863d8c0b9452c463da9edb8591303f449957cbb38b0b0ff35bfadd"
+    },
+    "KartPad-v0.5.0-build59-local-macos-arm64.zip": {
+      "bytes": 41642316,
+      "sha256": "66761d85fbbdeea6c03fe6b2c3c49f38d8923adc89deb541321e6456594258e7"
+    }
+  },
+  "android": {
+    "code": 135,
+    "installed": true,
+    "installed_apk_readback_matches": true,
+    "public_and_local_payloads_identical": true,
+    "native_build_id": "ce82326003e7b0db832e931282f3f815195e60f2",
+    "device_check": "First post-update Retro Rewind offline 100cc Yoshi menu: all 12 vehicle thumbnails colored. Original mode and full-race owner acceptance remain pending.",
+    "owner_confirmation": "September 20: owner says this appears to fix the reported black-thumbnail regression. No separate full-race/all-mode endurance acceptance inferred."
+  },
+  "ios_ipados": {
+    "build": 59,
+    "uuid": "1FDEF47B-7C42-3913-A47B-B2B85407FA0B",
+    "installed": true,
+    "current_owner_ipad_build": 59,
+    "status": "Installed in place on physical iPad; signing profile and executable UUID verified. All 30 fresh backup files match after installation, WBFS remains present. Normal launch and both game-ready entries observed. No physical build59 gameplay claim.",
+    "preserved_files_verified": 30
+  },
+  "macos": {
+    "build": 59,
+    "installed": false,
+    "status": "Built, packaged, signed, audited; archive bytes, modes and symlinks verified."
+  },
+  "validation": {
+    "old_copy_exit": 4,
+    "old_capacity_exit": 4,
+    "fixed_copy_exit": 0,
+    "fixed_capacity_exit": 0,
+    "fixed_full_skip_enabled_exit": 0,
+    "four_platform_staging_and_readback_sanitizers": "passed",
+    "ci": "all 3 checks passed on a2f41d5"
+  },
+  "release_status": "Published as latest stable v0.5.0 on September 20, 2026. All six downloaded assets verified; see ../2026-09-20/release-050-publication.json.",
+  "coordinated_delivery": {
+    "status": "published_and_download_verified",
+    "packagingCommit": "7502b1fa5690020dc6c17512d0199395da06f9db",
+    "artifacts": {
+      "KartPad-v0.5.0-android-arm64.apk": {
+        "bytes": 111773259,
+        "sha256": "63526e4d5ae6c7ec209276ce49e9332af861dfb4a06617b7431843cf9432da37"
+      },
+      "KartPad-v0.5.0-ios-unsigned.ipa": {
+        "bytes": 41995797,
+        "sha256": "7c64144ea996f438aab853e700c8ffa3b8b9db205fdb8033714b07ca6186cadf"
+      },
+      "KartPad-v0.5.0-macos-arm64.zip": {
+        "bytes": 41882700,
+        "sha256": "9f92e43cc3e5d15e9dcdea8c00c37150b00d0286e7445d0929ebaa9e435f5cea"
+      },
+      "KartPad-v0.5.0-notices.zip": {
+        "bytes": 240406,
+        "sha256": "9f348d95c25b2d4f96cbcffdc50c526b0b813ec17be09d87749ff435b9dedfbc"
+      },
+      "KartPad-v0.5.0-source.tar.gz": {
+        "bytes": 361516349,
+        "sha256": "70f1672b99d40114807fa36eb7c12f4d161b1d5a65c13636cf2451f7291a3457"
+      }
+    },
+    "directory": "build/release-050-20260920",
+    "verification": "Independent final checksum readback; all original IPA/Mac app entry bytes, modes and symlinks preserved. Embedded guides match packaging commit 7502b1f. Source archive retains exact compilation source a2f41d5.",
+    "release_url": "https://github.com/chrissotraidis/kartpad/releases/tag/v0.5.0"
+  }
+}

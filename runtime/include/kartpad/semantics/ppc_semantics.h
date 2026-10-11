@@ -82,6 +82,23 @@ inline constexpr std::uint32_t ANY_X = OX | UX | ZX | XX | VX_ANY;
 inline constexpr std::uint32_t ANY_E = VE | OE | UE | ZE | XE;
 }  // namespace fpscr
 
+// Host overflow/underflow/inexact flags only set the guest's sticky OX/UX/XX
+// status bits, unless the matching FPSCR enable could suppress the register
+// write. The translated game reads FPSCR (mffs) solely in OS context
+// save/restore, FP-exception and crash-dump paths, so on Android the status
+// capture is skipped while those enables are clear. Results, register writes,
+// VX/ZX, FR/FI and FPRF are unchanged. Skipping also avoids reading and writing
+// the host FPSR around every operation.
+inline constexpr bool TrackHostFpStatus(std::uint32_t fpscr_value) noexcept {
+#if (defined(KARTPAD_ANDROID_COMBINED_FENV) && defined(KARTPAD_ANDROID_UNOBSERVED_FP_STATUS)) || \
+    defined(KARTPAD_UNOBSERVED_FP_STATUS)
+  return (fpscr_value & (fpscr::OE | fpscr::UE | fpscr::XE)) != 0;
+#else
+  (void)fpscr_value;
+  return true;
+#endif
+}
+
 inline constexpr std::uint32_t UpdateFpscrSummaries(
     std::uint32_t value) noexcept {
   value = (value & ~fpscr::VX) |
@@ -221,7 +238,9 @@ enum class ScalarFpBinaryOperation { Add, Subtract, Multiply, Divide };
 inline ScalarFpResult EvaluatePpcScalarBinary(
     std::uint32_t fpscr_value, ScalarFpBinaryOperation operation, double a,
     double b, bool single_precision) noexcept {
-  ClearScalarFlags();
+  const bool track_status = TrackHostFpStatus(fpscr_value);
+  if (track_status)
+    ClearScalarFlags();
   volatile double computed = 0.0;
   switch (operation) {
   case ScalarFpBinaryOperation::Add:
@@ -270,7 +289,7 @@ inline ScalarFpResult EvaluatePpcScalarBinary(
     exception |= fpscr::ZX;
   }
 
-  const int host_flags = CaptureAndClearScalarFlags();
+  const int host_flags = track_status ? CaptureAndClearScalarFlags() : 0;
   if ((host_flags & FE_OVERFLOW) != 0)
     exception |= fpscr::OX;
   if ((host_flags & FE_UNDERFLOW) != 0)
@@ -294,10 +313,12 @@ inline ScalarFpResult EvaluatePpcSqrt(std::uint32_t fpscr_value, double input,
     fpscr_value &= ~(fpscr::FR | fpscr::FI);
     value = std::bit_cast<double>(0x7ff8000000000000ULL);
   } else {
-    ClearScalarFlags();
+    const bool track_status = TrackHostFpStatus(fpscr_value);
+    if (track_status)
+      ClearScalarFlags();
     volatile double computed = std::sqrt(input);
     value = computed;
-    const int flags = CaptureAndClearScalarFlags();
+    const int flags = track_status ? CaptureAndClearScalarFlags() : 0;
     if ((flags & FE_OVERFLOW) != 0)
       exception |= fpscr::OX;
     if ((flags & FE_UNDERFLOW) != 0)
@@ -360,7 +381,9 @@ inline ScalarFpResult EvaluatePpcFused(std::uint32_t fpscr_value, double a,
                                        bool single_precision,
                                        bool negate_result) noexcept {
   const double effective_c = single_precision ? Force25Bit(c) : c;
-  ClearScalarFlags();
+  const bool track_status = TrackHostFpStatus(fpscr_value);
+  if (track_status)
+    ClearScalarFlags();
   volatile double computed = std::fma(a, effective_c, subtract ? -b : b);
   double value = computed;
   std::uint32_t exception = 0;
@@ -386,7 +409,7 @@ inline ScalarFpResult EvaluatePpcFused(std::uint32_t fpscr_value, double a,
     value = -value;
   }
 
-  const int flags = CaptureAndClearScalarFlags();
+  const int flags = track_status ? CaptureAndClearScalarFlags() : 0;
   if ((flags & FE_OVERFLOW) != 0)
     exception |= fpscr::OX;
   if ((flags & FE_UNDERFLOW) != 0)

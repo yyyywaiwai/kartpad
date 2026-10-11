@@ -17,11 +17,14 @@ internal object KartPadTouchSettings {
     private const val OPACITY = "control_opacity"
     private const val SIZE = "control_size"
     private const val HIDE_ON_CONTROLLER = "hide_on_controller"
+    private const val AUTO_ACCELERATE = "auto_accelerate"
+    private const val CONTROLLER_AUTO_ACCELERATE = "controller_auto_accelerate"
     private const val MODERN_C_STICK = "modern_c_stick_horizontal"
     private const val SHOW_FPS = "show_fps"
     private const val FPS_SIZE = "fps_size"
     private const val ASPECT_MODE = "aspect_mode"
     private const val RESOLUTION_SCALE = "resolution_scale"
+    private const val SHAKE_TRICKS = "shake_tricks_enabled"
     private const val MOTION_ENABLED = "motion_steering_enabled"
     private const val MOTION_INVERTED = "motion_steering_inverted"
     private const val MOTION_SENSITIVITY = "motion_steering_sensitivity"
@@ -55,6 +58,20 @@ internal object KartPadTouchSettings {
 
     fun setHideOnController(context: Context, value: Boolean) {
         preferences(context).edit().putBoolean(HIDE_ON_CONTROLLER, value).apply()
+    }
+
+    fun autoAccelerate(context: Context): Boolean = preferences(context)
+        .getBoolean(AUTO_ACCELERATE, true)
+
+    fun setAutoAccelerate(context: Context, value: Boolean) {
+        preferences(context).edit().putBoolean(AUTO_ACCELERATE, value).apply()
+    }
+
+    fun controllerAutoAccelerate(context: Context): Boolean = preferences(context)
+        .getBoolean(CONTROLLER_AUTO_ACCELERATE, false)
+
+    fun setControllerAutoAccelerate(context: Context, value: Boolean) {
+        preferences(context).edit().putBoolean(CONTROLLER_AUTO_ACCELERATE, value).apply()
     }
 
     fun modernCStickHorizontal(context: Context): Boolean = preferences(context)
@@ -92,6 +109,13 @@ internal object KartPadTouchSettings {
         preferences(context).edit().putFloat(
             RESOLUTION_SCALE, if (value.isFinite()) value.coerceIn(0.5f, 4f) else 1f,
         ).apply()
+    }
+
+    fun shakeTricksEnabled(context: Context): Boolean = preferences(context)
+        .getBoolean(SHAKE_TRICKS, false)
+
+    fun setShakeTricksEnabled(context: Context, value: Boolean) {
+        preferences(context).edit().putBoolean(SHAKE_TRICKS, value).apply()
     }
 
     fun motionEnabled(context: Context): Boolean = preferences(context)

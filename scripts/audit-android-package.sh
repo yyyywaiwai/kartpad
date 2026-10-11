@@ -2,6 +2,8 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
+release_version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "${repo_root}/version.json" version)"
+release_build="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])' "${repo_root}/version.json" build)"
 # shellcheck source=android-toolchain-versions.sh
 source "$repo_root/scripts/android-toolchain-versions.sh"
 case "${KARTPAD_ANDROID_AUDIT_REGION:-P}" in
@@ -21,7 +23,7 @@ for tool in "$aapt2" "$zipalign" "$readelf"; do
 done
 
 badging="$("$aapt2" dump badging "$apk")"
-expected_version_name="${KARTPAD_ANDROID_EXPECTED_VERSION_NAME:-0.4.12-android.2}"
+expected_version_name="${KARTPAD_ANDROID_EXPECTED_VERSION_NAME:-${release_version}}"
 if [[ -n "${KARTPAD_ANDROID_EXPECTED_VERSION_CODE:-}" ]]; then
   [[ "$badging" == *"versionCode='$KARTPAD_ANDROID_EXPECTED_VERSION_CODE'"* ]] || {
     echo "ERROR: APK version code does not match the requested code" >&2; exit 1;
@@ -31,15 +33,22 @@ if [[ "${KARTPAD_ANDROID_REQUIRE_RELEASE:-0}" == 1 &&
       "$badging" == *"application-debuggable"* ]]; then
   echo "ERROR: release APK is debuggable" >&2; exit 1
 fi
-[[ "$badging" == *"package: name='$package'"* ]]
+[[ "$badging" == *"package: name='$package'"* ]] || { echo "ERROR: unexpected package name" >&2; exit 1; }
 [[ "$badging" == *"versionName='$expected_version_name'"* ]] || {
   echo "ERROR: APK version name is not $expected_version_name" >&2
   exit 1
 }
-[[ "$badging" == *"compileSdkVersion='36'"* ]]
-[[ "$badging" == *"minSdkVersion:'28'"* ]]
-[[ "$badging" == *"targetSdkVersion:'36'"* ]]
-[[ "$badging" == *"native-code: 'arm64-v8a'"* ]]
+[[ "$badging" == *"compileSdkVersion='36'"* ]] || { echo "audit-android-package.sh: check failed (line 36)" >&2; exit 1; }
+expected_min_sdk="${KARTPAD_ANDROID_EXPECTED_MIN_SDK:-28}"
+case "$expected_min_sdk" in
+  28|29) ;;
+  *) echo "ERROR: expected Android minimum must be 28 or 29" >&2; exit 64 ;;
+esac
+[[ "$badging" == *"minSdkVersion:'$expected_min_sdk'"* ]] || {
+  echo "ERROR: APK minimum SDK does not match $expected_min_sdk" >&2; exit 1;
+}
+[[ "$badging" == *"targetSdkVersion:'36'"* ]] || { echo "audit-android-package.sh: check failed (line 45)" >&2; exit 1; }
+[[ "$badging" == *"native-code: 'arm64-v8a'"* ]] || { echo "audit-android-package.sh: check failed (line 46)" >&2; exit 1; }
 permissions="$("$aapt2" dump permissions "$apk")"
 permission_names="$(printf '%s\n' "$permissions" |
   sed -n "s/^uses-permission: name='\([^']*\)'.*$/\1/p" | sort)"
@@ -50,6 +59,7 @@ expected_permission_names="$(printf '%s\n' \
   android.permission.INTERNET \
   android.permission.POST_NOTIFICATIONS \
   android.permission.RECEIVE_BOOT_COMPLETED \
+  android.permission.REQUEST_INSTALL_PACKAGES \
   android.permission.WAKE_LOCK \
   "$package.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" | sort)"
 if [[ "$permission_names" != "$expected_permission_names" ]]; then
@@ -90,8 +100,20 @@ expected_native_members="$(printf '%s\n' \
 has_discio=0
 if printf '%s\n' "$members" | grep -Fxq lib/arm64-v8a/libkartpad_discio.so; then
   has_discio=1
+  # A stale prebuilt disc reader shipped in 0.5.1 without RVZ support (#314).
+  # grep -c reads the whole stream; grep -q would stop early and trip pipefail via SIGPIPE.
+  rvz_marker_count="$(unzip -p "$apk" lib/arm64-v8a/libkartpad_discio.so | grep -a -F -c 'ISO, WBFS or RVZ image' || true)"
+  [[ "${rvz_marker_count:-0}" -ge 1 ]] || {
+    echo "ERROR: libkartpad_discio.so predates RVZ import; rebuild it with scripts/build-android-discio-probe.sh" >&2
+    exit 1
+  }
   expected_native_members="$(printf '%s\n' "$expected_native_members" \
     lib/arm64-v8a/libkartpad_discio.so | sort)"
+fi
+# The ready-to-play app (KARTPAD_ANDROID_ALLOW_GAME_PACK=1) also carries the game pack:
+# KartPad's translated game code. Every other check still applies to it.
+if [[ "${KARTPAD_ANDROID_ALLOW_GAME_PACK:-0}" == 1 ]]; then
+  expected_native_members="$(printf '%s\n' "$expected_native_members" lib/arm64-v8a/libkartpad_game.so | sort)"
 fi
 [[ "$native_members" == "$expected_native_members" ]] || {
   echo "ERROR: APK native-library set differs from the A0 allowlist" >&2
@@ -145,6 +167,7 @@ audit_libraries=(libSDL3.so libc++_shared.so libmain.so)
 if [[ "$has_discio" == 1 ]]; then
   audit_libraries+=(libkartpad_discio.so)
 fi
+[[ "${KARTPAD_ANDROID_ALLOW_GAME_PACK:-0}" != 1 ]] || audit_libraries+=(libkartpad_game.so)
 for library in "${audit_libraries[@]}"; do
   unzip -p "$apk" "lib/arm64-v8a/$library" > "$audit_root/$library"
   if "$readelf" -l "$audit_root/$library" |
@@ -163,7 +186,7 @@ expected_needed="$(printf '%s\n' \
   echo "ERROR: libmain.so dependency set differs from the allowlist" >&2
   exit 1
 }
-[[ "$dynamic" == *"GNU_RELRO"* ]]
+[[ "$dynamic" == *"GNU_RELRO"* ]] || { echo "audit-android-package.sh: check failed (line 183)" >&2; exit 1; }
 if ! printf '%s\n' "$dynamic" | grep -Eq 'GNU_STACK .* RW  0x0$'; then
   echo "ERROR: libmain.so does not have a non-executable stack" >&2
   exit 1
@@ -173,13 +196,13 @@ if [[ "$has_discio" == 1 ]]; then
   discio_needed="$(printf '%s\n' "$discio_dynamic" |
     sed -n 's/.*Shared library: \[\([^]]*\)\].*/\1/p' | sort)"
   expected_discio_needed="$(printf '%s\n' \
-    libc++_shared.so libc.so libdl.so libm.so libEGL.so libOpenSLES.so \
+    libc++_shared.so libc.so libdl.so libm.so libEGL.so \
     libandroid.so liblog.so | sort)"
   [[ "$discio_needed" == "$expected_discio_needed" ]] || {
     echo "ERROR: libkartpad_discio.so dependency set differs from the allowlist" >&2
     exit 1
   }
-  [[ "$discio_dynamic" == *"GNU_RELRO"* ]]
+  [[ "$discio_dynamic" == *"GNU_RELRO"* ]] || { echo "audit-android-package.sh: check failed (line 199)" >&2; exit 1; }
   if ! printf '%s\n' "$discio_dynamic" | grep -Eq 'GNU_STACK .* RW  0x0$'; then
     echo "ERROR: libkartpad_discio.so does not have a non-executable stack" >&2
     exit 1
@@ -232,10 +255,8 @@ key_markers="$(grep -E -- '-----(BEGIN|END) (RSA |EC |OPENSSH )?PRIVATE KEY-----
 expected_key_markers=""
 # Every Android target links KartPad's pinned Mbed TLS 4 parser archives.
 key_marker_repetitions=2
-if [[ "$has_discio" == 1 ]]; then
-  # Product APKs additionally carry Dolphin DiscIO's historical parser.
-  key_marker_repetitions=$((key_marker_repetitions + 1))
-fi
+# The coreless disc-import library (libkartpad_discio.so) links no TLS code,
+# so it adds no parser strings.
 if (( key_marker_repetitions > 0 )); then
   # mbedTLS's PEM parser contains these six format delimiters as code strings;
   # exact cardinality prevents an actual packaged PEM block from hiding there.

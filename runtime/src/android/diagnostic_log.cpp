@@ -2,6 +2,7 @@
 #include <android/trace.h>
 #include <sys/system_properties.h>
 #include <cstdarg>
+#include <cstring>
 #include <cstdio>
 #include <time.h>
 #include <array>
@@ -57,7 +58,8 @@ extern "C" void KartPadAndroidRecordPhase(unsigned id, long long wall, long long
     "present_lock", "present_acquire", "present_encode", "present_finish",
     "present_submit", "present_schedule_wait", "present_call", "present_total",
     "worker_seal_encode", "worker_prepare", "worker_overlap_encode",
-    "producer_wait_sealed", "producer_wait_ready"
+    "producer_wait_sealed", "producer_wait_ready",
+    "present_queue_age", "present_deadline_lateness"
   };
   static std::array<kartpad::android::PhaseMetrics, std::size(names)> windows{};
   static std::mutex mutex;
@@ -85,4 +87,18 @@ extern "C" void KartPadAndroidRecordPhase(unsigned id, long long wall, long long
 extern "C" JNIEXPORT void JNICALL
 Java_dev_kartpad_android_KartPadRuntimeHealth_nativeSampleNetworkWaits(JNIEnv*, jobject) {
   kartpad::android::SampleNetworkWaits();
+}
+
+// Private candidate menu only; normal execution never calls this. A normal-thread
+// flush precedes abort; no signal handler performs logging or allocation.
+#include <cstdlib>
+extern "C" __attribute__((noinline)) void KartPadDiagnosticCrashProbe() {
+  std::fprintf(stderr, "[KartPadDiagnosticTest] intentional_native_abort\n");
+  std::fflush(stderr);
+  std::abort();
+}
+extern "C" JNIEXPORT void JNICALL
+Java_dev_kartpad_android_KartPadActivity_nativeTestDiagnosticCrash(JNIEnv*, jobject) {
+  const char* build = std::getenv("KARTPAD_DIAGNOSTIC_BUILD");
+  if (build && std::strstr(build, "diagnostics")) KartPadDiagnosticCrashProbe();
 }

@@ -10,11 +10,16 @@
 #import "KartPadRetroRewindInstaller.h"
 #import "KartPadDiagnosticContext.h"
 #import "KartPadMiiManager.h"
+#import "KartPadGameFiles.h"
 #import "SunPadDiagnostics.h"
+#import "KartPadSystemDiagnostics.h"
 #import "SunPadGameOverlay.h"
 #import "SunPadInputMixer.h"
 #import "SunPadSettings.h"
+#include "KartPadUpdateCheck.inc.mm"
 #include "audio_backend.h"
+#include "music_attenuation.h"
+#include "runtime_config.h"
 
 #import <SDL3/SDL_properties.h>
 #import <SDL3/SDL_video.h>
@@ -27,9 +32,25 @@
 
 #include <algorithm>
 #include <cmath>
+#include <array>
+#include <chrono>
+
+#include "kartpad/input/auto_accelerate.h"
 
 extern "C" int g_gxFrameCount;
 #include <atomic>
+static NSString *const kKartPadAutoAccelerateKey = @"KartPadAutoAccelerate";
+static BOOL KartPadAutoAccelerateEnabled() {
+  NSNumber *saved = [NSUserDefaults.standardUserDefaults objectForKey:kKartPadAutoAccelerateKey];
+  return saved == nil || saved.boolValue;
+}
+
+// Controller auto-accelerate is separate from the touch A lock and off by default.
+static NSString *const kKartPadControllerAutoAccelerateKey = @"KartPadControllerAutoAccelerate";
+static std::atomic<bool> gKartPadControllerAutoAccelerate{
+    [NSUserDefaults.standardUserDefaults boolForKey:kKartPadControllerAutoAccelerateKey]};
+static std::array<kartpad::input::AutoAccelerateLatch, 4> gKartPadControllerAccelerateLatches;
+
 static std::atomic<float> gKartPadFpsScale{1.0f};
 extern "C" float KartPadMobileFpsOverlayScale(){return gKartPadFpsScale.load(std::memory_order_relaxed);}
 
@@ -49,6 +70,7 @@ extern "C" float KartPadMobileFpsOverlayScale(){return gKartPadFpsScale.load(std
 @property(nonatomic, copy) void (^multiplayerRequested)(void);
 @property(nonatomic, copy) void (^mainMenuRequested)(void);
 @property(nonatomic, copy) void (^motionSteeringRequested)(void);
+@property(nonatomic, copy) void (^shakeTricksRequested)(void);
 @property(nonatomic, copy) void (^miiManagerRequested)(void);
 @property(nonatomic, copy) void (^ghostManagerRequested)(void);
 @property(nonatomic, copy) void (^saveManagerRequested)(void);
@@ -78,6 +100,8 @@ extern "C" float KartPadMobileFpsOverlayScale(){return gKartPadFpsScale.load(std
 - (void)rPressureChanged:(uint8_t)pressure fullPress:(BOOL)fullPress;
 - (void)clearTouchInput;
 - (void)buttonDown:(UIButton *)button;
+- (void)buttonUp:(UIButton *)button;
+- (UIView *)settingsRowWithTitle:(NSString *)title control:(UIView *)control;
 - (void)endLayoutEditing;
 - (void)finishLayoutEditing;
 - (void)refreshMenuButton;
@@ -429,9 +453,20 @@ NSString *KartPadValidateExtractedRoot(NSString *root, NSError **error) {
   }
   if (![dolHash isEqualToString:
       @"80d18895b39c63bd80f457398bfcbb91b7d16ac116a41a88967e954080155b05"]) {
-    return @"sys/main.dol does not match the supported RMCP01 revision 0 profile.";
+    return @"This game data is modified (for example Wiimmfi-patched or pre-patched). Please use a clean RMCP01 dump.";
   }
-  return nil;
+  NSString *relHash = KartPadSHA256ForFile(
+      [root stringByAppendingPathComponent:@"files/rel/StaticR.rel"], error);
+  if (relHash == nil) {
+    return @"KartPad could not hash files/rel/StaticR.rel.";
+  }
+  if (![relHash isEqualToString:
+      @"16d9d146112541fefea701ecb5bc1a496f9d50e4a752fbb5b6778e7c6399f67d"]) {
+    return @"This game data is modified (for example Wiimmfi-patched or pre-patched). Please use a clean RMCP01 dump.";
+  }
+  return KartPadIncompleteGameFilesError(root,
+      @"If it's in iCloud Drive, open Files, touch and hold the folder, tap Download Now and wait "
+      @"for it to finish. Then import it again.");
 }
 
 BOOL KartPadEnsureRelativeRuntimePath(NSString *key, NSString *value,
@@ -598,7 +633,7 @@ BOOL KartPadInstalledGameDataIsValid() {
 NSError *KartPadPerformGameDataImport(NSURL *url,
                                       KartPadDiscExtractionProgress progress) {
   BOOL securityScoped = [url startAccessingSecurityScopedResource];
-  NSError *workError = nil;
+  __block NSError *workError = nil;
   NSString *supportRoot = KartPadSupportRoot();
   NSString *staging = [supportRoot stringByAppendingPathComponent:
       [NSString stringWithFormat:@"GameData.import-%@", NSUUID.UUID.UUIDString]];
@@ -609,19 +644,25 @@ NSError *KartPadPerformGameDataImport(NSURL *url,
                           error:&workError];
   if (workError == nil) {
     KartPadRecoverInterruptedImport(supportRoot);
-    if (KartPadURLIsSupportedDiscImage(url)) {
-      [KartPadDiscExtractor extractImageAtPath:url.path toDirectory:staging
-                                      progress:progress error:&workError];
-    } else {
-      NSString *sourceRoot = KartPadResolvedExtractedRoot(url);
-      NSString *validationError = KartPadValidateExtractedRoot(sourceRoot, &workError);
-      if (validationError != nil && workError == nil) {
-        workError = KartPadGameDataError(1, validationError);
+    NSError *coordinationError = nil;
+    NSFileCoordinator *coordinator = [[NSFileCoordinator alloc] initWithFilePresenter:nil];
+    [coordinator coordinateReadingItemAtURL:url options:0 error:&coordinationError
+        byAccessor:^(NSURL *readingURL) {
+      if (KartPadURLIsSupportedDiscImage(readingURL)) {
+        [KartPadDiscExtractor extractImageAtPath:readingURL.path toDirectory:staging
+                                        progress:progress error:&workError];
+      } else {
+        NSString *sourceRoot = KartPadResolvedExtractedRoot(readingURL);
+        NSString *validationError = KartPadValidateExtractedRoot(sourceRoot, &workError);
+        if (validationError != nil && workError == nil) {
+          workError = KartPadGameDataError(1, validationError);
+        }
+        if (workError == nil) {
+          [files copyItemAtPath:sourceRoot toPath:staging error:&workError];
+        }
       }
-      if (workError == nil) {
-        [files copyItemAtPath:sourceRoot toPath:staging error:&workError];
-      }
-    }
+    }];
+    if (workError == nil) workError = coordinationError;
   }
   if (securityScoped) {
     [url stopAccessingSecurityScopedResource];
@@ -700,7 +741,9 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 @property(nonatomic, strong) NSMutableArray<UILabel *> *primaryLabels;
 @property(nonatomic, strong) NSMutableArray<UIView *> *dividers;
 @property(nonatomic, strong) NSMutableArray<UIButton *> *actionButtons;
-@property(nonatomic, strong) UISwitch *themeSwitch;
+@property(nonatomic, strong) UIButton *themeButton;
+@property(nonatomic, strong) UIButton *updateButton;
+@property(nonatomic) BOOL darkMode;
 @property(nonatomic, strong) UIButton *preferenceButton;
 @property(nonatomic, strong) UIImageView *checker;
 @end
@@ -708,7 +751,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 @implementation KartPadFirstLaunchViewController
 
 - (UIColor *)racingRed {
-  return self.themeSwitch.on ? [UIColor colorWithRed:1 green:0.20 blue:0.26 alpha:1]
+  return self.darkMode ? [UIColor colorWithRed:1 green:0.20 blue:0.26 alpha:1]
                             : [UIColor colorWithRed:0.80 green:0.035 blue:0.12 alpha:1];
 }
 
@@ -756,6 +799,25 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 
 - (void)closeSetupHelp {
   [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)showUpdate {
+  NSDictionary<NSString *, NSString *> *update = KartPadKnownUpdate();
+  if (update == nil) {
+    self.updateButton.hidden = YES;
+    return;
+  }
+  UIAlertController *alert = [UIAlertController
+      alertControllerWithTitle:[NSString stringWithFormat:@"KartPad %@ Is Available", update[@"version"]]
+      message:@"Build it with PadMint on your computer, then install it over this KartPad with the same sideloading tool and Apple ID. Your saves and game data stay."
+      preferredStyle:UIAlertControllerStyleAlert];
+  NSURL *page = [NSURL URLWithString:update[@"page"]];
+  [alert addAction:[UIAlertAction actionWithTitle:@"What's New" style:UIAlertActionStyleDefault
+      handler:^(UIAlertAction *action) {
+    if (page != nil) [UIApplication.sharedApplication openURL:page options:@{} completionHandler:nil];
+  }]];
+  [alert addAction:[UIAlertAction actionWithTitle:@"Not Now" style:UIAlertActionStyleCancel handler:nil]];
+  [self presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)showSetupHelp {
@@ -858,7 +920,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 }
 
 - (void)applyTheme {
-  BOOL dark = self.themeSwitch.on;
+  BOOL dark = self.darkMode;
   self.overrideUserInterfaceStyle = dark ? UIUserInterfaceStyleDark : UIUserInterfaceStyleLight;
   self.view.backgroundColor = dark ? [UIColor colorWithWhite:0.065 alpha:1]
                                   : [UIColor colorWithRed:0.985 green:0.975 blue:0.95 alpha:1];
@@ -875,18 +937,26 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
         ? [[self racingRed] colorWithAlphaComponent:dark ? 0.10 : 0.065] : UIColor.clearColor;
     UIButton *button = self.actionButtons[i];
     UIButtonConfiguration *config = button.configuration;
-    BOOL primary = current || (!self.resumingGame && i == 0);
-    config.baseBackgroundColor = primary ? [UIColor colorWithRed:0.89 green:0.025 blue:0.10 alpha:1] : UIColor.clearColor;
-    config.baseForegroundColor = primary ? UIColor.whiteColor : [self racingRed];
+    config.baseBackgroundColor = i == 1
+        ? [UIColor colorWithRed:0.08 green:0.36 blue:0.80 alpha:1]
+        : [UIColor colorWithRed:0.89 green:0.025 blue:0.10 alpha:1];
+    config.baseForegroundColor = UIColor.whiteColor;
     button.configuration = config;
   }
-  self.themeSwitch.onTintColor = [UIColor colorWithRed:0.89 green:0.025 blue:0.10 alpha:1];
+  UIButtonConfiguration *theme = self.themeButton.configuration;
+  theme.image = [UIImage systemImageNamed:dark ? @"moon.fill" : @"sun.max.fill"];
+  theme.baseForegroundColor = foreground;
+  theme.baseBackgroundColor = [foreground colorWithAlphaComponent:0.08];
+  self.themeButton.configuration = theme;
+  self.themeButton.accessibilityLabel = dark ? @"Switch to light mode" : @"Switch to dark mode";
+  self.themeButton.accessibilityValue = dark ? @"Dark mode" : @"Light mode";
   self.checker.tintColor = dark ? UIColor.whiteColor : UIColor.blackColor;
   self.checker.alpha = dark ? 1.0 : 0.65;
 }
 
-- (void)themeChanged:(UISwitch *)sender {
-  [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:kKartPadDarkModeKey];
+- (void)themeChanged:(UIButton *)sender {
+  self.darkMode = !self.darkMode;
+  [NSUserDefaults.standardUserDefaults setBool:self.darkMode forKey:kKartPadDarkModeKey];
   [self applyTheme];
 }
 
@@ -983,12 +1053,15 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   self.secondaryLabels = [NSMutableArray array];
   self.cardTitles = [NSMutableArray array];
   self.dividers = [NSMutableArray array];
-  self.themeSwitch = [UISwitch new];
+  UIButtonConfiguration *themeConfiguration = [UIButtonConfiguration filledButtonConfiguration];
+  themeConfiguration.cornerStyle = UIButtonConfigurationCornerStyleCapsule;
+  self.themeButton = [UIButton buttonWithConfiguration:themeConfiguration primaryAction:nil];
   id savedTheme = [NSUserDefaults.standardUserDefaults objectForKey:kKartPadDarkModeKey];
-  self.themeSwitch.on = savedTheme == nil || [savedTheme boolValue];
-  self.themeSwitch.accessibilityLabel = @"Dark mode";
-  self.themeSwitch.accessibilityIdentifier = @"kartpad.theme.dark";
-  [self.themeSwitch addTarget:self action:@selector(themeChanged:) forControlEvents:UIControlEventValueChanged];
+  self.darkMode = savedTheme == nil || [savedTheme boolValue];
+  self.themeButton.accessibilityIdentifier = @"kartpad.theme.dark";
+  [self.themeButton.widthAnchor constraintEqualToConstant:48].active = YES;
+  [self.themeButton.heightAnchor constraintEqualToConstant:48].active = YES;
+  [self.themeButton addTarget:self action:@selector(themeChanged:) forControlEvents:UIControlEventTouchUpInside];
   UIImageView *mark = [[UIImageView alloc] initWithImage:[UIImage imageNamed:@"KartPadLogo"]];
   mark.contentMode = UIViewContentModeScaleAspectFit;
   mark.isAccessibilityElement = NO;
@@ -1000,19 +1073,20 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   identity.axis = UILayoutConstraintAxisHorizontal;
   identity.alignment = UIStackViewAlignmentCenter;
   identity.spacing = 12;
-  UILabel *themeLabel = [self label:@"Dark mode" style:UIFontTextStyleSubheadline secondary:NO];
-  UIStackView *theme = [[UIStackView alloc] initWithArrangedSubviews:@[themeLabel, self.themeSwitch]];
-  theme.axis = UILayoutConstraintAxisHorizontal;
-  theme.alignment = UIStackViewAlignmentCenter;
-  theme.spacing = 10;
-  [theme setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
   __weak KartPadFirstLaunchViewController *weakSelf = self;
   UIButton *help = [self link:@"Help" symbol:nil action:^{ [weakSelf showSetupHelp]; }];
   help.accessibilityIdentifier = @"kartpad.setup.help";
   [help setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  self.updateButton = [self link:@"Update available" symbol:@"arrow.down.circle" action:^{ [weakSelf showUpdate]; }];
+  self.updateButton.accessibilityIdentifier = @"kartpad.setup.update";
+  self.updateButton.hidden = KartPadKnownUpdate() == nil;
+  [self.updateButton setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
+  KartPadRefreshUpdate(NO, ^(NSDictionary<NSString *, NSString *> *update, BOOL checked) {
+    (void)checked;
+    weakSelf.updateButton.hidden = update == nil;
+  });
   [identity setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-  [themeLabel setContentHuggingPriority:UILayoutPriorityRequired forAxis:UILayoutConstraintAxisHorizontal];
-  self.header = [[UIStackView alloc] initWithArrangedSubviews:@[identity, [UIView new], theme, help]];
+  self.header = [[UIStackView alloc] initWithArrangedSubviews:@[identity, [UIView new], self.updateButton, self.themeButton, help]];
   self.header.axis = UILayoutConstraintAxisHorizontal;
   self.header.alignment = UIStackViewAlignmentCenter;
   self.header.spacing = 20;
@@ -1131,9 +1205,11 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 @property(nonatomic, assign) BOOL choosingGameDataCopy;
 @property(nonatomic, assign) BOOL receivedRetroDownload;
 @property(nonatomic, assign) BOOL retroVersionChecked;
+@property(nonatomic, assign) BOOL gamePackReady;
 @property(nonatomic, assign) NSInteger lastRetroDownloadPercent;
 - (BOOL)run;
 - (void)showOptions;
+- (void)showGamePackRequired;
 - (void)presentGameDataPicker;
 - (void)showRetroRewindOptions;
 - (void)checkRetroRewindVersionAndContinue;
@@ -1272,6 +1348,10 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 }
 
 - (void)completeSelectedMode {
+  if (!self.gamePackReady) {
+    [self showGamePackRequired];
+    return;
+  }
   if (!KartPadInstalledGameDataIsValid()) {
     [self showOptions];
     return;
@@ -1393,7 +1473,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
           @"Retro Rewind %@ Required",
           KartPadRetroRewindInstaller.requiredVersion]
                        message:[NSString stringWithFormat:
-          @"Retro Rewind is optional community content used for its extra tracks, characters, and Retro WFC online play. This KartPad build requires the matching official %.2f GiB full download.",
+          @"Retro Rewind is optional community content used for its extra tracks, characters, and Retro WFC online play. This KartPad build requires the matching official %.2f GiB base download plus a small update. The update downloads automatically, including when you choose a ZIP.",
           gib]
                 preferredStyle:UIAlertControllerStyleAlert];
   [options addAction:[UIAlertAction actionWithTitle:@"Download Official Pack"
@@ -1565,10 +1645,11 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 }
 
 - (void)presentGameDataPicker {
-  self.choosingGameDataCopy = YES;
+  // Open folders in place; the importer copies validated data into private staging.
+  self.choosingGameDataCopy = NO;
   UIDocumentPickerViewController *picker =
       [[UIDocumentPickerViewController alloc]
-          initForOpeningContentTypes:KartPadGameDataContentTypes() asCopy:YES];
+          initForOpeningContentTypes:KartPadGameDataContentTypes() asCopy:NO];
   picker.delegate = self;
   picker.allowsMultipleSelection = NO;
   [self.root presentViewController:picker animated:YES completion:nil];
@@ -1579,9 +1660,17 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   self.choosingGameDataCopy = NO;
   UIAlertController *options =
       [UIAlertController alertControllerWithTitle:@"Game Data Required"
-          message:@"First, import your own Mario Kart Wii game: PAL (Europe), RMCP01 revision 0.\n\nChoose an ISO, WBFS, or extracted DATA folder. RVZ files must be converted first. Retro Rewind is added after this step."
+          message:@"Import your own Mario Kart Wii once: PAL (Europe), RMCP01.\n\nEasiest: the folder Dolphin's Extract Entire Disc makes. Copy it to this device (AirDrop, a zip you unzip in Files, or iCloud Drive once it has fully downloaded) and import it.\n\nA disc image (ISO or WBFS) needs your own Wii's common key. Retro Rewind is added after this step."
           preferredStyle:UIAlertControllerStyleAlert];
-  [options addAction:[UIAlertAction actionWithTitle:@"Choose WBFS, ISO, or DATA Folder…"
+  [options addAction:[UIAlertAction actionWithTitle:@"Import from Extracted Folder…"
+                                               style:UIAlertActionStyleDefault
+                                             handler:^(UIAlertAction *action) {
+    (void)action;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
+                                 (int64_t)(0.35 * NSEC_PER_SEC)),
+                   dispatch_get_main_queue(), ^{ [self chooseDocumentsRoot]; });
+  }]];
+  [options addAction:[UIAlertAction actionWithTitle:@"Disc Image (Needs Wii Key) or Other Folder…"
                                                style:UIAlertActionStyleDefault
                                              handler:^(UIAlertAction *action) {
     (void)action;
@@ -1591,18 +1680,32 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
       [self presentGameDataPicker];
     });
   }]];
-  [options addAction:[UIAlertAction actionWithTitle:@"Import from Extracted Folder…"
-                                               style:UIAlertActionStyleDefault
-                                             handler:^(UIAlertAction *action) {
-    (void)action;
-    dispatch_after(dispatch_time(DISPATCH_TIME_NOW,
-                                 (int64_t)(0.35 * NSEC_PER_SEC)),
-                   dispatch_get_main_queue(), ^{ [self chooseDocumentsRoot]; });
-  }]];
   [options addAction:[UIAlertAction actionWithTitle:@"Back"
                                                style:UIAlertActionStyleCancel
                                              handler:nil]];
   [self.root presentViewController:options animated:YES completion:nil];
+}
+
+// The published app contains no game code. PadMint builds the player's own
+// KartPad from their disc on a computer, with the game pack inside the app.
+- (void)showGamePackRequired {
+  UIAlertController *alert =
+      [UIAlertController alertControllerWithTitle:@"Add Your Game with PadMint"
+          message:@"This copy of KartPad contains no game code. On a Mac, PadMint builds your own KartPad from your Mario Kart Wii disc. Install that copy over this one; your saves stay."
+          preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:@"Get PadMint"
+                                            style:UIAlertActionStyleDefault
+                                          handler:^(UIAlertAction *action) {
+    (void)action;
+    [UIApplication.sharedApplication
+        openURL:[NSURL URLWithString:@"https://github.com/chrissotraidis/padmint"]
+        options:@{}
+        completionHandler:nil];
+  }]];
+  [alert addAction:[UIAlertAction actionWithTitle:@"Back"
+                                            style:UIAlertActionStyleCancel
+                                          handler:nil]];
+  [self.root presentViewController:alert animated:YES completion:nil];
 }
 
 - (void)documentPicker:(UIDocumentPickerViewController *)controller
@@ -1653,6 +1756,17 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 }
 
 - (BOOL)run {
+#if defined(MKW_GAME_PACK_APP) && MKW_GAME_PACK_APP
+  // PadMint places the player's game pack in the app's Frameworks folder.
+  NSString *gamePack = [NSBundle.mainBundle.privateFrameworksPath
+      stringByAppendingPathComponent:@"libkartpad_game.dylib"];
+  self.gamePackReady = [NSFileManager.defaultManager fileExistsAtPath:gamePack];
+  if (self.gamePackReady) {
+    setenv("KARTPAD_GAME_PACK", gamePack.fileSystemRepresentation, 1);
+  }
+#else
+  self.gamePackReady = YES;
+#endif
   // Create the Files-visible app directory before first-launch UI is shown.
   // UIFileSharingEnabled and LSSupportsOpeningDocumentsInPlace expose this
   // Documents directory as On My iPhone/iPad -> KartPad.
@@ -1696,7 +1810,24 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   self.window.windowLevel = UIWindowLevelAlert + 1.0;
   self.window.rootViewController = self.root;
   [self.window makeKeyAndVisible];
+  // The game runtime has no dialog of its own on iPhone/iPad, so a fatal error (for
+  // example incomplete game data, #370) only closed the game. The runtime leaves its
+  // message in Logs/last_fatal.txt; show it once here and remove it.
+  NSString *lastFatal = nil;
+  {
+    NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
+                                                          inDomains:NSUserDomainMask].firstObject;
+    NSURL *file = [support URLByAppendingPathComponent:@"KartPad/Logs/last_fatal.txt"];
+    NSString *text = [NSString stringWithContentsOfURL:file encoding:NSUTF8StringEncoding error:nil];
+    [NSFileManager.defaultManager removeItemAtURL:file error:nil];
+    text = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+    if (text.length > 0) lastFatal = text.length > 1500 ? [text substringToIndex:1500] : text;
+  }
   __weak KartPadFirstLaunchHost *weakSelf = self;
+  // #327: when a saved game choice skips the launcher, keep its window transparent so the
+  // chooser does not flash for a frame between the launch screen and the game. Any prompt
+  // that has to be shown (import, Retro Rewind setup, errors) restores it first.
+  BOOL skipsLauncher = NO;
   self.root.modeSelected = ^(BOOL retroRewind) {
     KartPadFirstLaunchHost *strongSelf = weakSelf;
     if (strongSelf == nil || strongSelf.finished) return;
@@ -1713,15 +1844,32 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   if (requestedProfile.length == 0 && gameDataReady) {
     requestedProfile = [NSUserDefaults.standardUserDefaults stringForKey:kKartPadPreferredGameKey];
   }
+  if (lastFatal != nil) {
+    // Show the reason instead of starting the game straight into the same error.
+    requestedProfile = nil;
+    dispatch_async(dispatch_get_main_queue(), ^{
+      KartPadFirstLaunchHost *strongSelf = weakSelf;
+      if (strongSelf == nil || strongSelf.finished) return;
+      UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"The game stopped"
+                                                                     message:lastFatal
+                                                              preferredStyle:UIAlertControllerStyleAlert];
+      [alert addAction:[UIAlertAction actionWithTitle:@"OK" style:UIAlertActionStyleDefault handler:nil]];
+      [strongSelf.root presentViewController:alert animated:YES completion:nil];
+    });
+  }
   if ([requestedProfile isEqualToString:@"retro_rewind"] ||
       [requestedProfile isEqualToString:@"base"]) {
+    skipsLauncher = gameDataReady && removalError == nil;
     [NSUserDefaults.standardUserDefaults
         removeObjectForKey:kKartPadRequestedRuntimeProfileKey];
     [NSUserDefaults.standardUserDefaults synchronize];
+    if (skipsLauncher) self.window.alpha = 0.0;
     dispatch_async(dispatch_get_main_queue(), ^{
       if (self.root.modeSelected != nil) {
         self.root.modeSelected([requestedProfile isEqualToString:@"retro_rewind"]);
       }
+      // Still running here means a prompt is needed; make the launcher visible for it.
+      if (!self.finished) self.window.alpha = 1.0;
     });
   }
   if (removalError != nil) {
@@ -1742,6 +1890,132 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   self.window.hidden = YES;
   self.window = nil;
   return self.succeeded;
+}
+
+@end
+
+// Music and game-sound levels (#411). Off by default: everything plays at full volume. When on,
+// music and game sounds (effects, voices, menus) each have a level. Applied live through the
+// runtime's sound categories and saved in Config.toml, which the runtime applies at every start.
+static NSString *const kKartPadSoundCustomKey = @"KartPadSoundCustomLevels";
+static NSString *const kKartPadSoundMusicKey = @"KartPadSoundMusicPercent";
+static NSString *const kKartPadSoundGameKey = @"KartPadSoundGamePercent";
+
+static NSInteger KartPadSoundPercent(NSString *key) {
+  NSNumber *saved = [NSUserDefaults.standardUserDefaults objectForKey:key];
+  return saved == nil ? 100 : std::clamp<NSInteger>(saved.integerValue, 0, 100);
+}
+
+static void KartPadApplySoundLevels(BOOL persist) {
+  const BOOL custom = [NSUserDefaults.standardUserDefaults boolForKey:kKartPadSoundCustomKey];
+  const float music = custom ? KartPadSoundPercent(kKartPadSoundMusicKey) / 100.0f : 1.0f;
+  const float sounds = custom ? KartPadSoundPercent(kKartPadSoundGameKey) / 100.0f : 1.0f;
+  MusicAttenuation::SetMusicVolume(music);
+  MusicAttenuation::SetSoundEffectsVolume(sounds);
+  MusicAttenuation::SetVoicesVolume(sounds);
+  MusicAttenuation::SetUiVolume(sounds);
+  if (persist) {
+    RuntimeConfigFile::SetMusicVolume(music);
+    RuntimeConfigFile::SetSoundEffectsVolume(sounds);
+    RuntimeConfigFile::SetVoicesVolume(sounds);
+    RuntimeConfigFile::SetUiVolume(sounds);
+  }
+  NSLog(@"[KartPadSound] music=%.2f sounds=%.2f", music, sounds);
+}
+
+@interface KartPadSoundSettingsController : UIViewController
+@end
+
+@implementation KartPadSoundSettingsController {
+  UISwitch *_custom;
+  UILabel *_musicLabel, *_gameLabel;
+  UISlider *_music, *_game;
+}
+
+- (void)viewDidLoad {
+  [super viewDidLoad];
+  self.title = @"Sound";
+  self.view.backgroundColor = UIColor.systemBackgroundColor;
+  self.navigationItem.rightBarButtonItem =
+      [[UIBarButtonItem alloc] initWithBarButtonSystemItem:UIBarButtonSystemItemDone target:self action:@selector(done)];
+  UILabel *toggleLabel = [UILabel new];
+  toggleLabel.text = @"Adjust music and game sounds";
+  _custom = [UISwitch new];
+  _custom.on = [NSUserDefaults.standardUserDefaults boolForKey:kKartPadSoundCustomKey];
+  _custom.accessibilityLabel = @"Adjust music and game sounds separately";
+  [_custom addTarget:self action:@selector(changed) forControlEvents:UIControlEventValueChanged];
+  UIStackView *toggleRow = [[UIStackView alloc] initWithArrangedSubviews:@[ toggleLabel, _custom ]];
+  toggleRow.alignment = UIStackViewAlignmentCenter;
+  UILabel *hint = [UILabel new];
+  hint.text = @"When this is off, everything plays at full volume. Turn it on to lower or mute the music, the game sounds, or both.";
+  hint.numberOfLines = 0;
+  hint.font = [UIFont preferredFontForTextStyle:UIFontTextStyleFootnote];
+  hint.textColor = UIColor.secondaryLabelColor;
+  _musicLabel = [UILabel new];
+  _gameLabel = [UILabel new];
+  _music = [UISlider new];
+  _game = [UISlider new];
+  _music.accessibilityLabel = @"Music volume";
+  _game.accessibilityLabel = @"Game sounds volume: effects, voices and menus";
+  for (UISlider *slider in @[ _music, _game ]) {
+    slider.minimumValue = 0;
+    slider.maximumValue = 100;
+    [slider addTarget:self action:@selector(changed) forControlEvents:UIControlEventValueChanged];
+  }
+  _music.value = KartPadSoundPercent(kKartPadSoundMusicKey);
+  _game.value = KartPadSoundPercent(kKartPadSoundGameKey);
+  UIStackView *stack = [[UIStackView alloc]
+      initWithArrangedSubviews:@[ toggleRow, hint, _musicLabel, _music, _gameLabel, _game ]];
+  stack.axis = UILayoutConstraintAxisVertical;
+  stack.spacing = 12;
+  [stack setCustomSpacing:24 afterView:hint];
+  [stack setCustomSpacing:20 afterView:_music];
+  stack.translatesAutoresizingMaskIntoConstraints = NO;
+  UIScrollView *scroll = [UIScrollView new];
+  scroll.translatesAutoresizingMaskIntoConstraints = NO;
+  [self.view addSubview:scroll];
+  [scroll addSubview:stack];
+  UILayoutGuide *safe = self.view.safeAreaLayoutGuide;
+  [NSLayoutConstraint activateConstraints:@[
+    [scroll.topAnchor constraintEqualToAnchor:safe.topAnchor],
+    [scroll.bottomAnchor constraintEqualToAnchor:safe.bottomAnchor],
+    [scroll.leadingAnchor constraintEqualToAnchor:safe.leadingAnchor],
+    [scroll.trailingAnchor constraintEqualToAnchor:safe.trailingAnchor],
+    [stack.topAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.topAnchor constant:20],
+    [stack.bottomAnchor constraintEqualToAnchor:scroll.contentLayoutGuide.bottomAnchor constant:-20],
+    [stack.leadingAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.leadingAnchor constant:20],
+    [stack.trailingAnchor constraintEqualToAnchor:scroll.frameLayoutGuide.trailingAnchor constant:-20],
+  ]];
+  [self refresh];
+}
+
+- (void)refresh {
+  const NSInteger music = std::lround(_music.value);
+  const NSInteger game = std::lround(_game.value);
+  _musicLabel.text = music == 0 ? @"Music: off" : [NSString stringWithFormat:@"Music: %ld%%", (long)music];
+  _gameLabel.text = game == 0 ? @"Game sounds: off" : [NSString stringWithFormat:@"Game sounds: %ld%%", (long)game];
+  for (UIView *view in @[ _musicLabel, _music, _gameLabel, _game ]) {
+    view.alpha = _custom.on ? 1.0 : 0.4;
+    if ([view isKindOfClass:UIControl.class]) ((UIControl *)view).enabled = _custom.on;
+  }
+}
+
+- (void)changed {
+  NSUserDefaults *defaults = NSUserDefaults.standardUserDefaults;
+  [defaults setBool:_custom.on forKey:kKartPadSoundCustomKey];
+  [defaults setInteger:std::lround(_music.value) forKey:kKartPadSoundMusicKey];
+  [defaults setInteger:std::lround(_game.value) forKey:kKartPadSoundGameKey];
+  KartPadApplySoundLevels(NO);
+  [self refresh];
+}
+
+- (void)done {
+  [self dismissViewControllerAnimated:YES completion:nil];
+}
+
+- (void)viewDidDisappear:(BOOL)animated {
+  [super viewDidDisappear:animated];
+  KartPadApplySoundLevels(YES);  // saved once, when the sheet closes
 }
 
 @end
@@ -1943,8 +2217,26 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
       self, @"Render resolution", UISegmentedControl.class);
   UIView *row = resolution.superview;
   if ([row.superview isKindOfClass:UIStackView.class]) {
-    [(UIStackView *)row.superview removeArrangedSubview:row];
+    UIStackView *stack = (UIStackView *)row.superview;
+    [stack removeArrangedSubview:row];
     [row removeFromSuperview];
+    UISwitch *autoAccelerate = [UISwitch new];
+    autoAccelerate.on = KartPadAutoAccelerateEnabled();
+    autoAccelerate.accessibilityLabel = @"Touch auto-accelerate";
+    autoAccelerate.accessibilityHint = @"Hold touch A for one second to lock acceleration. Turn off for normal hold controls.";
+    [autoAccelerate addTarget:self action:@selector(kartPadAutoAccelerateChanged:)
+            forControlEvents:UIControlEventValueChanged];
+    [stack insertArrangedSubview:[self settingsRowWithTitle:@"Touch auto-accelerate" control:autoAccelerate]
+                         atIndex:MIN((NSUInteger)3, stack.arrangedSubviews.count)];
+    UISwitch *controllerAutoAccelerate = [UISwitch new];
+    controllerAutoAccelerate.on = gKartPadControllerAutoAccelerate.load();
+    controllerAutoAccelerate.accessibilityLabel = @"Controller auto-accelerate";
+    controllerAutoAccelerate.accessibilityHint = @"Hold controller A for one second to lock acceleration. Press A again to release.";
+    [controllerAutoAccelerate addTarget:self action:@selector(kartPadControllerAutoAccelerateChanged:)
+                       forControlEvents:UIControlEventValueChanged];
+    [stack insertArrangedSubview:[self settingsRowWithTitle:@"Controller auto-accelerate"
+                                                    control:controllerAutoAccelerate]
+                         atIndex:MIN((NSUInteger)4, stack.arrangedSubviews.count)];
   }
 }
 
@@ -2091,8 +2383,9 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   if (gasButton != nil && self.kartPadGasButton != gasButton) {
     self.kartPadGasButton = gasButton;
     self.kartPadGasRestColor = gasButton.backgroundColor;
-    gasButton.accessibilityHint =
-        @"Hold for one second to lock acceleration. Tap again to unlock.";
+    gasButton.accessibilityHint = KartPadAutoAccelerateEnabled()
+        ? @"Hold for one second to lock acceleration. Tap again to unlock."
+        : @"Hold to accelerate. Release to stop accelerating.";
     [gasButton addTarget:self action:@selector(kartPadGasDown:)
          forControlEvents:UIControlEventTouchDown];
     [gasButton addTarget:self action:@selector(kartPadGasUp:)
@@ -2275,6 +2568,16 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
                             weakSelf.multiplayerRequested();
                           }
                         }];
+  UIAction *shakeTricks =
+      [UIAction actionWithTitle:@"Shake to Trick…"
+                          image:[UIImage systemImageNamed:@"gyroscope"]
+                     identifier:@"dev.kartpad.shake-tricks"
+                        handler:^(__kindof UIAction *action) {
+                          (void)action;
+                          if (weakSelf.shakeTricksRequested != nil) {
+                            weakSelf.shakeTricksRequested();
+                          }
+                        }];
   UIAction *motionSteering =
       [UIAction actionWithTitle:@"Motion Steering…"
                           image:[UIImage systemImageNamed:@"gyroscope"]
@@ -2369,6 +2672,16 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
           [dataItems addObject:dataElement];
         }
       }
+      // Offer the extracted folder (no key needed) before the disc image (needs a Wii key).
+      NSUInteger discIndex = NSNotFound, folderIndex = NSNotFound;
+      for (NSUInteger i = 0; i < dataItems.count; ++i) {
+        NSString *title = dataItems[i].title;
+        if ([title isEqualToString:@"Import or Reimport Wii Disc Image…"]) discIndex = i;
+        if ([title isEqualToString:@"Import from Extracted Folder…"]) folderIndex = i;
+      }
+      if (discIndex != NSNotFound && folderIndex != NSNotFound && folderIndex > discIndex) {
+        [dataItems exchangeObjectAtIndex:discIndex withObjectAtIndex:folderIndex];
+      }
       UIAction *miiManager =
           [UIAction actionWithTitle:@"Player Identity…"
                               image:[UIImage systemImageNamed:@"person.crop.circle.badge.plus"]
@@ -2398,6 +2711,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   if (controllerMapping != nil) [controlItems addObject:controllerMapping];
   if (touchControlSettings != nil) [controlItems addObject:touchControlSettings];
   [controlItems addObject:[UIAction actionWithTitle:@"Controller Player Setup…" image:[UIImage systemImageNamed:@"gamecontroller"] identifier:nil handler:^(__kindof UIAction *action) { [weakSelf.delegate gameOverlayRequestsControllerMapping:weakSelf]; }]];
+  [controlItems addObject:shakeTricks];
   [controlItems addObject:motionSteering];
   [controlItems addObject:experimentalWiimote];
   UIMenu *controls =
@@ -2422,6 +2736,28 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
     [sizes addObject:size];
   }
   [displayItems addObject:[UIMenu menuWithTitle:@"FPS Counter Size" children:sizes]];
+  if (UIApplication.sharedApplication.supportsAlternateIcons) {
+    // Original KartPad artwork only (see branding/PROVENANCE.md). nil is the default icon.
+    NSArray<NSString *> *iconTitles = @[@"Red K", @"Circuit", @"Mono"];
+    NSArray *iconNames = @[NSNull.null, @"AppIcon-Circuit", @"AppIcon-Mono"];
+    NSString *currentIcon = UIApplication.sharedApplication.alternateIconName;
+    NSMutableArray<UIMenuElement *> *icons = [NSMutableArray array];
+    for (NSUInteger index = 0; index < iconTitles.count; ++index) {
+      NSString *iconName = iconNames[index] == NSNull.null ? nil : iconNames[index];
+      UIAction *icon = [UIAction actionWithTitle:iconTitles[index] image:nil identifier:nil
+          handler:^(__kindof UIAction *action) {
+        [UIApplication.sharedApplication setAlternateIconName:iconName completionHandler:^(NSError *error) {
+          dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf refreshMenuButton]; });
+        }];
+      }];
+      icon.state = (iconName == nil ? currentIcon == nil : [iconName isEqualToString:currentIcon])
+          ? UIMenuElementStateOn : UIMenuElementStateOff;
+      [icons addObject:icon];
+    }
+    [displayItems addObject:[UIMenu menuWithTitle:@"App Icon"
+        image:[UIImage systemImageNamed:@"app.badge"] identifier:@"dev.kartpad.app-icon"
+        options:0 children:icons]];
+  }
   UIMenu *display =
       [UIMenu menuWithTitle:@"Display"
                       image:[UIImage systemImageNamed:@"display"]
@@ -2439,8 +2775,33 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   if (fpsCounter != nil) [children addObject:fpsCounter];
   [children addObject:controls];
   [children addObject:display];
+  [children addObject:[UIAction actionWithTitle:@"Sound…"
+      image:[UIImage systemImageNamed:@"speaker.wave.2"] identifier:@"dev.kartpad.sound"
+      handler:^(__kindof UIAction *action) {
+    UIViewController *presenter = KartPadVisibleViewController(weakSelf.window);
+    if (presenter == nil) return;
+    UINavigationController *navigation =
+        [[UINavigationController alloc] initWithRootViewController:[KartPadSoundSettingsController new]];
+    navigation.modalPresentationStyle = UIModalPresentationFormSheet;
+    [presenter presentViewController:navigation animated:YES completion:nil];
+  }]];
   if (gameData != nil) [children addObject:gameData];
   if (reportProblem != nil) [children addObject:reportProblem];
+  if (KartPadSystemDiagnosticsIsCandidate()) {
+    [children addObject:[UIAction actionWithTitle:@"Test Native Crash…"
+        image:[UIImage systemImageNamed:@"exclamationmark.triangle"] identifier:nil
+        handler:^(__kindof UIAction *action) {
+      UIViewController *presenter = KartPadVisibleViewController(weakSelf.window);
+      UIAlertController *confirm = [UIAlertController alertControllerWithTitle:@"Test Native Crash?"
+          message:@"This intentionally closes KartPad to test crash reporting. Finish your race first. Reopen KartPad afterward and export the test session. Unsaved progress may be lost."
+          preferredStyle:UIAlertControllerStyleAlert];
+      [confirm addAction:[UIAlertAction actionWithTitle:@"Cancel" style:UIAlertActionStyleCancel handler:nil]];
+      [confirm addAction:[UIAlertAction actionWithTitle:@"Crash Test" style:UIAlertActionStyleDestructive
+          handler:^(UIAlertAction *action) { KartPadDiagnosticCrashProbe(); }]];
+      [presenter presentViewController:confirm animated:YES completion:nil];
+    }]];
+  }
+
   menuButton.menu = [UIMenu menuWithTitle:@"KartPad"
                                     image:sourceMenu.image
                                identifier:@"dev.kartpad.menu"
@@ -2478,6 +2839,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
                                                       error:&error] : nil;
       NSURL *kartPadReportURL = nil;
       if (report != nil) {
+        report = [report stringByAppendingString:KartPadSystemDiagnosticsReport()];
         report = [report stringByReplacingOccurrencesOfString:
             @"SunPad Diagnostic Report v2" withString:@"KartPad Diagnostic Report v2"];
         report = [report stringByReplacingOccurrencesOfString:
@@ -2681,6 +3043,28 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   [super rPressureChanged:pressed ? 255 : 0 fullPress:pressed];
 }
 
+- (void)kartPadControllerAutoAccelerateChanged:(UISwitch *)sender {
+  [NSUserDefaults.standardUserDefaults setBool:sender.on
+                                        forKey:kKartPadControllerAutoAccelerateKey];
+  gKartPadControllerAutoAccelerate.store(sender.on);
+}
+
+- (void)kartPadAutoAccelerateChanged:(UISwitch *)sender {
+  [NSUserDefaults.standardUserDefaults setBool:sender.on forKey:kKartPadAutoAccelerateKey];
+  ++self.kartPadGasHoldGeneration;
+  if (!sender.on && self.kartPadGasLocked) {
+    self.kartPadGasLocked = NO;
+    if (!self.kartPadGasPressed) [super buttonUp:self.kartPadGasButton];
+    self.kartPadGasButton.backgroundColor = self.kartPadGasRestColor;
+    self.kartPadGasButton.layer.borderColor = [UIColor colorWithWhite:1.0 alpha:0.36].CGColor;
+    self.kartPadGasButton.layer.shadowOpacity = 0.0;
+    self.kartPadGasButton.accessibilityValue = nil;
+  }
+  self.kartPadGasButton.accessibilityHint = sender.on
+      ? @"Hold for one second to lock acceleration. Tap again to unlock."
+      : @"Hold to accelerate. Release to stop accelerating.";
+}
+
 - (void)kartPadGasDown:(UIButton *)button {
   self.kartPadGasPressed = YES;
   const NSUInteger generation = ++self.kartPadGasHoldGeneration;
@@ -2695,6 +3079,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
     button.accessibilityValue = @"Unlocking acceleration";
     return;
   }
+  if (!KartPadAutoAccelerateEnabled()) return;
   __weak KartPadGameOverlay *weakSelf = self;
   __weak UIButton *weakButton = button;
   dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)NSEC_PER_SEC),
@@ -2702,7 +3087,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
     KartPadGameOverlay *strongSelf = weakSelf;
     UIButton *strongButton = weakButton;
     if (strongSelf == nil || strongButton == nil ||
-        !strongSelf.kartPadGasPressed ||
+        !strongSelf.kartPadGasPressed || !KartPadAutoAccelerateEnabled() ||
         strongSelf.kartPadGasHoldGeneration != generation) {
       return;
     }
@@ -2803,6 +3188,9 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   overlay.mainMenuRequested = ^{
     gKartPadMainMenuRequested = YES;
   };
+  overlay.shakeTricksRequested = ^{
+    [weakSelf showShakeTricks];
+  };
   overlay.motionSteeringRequested = ^{
     [weakSelf showMotionSteering];
   };
@@ -2894,6 +3282,32 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   });
 }
 
+- (void)showShakeTricks {
+  [[SunPadInputMixer sharedMixer] clearInputFromTouch:YES];
+  UIViewController *controller = KartPadVisibleViewController(_window);
+  if (controller == nil) return;
+  KartPadMotionSteering *motion = [KartPadMotionSteering sharedSteering];
+  NSString *message = motion.sensorAvailable
+      ? [NSString stringWithFormat:@"Shake the device to press D-pad Up: tricks in the air and wheelies on bikes. Works without tilt steering. Physical controllers take priority.\n\nCurrent state: %@.",
+                                   motion.shakeTricksEnabled ? @"On" : @"Off"]
+      : @"Shake input is unavailable on this device. You can still use D-pad Up.";
+  UIAlertController *sheet = [UIAlertController alertControllerWithTitle:@"Shake to Trick"
+      message:message preferredStyle:UIAlertControllerStyleActionSheet];
+  if (motion.sensorAvailable) {
+    [sheet addAction:[UIAlertAction actionWithTitle:motion.shakeTricksEnabled ? @"Turn Off" : @"Turn On"
+        style:UIAlertActionStyleDefault handler:^(UIAlertAction *action) {
+      (void)action;
+      motion.shakeTricksEnabled = !motion.shakeTricksEnabled;
+    }]];
+  }
+  [sheet addAction:[UIAlertAction actionWithTitle:@"Continue Playing"
+      style:UIAlertActionStyleCancel handler:nil]];
+  sheet.popoverPresentationController.sourceView = _overlay;
+  sheet.popoverPresentationController.sourceRect = CGRectMake(
+      CGRectGetMidX(_overlay.bounds), CGRectGetMidY(_overlay.bounds), 1.0, 1.0);
+  [controller presentViewController:sheet animated:YES completion:nil];
+}
+
 - (void)showMotionSteering {
   [[SunPadInputMixer sharedMixer] clearInputFromTouch:YES];
   UIViewController *controller = KartPadVisibleViewController(_window);
@@ -2901,9 +3315,8 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   KartPadMotionSteering *motion = [KartPadMotionSteering sharedSteering];
   NSString *status = motion.sensorAvailable
       ? [NSString stringWithFormat:
-            @"Tilt steering: %@. Shake tricks/wheelies: %@. Sensitivity: %.1fx. Physical controllers take priority.",
-            motion.enabled ? @"On" : @"Off",
-            motion.shakeTricksEnabled ? @"On" : @"Off", motion.sensitivity]
+            @"Tilt steering: %@. Sensitivity: %.1fx. Physical controllers take priority.",
+            motion.enabled ? @"On" : @"Off", motion.sensitivity]
       : @"Motion data is unavailable on this device or Simulator. Touch and physical-controller steering remain available.";
   UIAlertController *sheet =
       [UIAlertController alertControllerWithTitle:@"Motion Steering"
@@ -2932,15 +3345,6 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
                   handler:^(UIAlertAction *action) {
       (void)action;
       motion.inverted = !motion.inverted;
-    }]];
-    [sheet addAction:[UIAlertAction
-        actionWithTitle:motion.shakeTricksEnabled
-            ? @"Disable Shake Tricks/Wheelies"
-            : @"Enable Shake Tricks/Wheelies"
-                    style:UIAlertActionStyleDefault
-                  handler:^(UIAlertAction *action) {
-      (void)action;
-      motion.shakeTricksEnabled = !motion.shakeTricksEnabled;
     }]];
     [sheet addAction:[UIAlertAction
         actionWithTitle:@"Cycle Sensitivity"
@@ -3139,6 +3543,10 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 
 - (void)applicationWillResignActive:(NSNotification *)notification {
   (void)notification;
+  // The sound sheet can stay open while iOS suspends or terminates the app.
+  if ([NSUserDefaults.standardUserDefaults objectForKey:kKartPadSoundCustomKey] != nil) {
+    KartPadApplySoundLevels(YES);
+  }
   [[SunPadInputMixer sharedMixer] clearInputFromTouch:YES];
   if ([_overlay isKindOfClass:KartPadGameOverlay.class]) {
     [(KartPadGameOverlay *)_overlay resetKartPadControlAppearance];
@@ -3634,7 +4042,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   }
   UIDocumentPickerViewController *picker =
       [[UIDocumentPickerViewController alloc]
-          initForOpeningContentTypes:KartPadGameDataContentTypes() asCopy:YES];
+          initForOpeningContentTypes:KartPadGameDataContentTypes() asCopy:NO];
   picker.delegate = self;
   picker.allowsMultipleSelection = NO;
   [controller presentViewController:picker animated:YES completion:nil];
@@ -3733,7 +4141,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
     return;
   }
   if (url != nil) {
-    [self importExtractedGameDataFromURL:url deleteAfterwards:YES];
+    [self importExtractedGameDataFromURL:url deleteAfterwards:NO];
   }
 }
 
@@ -3752,7 +4160,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 - (void)gameOverlayRequestsGameDataFolderImport:(SunPadGameOverlay *)overlay {
   (void)overlay;
   UIViewController *presenter=KartPadVisibleViewController(_window);if(!presenter)return;
-  UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeFolder] asCopy:YES];picker.delegate=self;picker.allowsMultipleSelection=NO;
+  UIDocumentPickerViewController *picker=[[UIDocumentPickerViewController alloc] initForOpeningContentTypes:@[UTTypeFolder] asCopy:NO];picker.delegate=self;picker.allowsMultipleSelection=NO;
   [presenter presentViewController:picker animated:YES completion:nil];
 }
 
@@ -3821,7 +4229,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   NSError *error=nil;
   NSArray *licenses=KartPadLicenseRecords(&error);
   UIAlertController *sheet=[UIAlertController alertControllerWithTitle:@"Original Time Trial Ghosts"
-      message:@"Import comparison ghosts or export saved .rkg files. Retro Rewind custom-track ghosts use a different format association and are not supported here."
+      message:@"Import comparison ghosts or export saved .rkg files. Retro Rewind ghosts are not supported here, including Wii courses played in Retro."
       preferredStyle:UIAlertControllerStyleActionSheet];
   __weak KartPadRuntimeOverlayHost *weakSelf=self;
   NSUInteger count=0;
@@ -3880,7 +4288,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
   __weak KartPadRuntimeOverlayHost *weakSelf=self;
   [sheet addAction:[UIAlertAction actionWithTitle:@"Export a Ghost…" style:UIAlertActionStyleDefault handler:^(UIAlertAction *action){
     NSError *error=nil;NSArray *records=KartPadOriginalGhosts(license,&error);
-    if(records.count==0){[weakSelf showIntegrationAlert:@"No Saved Ghosts" message:error.localizedDescription ?: @"Complete and save an Original time trial first."];return;}
+    if(records.count==0){[weakSelf showIntegrationAlert:error != nil ? @"Ghost Export Unavailable" : @"No Saved Ghosts" message:error.localizedDescription ?: @"This Original license has no saved personal-best or downloaded ghosts. Choose the license used for your time trial. Retro Rewind ghosts are not supported here, including Wii courses played in Retro."];return;}
     UIAlertController *choose=[UIAlertController alertControllerWithTitle:@"Choose Ghost" message:nil preferredStyle:UIAlertControllerStyleActionSheet];
     for(NSDictionary *record in records)[choose addAction:[UIAlertAction actionWithTitle:record[@"name"] style:UIAlertActionStyleDefault handler:^(UIAlertAction *selected){
       NSURL *directory=[NSURL fileURLWithPath:[NSTemporaryDirectory() stringByAppendingPathComponent:NSUUID.UUID.UUIDString] isDirectory:YES];
@@ -4019,6 +4427,7 @@ static NSString *const kKartPadPreferredGameKey = @"KartPadPreferredGame";
 @end
 
 extern "C" bool KartPadMobileEnsureGameDataAvailable() {
+  KartPadSystemDiagnosticsStart();
   KartPadApplyPrivateServerAtLaunch();
   NSError *miiError = nil;
   if (!KartPadApplyPendingMiiDatabase(&miiError)) {
@@ -4064,6 +4473,46 @@ extern "C" void KartPadMobileRuntimeHostUninstall() {
   gRuntimeOverlayHost = nil;
 }
 
+// #370: after a fatal error the game runtime returns, but SDL keeps the app open on a
+// black screen. Show the runtime's message now. The game can't restart in this
+// process, so the only action closes KartPad; the next launch opens the chooser.
+extern "C" void KartPadMobileRuntimeStopped() {
+  if (!NSThread.isMainThread) return;
+  NSURL *support = [NSFileManager.defaultManager URLsForDirectory:NSApplicationSupportDirectory
+                                                        inDomains:NSUserDomainMask].firstObject;
+  NSURL *file = [support URLByAppendingPathComponent:@"KartPad/Logs/last_fatal.txt"];
+  NSString *text = [NSString stringWithContentsOfURL:file encoding:NSUTF8StringEncoding error:nil];
+  [NSFileManager.defaultManager removeItemAtURL:file error:nil];
+  text = [text stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceAndNewlineCharacterSet];
+  if (text.length == 0) text = @"The game closed because of an error.";
+  if (text.length > 1500) text = [text substringToIndex:1500];
+  UIWindowScene *scene = nil;
+  for (UIScene *candidate in UIApplication.sharedApplication.connectedScenes) {
+    if ([candidate isKindOfClass:UIWindowScene.class]) {
+      scene = (UIWindowScene *)candidate;
+      break;
+    }
+  }
+  if (scene == nil) return;
+  static UIWindow *stoppedWindow;
+  stoppedWindow = [[UIWindow alloc] initWithWindowScene:scene];
+  stoppedWindow.windowLevel = UIWindowLevelAlert + 1.0;
+  UIViewController *root = [[UIViewController alloc] init];
+  root.view.backgroundColor = UIColor.blackColor;
+  stoppedWindow.rootViewController = root;
+  [stoppedWindow makeKeyAndVisible];
+  NSString *message = [text stringByAppendingString:@"\n\nClose KartPad and open it again to return to the game chooser."];
+  UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"The game stopped"
+                                                                 message:message
+                                                          preferredStyle:UIAlertControllerStyleAlert];
+  [alert addAction:[UIAlertAction actionWithTitle:@"Close KartPad"
+                                            style:UIAlertActionStyleDefault
+                                          handler:^(UIAlertAction *action) { exit(0); }]];
+  dispatch_async(dispatch_get_main_queue(), ^{
+    [root presentViewController:alert animated:YES completion:nil];
+  });
+}
+
 extern "C" bool KartPadMobileReadRuntimeSettings(
     KartPadMobileRuntimeSettings *settings) {
   if (settings == nullptr) {
@@ -4098,6 +4547,23 @@ extern "C" bool KartPadMobileReadClassicInputForPlayer(
                                                             state:&source];
   } else {
     return false;
+  }
+  // Latch only physical-controller input. Player 1 also carries touch, whose A
+  // button has its own lock, so it latches only while a controller is connected.
+  auto &accelerateLatch = gKartPadControllerAccelerateLatches[player];
+  const bool controllerActive = player == 0
+      ? [KartPadPhysicalControllers sharedControllers].connectedControllerCount > 0
+      : source.connected != 0;
+  if (controllerActive) {
+    const auto nowMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+    if (accelerateLatch.Apply((source.buttons & SunPadButtonA) != 0,
+                              static_cast<uint64_t>(nowMs),
+                              gKartPadControllerAutoAccelerate.load(std::memory_order_relaxed))) {
+      source.buttons |= SunPadButtonA;
+    }
+  } else {
+    accelerateLatch.Reset();
   }
   KartPadClassicInputState adapted =
       kartpad::mobile::AdaptSunPadInput(source);

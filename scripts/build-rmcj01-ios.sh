@@ -48,5 +48,11 @@ PY
 KARTPAD_RMCJ_DATA="$data" KARTPAD_IOS_HOST_ROOT="$work/host" KARTPAD_IOS_AUDIT_REGION=J \
   "$repo/scripts/build-ios-device-game-app.sh" "$runtime" "$build" "$translation" "$product" \
   > "$work/build.log" 2>&1
-echo "Japanese unsigned iOS app: $build/Release-iphoneos/KartPad.app"
+app="$build/Release-iphoneos/KartPad.app"
+version="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "$repo/version.json")"
+build_number="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["build"])' "$repo/version.json")"
+plutil -replace CFBundleShortVersionString -string "$version" "$app/Info.plist"
+plutil -replace CFBundleVersion -string "$build_number" "$app/Info.plist"
+KARTPAD_IOS_AUDIT_REGION=J "$repo/scripts/audit-ios-game-app.sh" "$app" IOS
+echo "Japanese unsigned iOS app: $app"
 echo "Signing, installation, and physical-device acceptance are separate steps."
